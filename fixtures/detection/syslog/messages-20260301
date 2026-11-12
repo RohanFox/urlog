@@ -1,0 +1,24 @@
+Mar  1 00:00:00 web-01 kernel: [57152.987438] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:04 app-02 sudo[8276]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:08 db-01 sshd[52743]: Failed password for invalid user admin from 198.51.100.20 port 15959 ssh2
+Mar  1 00:00:09 web-01 postfix/smtpd[44129]: connect from unknown[192.0.2.20]
+Mar  1 00:00:10 web-01 CRON[62025]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:15 app-02 postfix/smtpd[35698]: connect from unknown[198.51.100.18]
+Mar  1 00:00:15 fw-01 sudo[4080]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:17 mail-01 sshd[45900]: Failed password for invalid user deploy from 192.0.2.1 port 3565 ssh2
+Mar  1 00:00:19 db-01 sudo[35907]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:23 mail-01 CRON[13265]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:27 mail-01 kernel: [92950.611060] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:31 db-01 sudo[16536]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:32 app-02 dovecot[45566]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.46, lip=10.0.0.5, TLS
+Mar  1 00:00:34 app-02 postfix/smtpd[45684]: connect from unknown[198.51.100.38]
+Mar  1 00:00:38 fw-01 postfix/smtpd[2274]: connect from unknown[198.51.100.28]
+Mar  1 00:00:43 db-01 dovecot[47812]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.29, lip=10.0.0.5, TLS
+Mar  1 00:00:46 app-02 systemd: Started Session 479 of user bob.
+Mar  1 00:00:48 mail-01 CRON[38888]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:51 web-01 systemd: Started Session 999 of user alice.
+Mar  1 00:00:53 web-01 sshd[27022]: Failed password for invalid user alice from 203.0.113.52 port 28348 ssh2
+Mar  1 00:00:57 fw-01 systemd: Started Session 666 of user admin.
+Mar  1 00:01:00 fw-01 postfix/smtpd[37385]: connect from unknown[203.0.113.31]
+Mar  1 00:01:00 fw-01 CRON[32969]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:00 app-02 systemd: Started Session 82 of user root.

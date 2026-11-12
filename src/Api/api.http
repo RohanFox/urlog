@@ -1,0 +1,104 @@
+@baseUrl = http://127.0.0.1:5080/api/v1
+# One request per endpoint. Every mutating call after login needs the cookie the login set and the
+# csrf_token it returned in X-CSRF-Token. Run `urlog user create --db data/metadata.db --name alice --admin` first.
+# The error paths: a wrong password is 401 with the same body as an unknown name; a 6th login attempt from one
+# address inside a minute is 429 with Retry-After; a case the caller is not a member of is 404 on every route.
+
+### Login (sets the urlog_session cookie)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "name": "alice", "password": "correct horse battery staple" }
+
+### Who am I (also returns the CSRF token)
+GET {{baseUrl}}/auth/me
+
+### Logout
+POST {{baseUrl}}/auth/logout
+X-CSRF-Token: {{csrf}}
+
+### Users (admin): list
+GET {{baseUrl}}/users
+
+### Users (admin): create
+POST {{baseUrl}}/users
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "name": "bob", "password": "another long password", "role": "analyst" }
+
+### Users (admin): one
+GET {{baseUrl}}/users/2
+
+### Users (admin): role
+PUT {{baseUrl}}/users/2/role
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "role": "admin" }
+
+### Users (admin): unlock early
+POST {{baseUrl}}/users/2/unlock
+X-CSRF-Token: {{csrf}}
+
+### Users (admin): set a new password (ends the user's sessions)
+POST {{baseUrl}}/users/2/password
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "password": "yet another long password" }
+
+### Cases: mine
+GET {{baseUrl}}/cases
+
+### Cases: create (the caller becomes owner)
+POST {{baseUrl}}/cases
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "name": "incident 1" }
+
+### Cases: one (404 unless a member)
+GET {{baseUrl}}/cases/1
+
+### Cases: members
+GET {{baseUrl}}/cases/1/members
+
+### Cases: share (owner)
+POST {{baseUrl}}/cases/1/members
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "user": "bob", "role": "ro" }
+
+### Cases: change a member's role (owner)
+PUT {{baseUrl}}/cases/1/members/2
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "role": "rw" }
+
+### Cases: unshare (owner)
+DELETE {{baseUrl}}/cases/1/members/2
+X-CSRF-Token: {{csrf}}
+
+### Admin: every case's metadata and members (never events)
+GET {{baseUrl}}/admin/cases
+
+### Admin: grant membership on any case (audited in the case's trail, by_admin: true)
+POST {{baseUrl}}/admin/cases/1/members
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "user": "alice", "role": "ro" }
+
+### Admin: change a member's role
+PUT {{baseUrl}}/admin/cases/1/members/1
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "role": "rw" }
+
+### Admin: remove a member
+DELETE {{baseUrl}}/admin/cases/1/members/1
+X-CSRF-Token: {{csrf}}

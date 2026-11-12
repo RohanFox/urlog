@@ -1,0 +1,24 @@
+﻿Mar  1 00:00:01 app-02 dovecot[28047]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.15, lip=10.0.0.5, TLS
+Mar  1 00:00:05 mail-01 dovecot[56911]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.2, lip=10.0.0.5, TLS
+Mar  1 00:00:09 db-01 postfix/smtpd[12063]: connect from unknown[192.0.2.10]
+Mar  1 00:00:11 fw-01 sshd[64156]: Connection closed by 192.0.2.38 port 6496 [preauth]
+Mar  1 00:00:15 db-01 postfix/smtpd[22557]: connect from unknown[198.51.100.59]
+Mar  1 00:00:16 db-01 sudo[31602]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:20 web-01 dovecot[29119]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.35, lip=10.0.0.5, TLS
+Mar  1 00:00:23 db-01 sudo[63304]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:24 web-01 CRON[56482]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:24 db-01 dovecot[16735]: imap-login: Login: user=<root>, method=PLAIN, rip=198.51.100.14, lip=10.0.0.5, TLS
+Mar  1 00:00:25 app-02 CRON[17851]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:25 fw-01 sshd[52655]: Connection closed by 192.0.2.13 port 51659 [preauth]
+Mar  1 00:00:30 db-01 sudo[58324]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:32 app-02 dovecot[52890]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.5, lip=10.0.0.5, TLS
+Mar  1 00:00:33 mail-01 CRON[17736]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:37 app-02 sudo[40157]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:38 app-02 kernel: [49708.504462] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:41 web-01 sshd[41074]: Accepted publickey for deploy from 192.0.2.33 port 4537 ssh2
+Mar  1 00:00:45 app-02 sudo[31937]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:47 app-02 dovecot[55437]: imap-login: Login: user=<deploy>, method=PLAIN, rip=203.0.113.16, lip=10.0.0.5, TLS
+Mar  1 00:00:49 app-02 kernel: [60892.329277] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:51 app-02 kernel: [9921.356978] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:52 db-01 kernel: [65585.313260] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:53 app-02 CRON[30913]: (alice) CMD (/usr/local/bin/backup.sh)

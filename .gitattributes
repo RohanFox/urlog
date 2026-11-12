@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.evtx binary
+*.gz binary
+*.zst binary
+fixtures/** -text

@@ -1,0 +1,20 @@
+1772323203 INFO retrying upstream call, attempt 566
+1772323205 ERROR retrying upstream call, attempt 169
+1772323209 INFO cache miss for key user:137
+1772323212 WARN connection pool size 352
+1772323214 INFO request handled in 762 ms
+1772323217 INFO connection pool size 330
+1772323221 WARN request handled in 583 ms
+1772323223 DEBUG request handled in 521 ms
+1772323227 DEBUG worker 485 heartbeat
+1772323227 DEBUG connection pool size 27
+1772323231 INFO cache miss for key user:596
+1772323233 WARN retrying upstream call, attempt 591
+1772323233 ERROR retrying upstream call, attempt 351
+1772323236 DEBUG retrying upstream call, attempt 807
+1772323238 INFO worker 85 heartbeat
+1772323241 ERROR retrying upstream call, attempt 562
+1772323245 INFO retrying upstream call, attempt 194
+1772323249 ERROR cache miss for key user:690
+1772323254 ERROR worker 517 heartbeat
+1772323254 INFO retrying upstream call, attempt 445

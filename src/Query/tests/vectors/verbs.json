@@ -1,0 +1,258 @@
+[
+  {
+    "name": "stats-count-by-url-path",
+    "spl": "src_ip=10.0.0.5 | stats count by url.path",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip = toIPv6({p0:String})) GROUP BY url_path",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10.0.0.5"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip",
+        "url.path"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-count-by-two-fields",
+    "spl": "| stats count by host, program",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "program"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-count-alias-sort-head",
+    "spl": "status>=500 | stats count as n by url.path | sort -n | head 20",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, count() AS `n` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) GROUP BY url_path ORDER BY `n` DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500",
+        "limit": "UInt64:20"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "url.path"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-count-without-by",
+    "spl": "| stats count",
+    "expect": {
+      "sql": "SELECT count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-by-extra-field",
+    "spl": "| stats count by request_uri",
+    "expect": {
+      "sql": "SELECT extras[{p0:String}] AS `url.original`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url.original"
+      },
+      "warnings": [],
+      "fields": [
+        "url.original"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-by-unknown-field",
+    "spl": "| stats count by proxy_upstream_name",
+    "expect": {
+      "sql": "SELECT extras[{p0:String}] AS `proxy_upstream_name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:proxy_upstream_name"
+      },
+      "warnings": [
+        "unknown_field@17+19"
+      ],
+      "fields": [
+        "proxy_upstream_name"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "sort-events-two-keys",
+    "spl": "host=web-01 | sort -_time, source.ip",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) ORDER BY ts DESC, source_ip ASC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "_time",
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "head-default",
+    "spl": "| head",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "head-n",
+    "spl": "| head 5000",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:5000"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "sort-after-stats-by-field",
+    "spl": "| stats count by host | sort host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `host.name` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "sort-after-stats-count",
+    "spl": "| stats count by host | sort -count",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `count` DESC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "stats-by-whitespace-list",
+    "spl": "| stats count by host program",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "program"
+      ],
+      "aggregate": true
+    }
+  },
+  {
+    "name": "pipe-chain-search-sort-head",
+    "spl": "program=sshd \"Failed password\" | sort -_time | head 10",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((program = {p0:String} AND (hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:sshd",
+        "p1": "String:failed",
+        "p2": "String:password",
+        "p3": "String:failed password",
+        "limit": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "program",
+        "_time"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "verbs-case-insensitive",
+    "spl": "| STATS COUNT BY host | SORT -COUNT | HEAD 3",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `count` DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:3"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true
+    }
+  }
+]

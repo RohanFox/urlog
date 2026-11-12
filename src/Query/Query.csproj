@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SPL lexer/parser/AST -> ClickHouse SQL transpiler, field catalog (design record, "Query language"). -->
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" />
+    <!-- The HTTP client for the query path (ADR 0003); the TCP client is Core's, for inserts and the control plane. -->
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The catalog ships inside the assembly; tests and the CLI read the same copy. -->
+    <EmbeddedResource Include="field-catalog.yaml" LogicalName="field-catalog.yaml" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The SPL slice: catalog, lexer, parser and transpiler, driven by the shared vectors in src/Query/tests/vectors/
+       (SPL → expected SQL, parameters and warnings, or the expected error), which the Lezer grammar in web/ runs too. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Query/Query.csproj" />
+  </ItemGroup>
+</Project>

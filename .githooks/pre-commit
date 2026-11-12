@@ -1,0 +1,72 @@
+#!/bin/sh
+# Pre-commit gate for this repository. Installed with: powershell -File tools/install-hooks.ps1
+# (which sets core.hooksPath=.githooks). Keep it fast: build, unit tests, and only the tokeniser
+# benches for a source touched by this commit. Integration tests and the full bench run live in
+# tools/pre-merge.ps1. See bench/README.md.
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRD)
+[ -z "$staged" ] && exit 0
+
+# 1. The benchmark baseline changes only on purpose.
+if printf '%s\n' "$staged" | grep -qx 'bench/baseline.json'; then
+  if [ "$URLOG_BASELINE_UPDATE" != "1" ]; then
+    echo "pre-commit: bench/baseline.json is staged." >&2
+    echo "           Baselines change only deliberately: re-run the full job, then" >&2
+    echo "           URLOG_BASELINE_UPDATE=1 git commit ... and say why in the message." >&2
+    exit 1
+  fi
+  echo "pre-commit: baseline update allowed by URLOG_BASELINE_UPDATE=1"
+fi
+
+# 2. Build with warnings as errors and run the unit tests when anything buildable changed.
+if printf '%s\n' "$staged" | grep -Eq '\.(cs|csproj|props|targets|sln|slnx|editorconfig|resx)$|^global\.json$|^Directory\.'; then
+  echo "pre-commit: dotnet build -warnaserror"
+  dotnet build urlog.sln -warnaserror --nologo -v quiet
+  echo "pre-commit: unit tests"
+  # The whole test output of this run is kept in test-logs/pre-commit.log (untracked, overwritten by the next
+  # run), and a failing step names its failing tests: a failure that does not come back can still be read.
+  exclude=$(git rev-parse --git-path info/exclude)
+  grep -qx 'test-logs/' "$exclude" 2>/dev/null || echo 'test-logs/' >> "$exclude"
+  mkdir -p test-logs
+  log=test-logs/pre-commit.log
+  : > "$log"
+  for proj in tests/*/*.csproj; do
+    case "$proj" in
+      tests/Integration.Tests/*|tests/Security/*) continue ;;   # Testcontainers: pre-merge only
+    esac
+    status=0
+    dotnet test "$proj" --no-build --nologo > test-logs/step.tmp 2>&1 || status=$?
+    cat test-logs/step.tmp
+    { echo "=== $proj"; cat test-logs/step.tmp; } >> "$log"
+    if [ "$status" -ne 0 ]; then
+      echo "pre-commit: failing tests in $proj:" >&2
+      grep -E '^failed ' test-logs/step.tmp >&2 || echo "  (no test named: the run itself failed, see the log)" >&2
+      echo "pre-commit: full test output kept in $log" >&2
+      rm -f test-logs/step.tmp
+      exit "$status"
+    fi
+  done
+  rm -f test-logs/step.tmp
+fi
+
+# 3. A touched source plugin runs its own Tokenise benches (short job) against the baseline.
+sources=$(printf '%s\n' "$staged" | sed -n 's#^src/Sources/\([A-Za-z0-9]*\)/.*#\1#p' | sort -u)
+if [ -n "$sources" ]; then
+  if command -v pwsh >/dev/null 2>&1; then ps=pwsh; elif command -v powershell >/dev/null 2>&1; then ps=powershell; else
+    echo "pre-commit: PowerShell (pwsh or powershell) is required to run the bench gate." >&2; exit 1
+  fi
+  rm -rf bench/BenchmarkDotNet.Artifacts/results
+  dotnet build bench/Bench.csproj -c Release --nologo -v quiet
+  for s in $sources; do
+    echo "pre-commit: bench *Tokenise${s}* (short job)"
+    dotnet run -c Release --project bench --no-build -- --filter "*Tokenise${s}*" --job short
+  done
+  echo "pre-commit: regression gate (partial)"
+  "$ps" -NoProfile -ExecutionPolicy Bypass -File bench/check-regression.ps1 -Partial
+fi
+
+echo "pre-commit: OK"

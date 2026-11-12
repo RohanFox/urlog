@@ -1,0 +1,7 @@
+203.0.113.7 - - [01/Mar/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 612 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"
+Mar  1 00:00:00 web-01 sshd[1234]: Accepted publickey for root from 10.0.0.1 port 22 ssh2
+10.0.0.5 - jsmith [01/Mar/2026:00:00:01 +0000] "POST /login HTTP/1.1" 302 0 "https://example.com/login" "curl/8.11.0"
+<34>Mar  1 00:00:01 web-01 sudo: root : TTY=pts/0 ; PWD=/root ; COMMAND=/bin/ls
+10.0.0.5 frank jsmith [01/Mar/2026:00:00:02 +0000] "GET /admin HTTP/1.1" 403 199 "-" "-"
+<165>1 2026-03-01T00:00:02.000Z web-01 app 1234 ID47 [exampleSDID@32473 iut="3"] message
+198.51.100.23 - - [01/Mar/2026:00:00:03 +0000] "GET /search?q=shell&page=2 HTTP/2.0" 200 5120 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"

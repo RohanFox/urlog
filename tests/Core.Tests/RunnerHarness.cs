@@ -1,0 +1,372 @@
+using System.Buffers;
+using System.Collections.Immutable;
+using System.Security.Cryptography;
+using Urlog.Core.Audit;
+using Urlog.Core.Ingest;
+using Urlog.Core.Jobs;
+using Urlog.Core.Metadata;
+using Urlog.Core.Pipeline;
+using Urlog.Core.Sources;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace Urlog.Core.Tests;
+
+/// <summary>
+/// An event store in memory for the runner's tests: rows counted per (file, generation), the visible generation per
+/// file, the two deletes with the real predicates, and a disk whose free space a test sets.
+/// </summary>
+internal sealed class FakeEventStore : IJobEventStore
+{
+    private readonly Lock _lock = new();
+    private readonly Dictionary<(ulong File, uint Generation), long> _rows = [];
+    private readonly Dictionary<ulong, uint> _current = [];
+    private readonly List<string> _calls = [];
+
+    public long FreeBytes { get; set; } = 500L << 30;
+
+    public long TotalBytes { get; set; } = 1000L << 30;
+
+    /// <summary>Thrown by the next generation commit, once.</summary>
+    public Exception? FailNextCommit { get; set; }
+
+    /// <summary>Batches the sinks refuse with this before they take any more: each refusal uses one up.</summary>
+    public int RefuseSubmits { get; set; }
+
+    /// <summary>What a refused submit throws.</summary>
+    public Func<Exception> Refusal { get; set; } = () => new IOException("the store refused the batch");
+
+    public IReadOnlyList<string> Calls
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _calls];
+            }
+        }
+    }
+
+    public long Rows(ulong file, uint generation)
+    {
+        lock (_lock)
+        {
+            return _rows.GetValueOrDefault((file, generation));
+        }
+    }
+
+    /// <summary>Every generation of the file that has rows.</summary>
+    public uint[] Generations(ulong file)
+    {
+        lock (_lock)
+        {
+            return [.. _rows.Where(r => r.Key.File == file && r.Value > 0).Select(r => r.Key.Generation).Order()];
+        }
+    }
+
+    /// <summary>What <c>events_v</c> would show: the rows of the committed generation, nothing without a commit.</summary>
+    public long Visible(ulong file)
+    {
+        lock (_lock)
+        {
+            return _current.TryGetValue(file, out var generation) ? _rows.GetValueOrDefault((file, generation)) : 0;
+        }
+    }
+
+    public uint Current(ulong file)
+    {
+        lock (_lock)
+        {
+            return _current.GetValueOrDefault(file);
+        }
+    }
+
+    public void Seed(ulong file, uint generation, long rows, uint? current = null)
+    {
+        lock (_lock)
+        {
+            _rows[(file, generation)] = rows;
+            if (current is { } c)
+            {
+                _current[file] = c;
+            }
+        }
+    }
+
+    public Task RequireSchemaAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _calls.Add($"delete-except {fileId} keep {keep}");
+            foreach (var key in _rows.Keys.Where(k => k.File == fileId && k.Generation != keep).ToList())
+            {
+                _rows.Remove(key);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteFileGenerationsBelowAsync(ulong caseId, ulong fileId, uint generation, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            _calls.Add($"delete-below {fileId} {generation}");
+            foreach (var key in _rows.Keys.Where(k => k.File == fileId && k.Generation < generation).ToList())
+            {
+                _rows.Remove(key);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task CommitFileGenerationsAsync(IReadOnlyList<KeyValuePair<ulong, uint>> generations, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            if (FailNextCommit is { } failure)
+            {
+                FailNextCommit = null;
+                throw failure;
+            }
+
+            foreach (var (file, generation) in generations)
+            {
+                _calls.Add($"commit {file} {generation}");
+                _current[file] = generation;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<Dictionary<ulong, uint>> ReadFileGenerationsAsync(CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(new Dictionary<ulong, uint>(_current));
+        }
+    }
+
+    public Task<uint> ReadFileGenerationAsync(ulong fileId, CancellationToken cancellationToken) => Task.FromResult(Current(fileId));
+
+    public Task<IReadOnlyList<DiskSpace>> DiskSpaceAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DiskSpace>>([new DiskSpace("clickhouse:default", FreeBytes, TotalBytes)]);
+
+    public IJobSink OpenSink(PipelineOptions pipeline) => new Sink(this);
+
+    private sealed class Sink(FakeEventStore store) : IJobSink
+    {
+        private long _acked;
+
+        public long AckedRows => Interlocked.Read(ref _acked);
+
+        public void Submit(EventBatch batch)
+        {
+            lock (store._lock)
+            {
+                if (store.RefuseSubmits > 0)
+                {
+                    store.RefuseSubmits--;
+                    batch.Return();
+                    throw store.Refusal();
+                }
+            }
+
+            if (batch.RowCount > 0)
+            {
+                lock (store._lock)
+                {
+                    var key = (batch.FileId[0], batch.ParseGeneration[0]);
+                    store._rows[key] = store._rows.GetValueOrDefault(key) + batch.RowCount;
+                }
+
+                Interlocked.Add(ref _acked, batch.RowCount);
+            }
+
+            batch.Return();
+        }
+
+        public ValueTask CompleteAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>A local volume whose free space a test sets.</summary>
+internal sealed class FakeDiskProbe : IDiskProbe
+{
+    public long FreeBytes { get; set; } = 500L << 30;
+
+    public long TotalBytes { get; set; } = 1000L << 30;
+
+    public DiskSpace Measure(string path) => new(path, FreeBytes, TotalBytes);
+}
+
+/// <summary>
+/// The numbered-line source with a hook before every chunk: tests hold a parse open, count who is parsing at once,
+/// or throw on a chosen chunk.
+/// </summary>
+internal sealed class HookedSource(Action<ParseContext> beforeChunk, bool stateful = true) : ILogSource
+{
+    public const string Id = "hooked";
+
+    private readonly NumberedLineSource _inner = new(stateful);
+
+    public SourceInfo Info { get; } = new(Id, [], "hooked lines", 1, stateful);
+
+    public Framing Framing => _inner.Framing;
+
+    public FieldSchema Schema => _inner.Schema;
+
+    public float Sniff(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, SniffContext ctx) => 0f;
+
+    public void Parse(ReadOnlySequence<byte> framedChunk, ParseContext ctx, IBatchWriter batch)
+    {
+        beforeChunk(ctx);
+        _inner.Parse(framedChunk, ctx, batch);
+    }
+}
+
+/// <summary>A migrated metadata file, a directory for evidence files, a fake event store, and the calls a runner test makes.</summary>
+internal sealed class RunnerHarness : IAsyncDisposable
+{
+    private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("urlog-runner-");
+    private long _ownerId;
+
+    private RunnerHarness()
+    {
+        Store = new MetadataStore(Path.Combine(_directory.FullName, "metadata.db"));
+    }
+
+    public MetadataStore Store { get; }
+
+    public FakeEventStore Events { get; } = new();
+
+    public FakeDiskProbe Disk { get; } = new();
+
+    /// <summary>Called before every chunk of the <c>hooked</c> source.</summary>
+    public Action<ParseContext> BeforeChunk { get; set; } = _ => { };
+
+    public static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>Small chunks and batches, so a few kilobytes of lines are several chunks and several batches.</summary>
+    public static PipelineOptions SmallPipeline { get; } = new() { ChunkBytes = 4096, MaxRecordBytes = 4096, BatchRows = 50, Parallelism = 2, InFlightChunks = 4, InFlightBatches = 2, Writers = 1 };
+
+    public static async Task<RunnerHarness> CreateAsync()
+    {
+        var harness = new RunnerHarness();
+        await harness.Store.MigrateAsync(Ct);
+        await using var db = harness.Store.CreateDbContext();
+        var user = new User { Name = "alice", PasswordHash = "argon2id$placeholder", CreatedAt = DateTime.UtcNow };
+        db.Users.Add(user);
+        await db.SaveChangesAsync(Ct);
+        harness._ownerId = user.Id;
+        return harness;
+    }
+
+    public static JobRunnerOptions Options(bool once = true, int jobs = 1) => new()
+    {
+        MaxConcurrentJobs = jobs,
+        Pipeline = SmallPipeline,
+        ExitWhenIdle = once,
+        IdlePoll = TimeSpan.FromMilliseconds(20),
+        ProgressInterval = TimeSpan.FromMilliseconds(50),
+        WatermarkInterval = TimeSpan.FromMilliseconds(50),
+        CommitBusyTimeout = TimeSpan.FromSeconds(20),
+        MemoryLimitBackoff = TimeSpan.FromMilliseconds(300),
+        LockWait = TimeSpan.FromMilliseconds(200),
+        WorkerName = "test",
+    };
+
+    public JobRunner Runner(JobRunnerOptions? options = null)
+    {
+        var catalog = new SourceCatalog();
+        catalog.Add(LogSourceRegistry.Registrations);
+        catalog.Add([new SourceRegistration(HookedSource.Id, [], () => new HookedSource(ctx => BeforeChunk(ctx)))]);
+        // The fallback id the runner resolves a file without a source to; the numbered-line source stands in for it.
+        catalog.Add([new SourceRegistration(Urlog.Core.Detection.FormatDetector.GenericSourceId, [], () => new NumberedLineSource())]);
+        return new JobRunner(Store, Events, catalog, options ?? Options(), Disk);
+    }
+
+    public MetadataDb Open() => Store.CreateDbContext();
+
+    public async Task<CaseRecord> AddCaseAsync(string name)
+    {
+        await using var db = Open();
+        return await CaseOperations.CreateAsync(db, Store.Audit, new AuditActor("alice"), name, _ownerId, DateTime.UtcNow, Ct);
+    }
+
+    /// <summary>Writes <paramref name="content"/> to a file, records it as intake would (hash first) and queues its parse.</summary>
+    public async Task<(EvidenceFile File, Job Job, string Path)> AddFileAsync(long caseId, byte[] content, string name, string? source = "test-lines")
+    {
+        var path = Path.Combine(_directory.FullName, $"{caseId}-{name}");
+        await File.WriteAllBytesAsync(path, content, Ct);
+        await using var db = Open();
+        var host = await HostOperations.GetOrCreateAsync(db, caseId, "web-01", DateTime.UtcNow, Ct);
+        var file = new EvidenceFile
+        {
+            CaseId = caseId,
+            HostId = host.Id,
+            Sha256 = Convert.ToHexStringLower(SHA256.HashData(content)),
+            Size = content.Length,
+            OriginalName = name,
+            StoredPath = path,
+            Source = FileSource.Cli,
+            Uploader = "alice",
+            ReceivedAt = DateTime.UtcNow,
+            Encoding = "utf8",
+            DetectedSource = source,
+        };
+        var added = (await FileOperations.AddAsync(db, Store.Audit, new AuditActor("alice"), file, Ct)).File;
+        var job = await JobOperations.EnqueueAsync(db, added.Id, DateTime.UtcNow, Ct);
+        return (added, job, path);
+    }
+
+    public async Task<Job> JobAsync(long id)
+    {
+        await using var db = Open();
+        return await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == id, Ct);
+    }
+
+    public async Task<EvidenceFile> FileAsync(long id)
+    {
+        await using var db = Open();
+        return await db.Files.AsNoTracking().SingleAsync(f => f.Id == id, Ct);
+    }
+
+    public async Task<List<AuditRow>> AuditAsync()
+    {
+        await using var db = Open();
+        return await db.Audit.AsNoTracking().OrderBy(a => a.Seq).ToListAsync(Ct);
+    }
+
+    /// <summary>Polls until <paramref name="condition"/> holds; fails the test after <paramref name="seconds"/>.</summary>
+    public static async Task EventuallyAsync(Func<Task<bool>> condition, string what, int seconds = 20)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        while (!await condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, $"timed out waiting for: {what}");
+            await Task.Delay(20, Ct);
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        SqliteConnection.ClearAllPools();
+        try
+        {
+            _directory.Delete(recursive: true);
+        }
+        catch (IOException)
+        {
+            // A straggling handle on Windows: the temp directory is cleaned by the OS eventually.
+        }
+
+        return ValueTask.CompletedTask;
+    }
+}

@@ -1,0 +1,20 @@
+[2026-03-01 00:00:01.970] [pid 4242] WARN request handled in 727 ms
+[2026-03-01 00:00:06.849] [pid 4242] ERROR request handled in 869 ms
+[2026-03-01 00:00:11.359] [pid 4242] WARN retrying upstream call, attempt 334
+[2026-03-01 00:00:15.388] [pid 4242] WARN request handled in 46 ms
+[2026-03-01 00:00:17.863] [pid 4242] INFO worker 280 heartbeat
+[2026-03-01 00:00:18.209] [pid 4242] INFO worker 607 heartbeat
+[2026-03-01 00:00:19.854] [pid 4242] WARN cache miss for key user:850
+[2026-03-01 00:00:21.681] [pid 4242] DEBUG retrying upstream call, attempt 900
+[2026-03-01 00:00:22.375] [pid 4242] WARN retrying upstream call, attempt 482
+[2026-03-01 00:00:26.366] [pid 4242] WARN cache miss for key user:403
+[2026-03-01 00:00:29.048] [pid 4242] ERROR cache miss for key user:544
+[2026-03-01 00:00:32.239] [pid 4242] WARN cache miss for key user:653
+[2026-03-01 00:00:35.682] [pid 4242] ERROR cache miss for key user:141
+[2026-03-01 00:00:39.613] [pid 4242] INFO cache miss for key user:857
+[2026-03-01 00:00:43.800] [pid 4242] DEBUG request handled in 664 ms
+[2026-03-01 00:00:46.690] [pid 4242] INFO connection pool size 22
+[2026-03-01 00:00:50.575] [pid 4242] ERROR request handled in 664 ms
+[2026-03-01 00:00:53.021] [pid 4242] DEBUG retrying upstream call, attempt 727
+[2026-03-01 00:00:56.599] [pid 4242] INFO connection pool size 16
+[2026-03-01 00:00:58.514] [pid 4242] DEBUG cache miss for key user:780

@@ -1,0 +1,943 @@
+[
+  {
+    "name": "empty-search",
+    "spl": "",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "keyword-eq-lowercases",
+    "spl": "host=WEB-01",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "alias-src-ip",
+    "spl": "src_ip=10.0.0.5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip = toIPv6({p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10.0.0.5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "ip-ne",
+    "spl": "source.ip!=10.0.0.5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip != toIPv6({p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10.0.0.5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "cidr-v4-mapped",
+    "spl": "src_ip=10.0.0.0/8",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (isIPAddressInRange(IPv6NumToString(source_ip), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::ffff:10.0.0.0/104",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "cidr-v6",
+    "spl": "src_ip=2001:db8::/32",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (isIPAddressInRange(IPv6NumToString(source_ip), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:2001:db8::/32",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "cidr-not",
+    "spl": "src_ip!=192.168.0.0/16",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT isIPAddressInRange(IPv6NumToString(source_ip), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::ffff:192.168.0.0/112",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "int-eq-status-alias",
+    "spl": "status=404",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "int-range-implicit-and",
+    "spl": "status>=400 status<500",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_status >= {p0:UInt64} AND http_status < {p1:UInt64})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:400",
+        "p1": "UInt64:500",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "int-event-code-alias",
+    "spl": "EventID=4625",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (event_code = {p0:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:4625",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "event.code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "string-exact",
+    "spl": "url.path=/admin",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/admin",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "string-prefix-like",
+    "spl": "uri=/admin*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path LIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/admin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "string-contains-ilike",
+    "spl": "user_agent=*sqlmap*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (user_agent ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%sqlmap%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+19"
+      ],
+      "fields": [
+        "user_agent.original"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "keyword-prefix",
+    "spl": "program=ngin*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (program LIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:ngin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "program"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "keyword-leading-wildcard",
+    "spl": "host=*-01",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host LIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%-01",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+9"
+      ],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "in-keyword",
+    "spl": "severity IN (err, crit, alert)",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (severity IN ({p0:String}, {p1:String}, {p2:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:err",
+        "p1": "String:crit",
+        "p2": "String:alert",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "log.level"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "in-int",
+    "spl": "status IN (401, 403)",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status IN ({p0:UInt64}, {p1:UInt64})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:401",
+        "p1": "UInt64:403",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "in-ip",
+    "spl": "src_ip IN (10.0.0.5, 10.0.0.6)",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip IN (toIPv6({p0:String}), toIPv6({p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10.0.0.5",
+        "p1": "String:10.0.0.6",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-single-token",
+    "spl": "sqlmap",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:sqlmap",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-multi-token-ip",
+    "spl": "10.0.0.5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10",
+        "p1": "String:0",
+        "p2": "String:5",
+        "p3": "String:10.0.0.5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-wildcard",
+    "spl": "fail*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (lower(message) LIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:fail%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+5"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "phrase",
+    "spl": "\"Failed password\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:failed",
+        "p1": "String:password",
+        "p2": "String:failed password",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "phrase-without-tokens",
+    "spl": "\"--\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (position(lower(message), {p0:String}) > 0) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:--",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "or-and-not-precedence",
+    "spl": "status=500 OR status=502 NOT host=web-02",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_status = {p0:UInt64} OR (http_status = {p1:UInt64} AND NOT (host = {p2:String})))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500",
+        "p1": "UInt64:502",
+        "p2": "String:web-02",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "parens-and-explicit-and",
+    "spl": "(host=web-01 OR host=web-02) AND status=200",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((host = {p0:String} OR host = {p1:String}) AND http_status = {p2:UInt64})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "p1": "String:web-02",
+        "p2": "UInt64:200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "not-group",
+    "spl": "NOT (program=cron OR program=sshd)",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT ((program = {p0:String} OR program = {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:cron",
+        "p1": "String:sshd",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "program"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-is-a-term",
+    "spl": "host=web-01 or host=web-02",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((host = {p0:String} AND hasToken(lower(message), {p1:String}) AND host = {p2:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "p1": "String:or",
+        "p2": "String:web-02",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "text-message-contains",
+    "spl": "message=*timeout*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (message ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%timeout%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+17"
+      ],
+      "fields": [
+        "message"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "text-raw-contains",
+    "spl": "raw=*sqlmap*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (raw ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%sqlmap%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+12"
+      ],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "extra-known-alias",
+    "spl": "request_uri=\"/x?y=1\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extras[{p0:String}] = {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url.original",
+        "p1": "String:/x?y=1",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+20"
+      ],
+      "fields": [
+        "url.original"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "extra-unknown-field",
+    "spl": "proxy_upstream_name=foo",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extras[{p0:String}] = {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:proxy_upstream_name",
+        "p1": "String:foo",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@0+19",
+        "unindexed@0+23"
+      ],
+      "fields": [
+        "proxy_upstream_name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "quoted-value-with-space",
+    "spl": "user=\"John Smith\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (user_name = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:John Smith",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "user.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "quoted-value-keeps-wildcard-literal",
+    "spl": "url.path=\"/a*\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/a*",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "quoted-value-escapes",
+    "spl": "message=\"say \\\"hi\\\" \\\\ bye\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (message = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:say \"hi\" \\ bye",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+27"
+      ],
+      "fields": [
+        "message"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "time-field-compare",
+    "spl": "_time>=2026-03-10T00:00:00Z",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (ts >= {p0:DateTime64(3)}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "DateTime64(3):2026-03-10 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "_time"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "index-same-case",
+    "spl": "index=1 host=web-01",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "index-other-allowed-case",
+    "spl": "index=7",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:7",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "earliest-latest-relative",
+    "spl": "earliest=-7d@d latest=now status=200",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-08 00:00:00.000",
+        "to": "DateTime64(3):2026-03-15 12:00:00.000",
+        "p0": "UInt64:200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "assumed_timezone@0+14"
+      ],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "earliest-latest-naive-absolute",
+    "spl": "earliest=2026-03-10 latest=2026-03-11",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-10 00:00:00.000",
+        "to": "DateTime64(3):2026-03-11 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "assumed_timezone@0+19",
+        "assumed_timezone@20+17"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "snap-in-display-zone",
+    "spl": "earliest=-1d@d",
+    "options": {
+      "case": 1,
+      "from": "2026-03-01T00:00:00Z",
+      "to": "2026-04-01T00:00:00Z",
+      "tz": "+02:00",
+      "now": "2026-03-15T12:00:00Z",
+      "allowed": [
+        1,
+        7
+      ]
+    },
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-13 22:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "assumed_timezone@0+14"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "alias-case-insensitive",
+    "spl": "CLIENTIP=10.0.0.5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip = toIPv6({p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10.0.0.5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "syslog-promoted-fields",
+    "spl": "facility=auth pid=1234 program=sshd",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((syslog_facility = {p0:String} AND process_pid = {p1:UInt64} AND program = {p2:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:auth",
+        "p1": "UInt64:1234",
+        "p2": "String:sshd",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "log.syslog.facility.name",
+        "process.pid",
+        "program"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "nginx-promoted-fields",
+    "spl": "method=POST http.version=1.1 bytes>1000 referer=*example.com*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_method = {p0:String} AND http_version = {p1:String} AND http_response_body_bytes > {p2:UInt64} AND http_referrer ILIKE {p3:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:post",
+        "p1": "String:1.1",
+        "p2": "UInt64:1000",
+        "p3": "String:%example.com%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@40+21"
+      ],
+      "fields": [
+        "http.request.method",
+        "http.version",
+        "http.response.body.bytes",
+        "http.request.referrer"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-with-nonascii-keeps-case",
+    "spl": "Юрий",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:Юрий",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-with-trailing-bang",
+    "spl": "denied!",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:denied",
+        "p1": "String:denied!",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "keyword-value-nonascii-kept",
+    "spl": "host=Köln-01",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:köln-01",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "extra-contains-ilike",
+    "spl": "request_uri=*Admin*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extras[{p0:String}] ILIKE {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url.original",
+        "p1": "String:%Admin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+19"
+      ],
+      "fields": [
+        "url.original"
+      ],
+      "aggregate": false
+    }
+  }
+]

@@ -1,0 +1,753 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using Urlog.Core.Audit;
+using Urlog.Core.Ingest;
+using Urlog.Core.Metadata;
+using Urlog.Core.Pipeline;
+using Urlog.Core.Detection;
+using Urlog.Core.Sources;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Urlog.Core.Jobs;
+
+/// <summary>
+/// Runs the ingest queue (design record, "Consistency"). One runner per metadata file (<see cref="RunnerLock"/>);
+/// <see cref="JobRunnerOptions.MaxConcurrentJobs"/> slots, each with its own pipeline buffers, each running one job
+/// at a time; a case never has two jobs running.
+/// <para>
+/// Startup, in order: the lock, the metadata migrations, the event store answering the ingest account, the
+/// reconcilers (<see cref="StartupReconciler"/>), the disk watermark, then claiming. A job is one read of the file:
+/// the bytes are hashed as they are read and the digest is compared with the intake record before anything is
+/// committed, and a file shows no rows until its generation is committed.
+/// </para>
+/// <para>
+/// Order within a job. Success: SQLite (job <c>done</c>, the file's generation) and then <c>file_generation</c> in
+/// the event store. Failure: the attempt's rows are deleted in the event store first and SQLite is written last. A
+/// stop anywhere leaves either a job in <c>parsing</c>, which the next start requeues, or SQLite ahead of the event
+/// store, which the next start syncs.
+/// </para>
+/// </summary>
+public sealed class JobRunner
+{
+    private readonly MetadataStore _store;
+    private readonly IJobEventStore _events;
+    private readonly SourceCatalog _sources;
+    private readonly JobRunnerOptions _options;
+    private readonly DiskWatermark _watermark;
+    private readonly ILogger _logger;
+    private readonly ILoggerFactory _loggers;
+    private int _running;
+    private int _paused;
+    private int _syncNeeded;
+    private long _claimNotBefore;
+
+    public JobRunner(MetadataStore store, IJobEventStore events, SourceCatalog sources, JobRunnerOptions options, IDiskProbe? disk = null, ILoggerFactory? loggers = null)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(events);
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+        _store = store;
+        _events = events;
+        _sources = sources;
+        _options = options;
+        _loggers = loggers ?? NullLoggerFactory.Instance;
+        _logger = _loggers.CreateLogger<JobRunner>();
+        var local = new List<string> { Path.GetDirectoryName(store.Path)! };
+        if (options.EvidenceRoot is { Length: > 0 } root)
+        {
+            local.Add(root);
+        }
+
+        _watermark = new DiskWatermark(options.Watermark, disk ?? new DriveDiskProbe(), local);
+    }
+
+    /// <summary>True while the disk watermark holds the queue.</summary>
+    public bool Paused => Volatile.Read(ref _paused) == 1;
+
+    public int Running => Volatile.Read(ref _running);
+
+    /// <summary>What the startup reconcilers did on the last <see cref="RunAsync"/>.</summary>
+    public ReconcileReport? LastReconcile { get; private set; }
+
+    /// <summary>
+    /// Runs until cancelled, or until the queue is empty with <see cref="JobRunnerOptions.ExitWhenIdle"/>. A
+    /// cancellation stops the running jobs, removes their rows and puts them back in the queue.
+    /// </summary>
+    /// <exception cref="RunnerLockedException">Another runner holds the metadata file.</exception>
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        using var runnerLock = await RunnerLock.AcquireAsync(_store.Path, _options.LockWait, cancellationToken).ConfigureAwait(false)
+            ?? throw new RunnerLockedException($"another job runner holds {RunnerLock.PathFor(_store.Path)}; one runner per metadata file");
+        await _store.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        if (!await WaitForStoreAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        LastReconcile = await new StartupReconciler(_store, _events, _options, _logger).RunAsync(cancellationToken).ConfigureAwait(false);
+        await CheckWatermarkAsync(cancellationToken).ConfigureAwait(false);
+
+        // A slot that cannot go on (the metadata store refuses a commit) stops the others; cancellation from outside is a normal stop.
+        using var fatal = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var maintenanceStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var maintenance = Task.Run(() => MaintenanceLoopAsync(maintenanceStop.Token), CancellationToken.None);
+        var slots = new Task[_options.MaxConcurrentJobs];
+        for (var i = 0; i < slots.Length; i++)
+        {
+            var slot = i + 1;
+            slots[i] = Task.Run(() => SlotLoopAsync(slot, fatal, cancellationToken), CancellationToken.None);
+        }
+
+        try
+        {
+            await Task.WhenAll(slots).ConfigureAwait(false);
+        }
+        finally
+        {
+            await maintenanceStop.CancelAsync().ConfigureAwait(false);
+            await maintenance.ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>True when the failure is SQLite reporting the database busy or locked, at any depth.</summary>
+    internal static bool IsBusy(Exception? e)
+    {
+        for (; e is not null; e = e.InnerException)
+        {
+            if (e is SqliteException { SqliteErrorCode: 5 or 6 })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True when the event store refused for memory (ClickHouse 241, MEMORY_LIMIT_EXCEEDED), at any depth.</summary>
+    internal static bool IsMemoryLimit(Exception? e)
+    {
+        for (; e is not null; e = e.InnerException)
+        {
+            if (e is Urlog.Core.Ingest.Native.ClickHouseInsertException { Code: 241 })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The message stored on a failed job: the reported exception's own message, then what caused it.</summary>
+    internal static string Describe(Exception e)
+    {
+        var text = new StringBuilder(e.Message);
+        var depth = 0;
+        for (var inner = e.InnerException; inner is not null && depth < 4; inner = inner.InnerException, depth++)
+        {
+            if (!text.ToString().Contains(inner.Message, StringComparison.Ordinal))
+            {
+                text.Append("; caused by ").Append(inner.GetType().Name).Append(": ").Append(inner.Message);
+            }
+        }
+
+        return text.ToString();
+    }
+
+    private async Task<bool> WaitForStoreAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            try
+            {
+                await _events.RequireSchemaAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+            catch (Exception e) when (!_options.ExitWhenIdle)
+            {
+                // The backend keeps serving while the event store is away or not migrated yet; nothing is claimed until it answers.
+                JobLog.StoreNotReady(_logger, e.Message, _options.StoreRetryInterval.TotalSeconds);
+            }
+
+            try
+            {
+                await Task.Delay(_options.StoreRetryInterval, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+        }
+    }
+
+    private async Task SlotLoopAsync(int slot, CancellationTokenSource fatal, CancellationToken stopping)
+    {
+        var worker = string.Create(CultureInfo.InvariantCulture, $"{_options.WorkerName}:{slot}");
+        var buffers = new PipelineBuffers(_options.Pipeline);
+        var token = fatal.Token;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                ClaimedJob? claimed = null;
+                var backoff = Stopwatch.GetElapsedTime(Stopwatch.GetTimestamp(), Interlocked.Read(ref _claimNotBefore));
+                if (backoff > TimeSpan.Zero)
+                {
+                    // The event store refused an insert for memory a moment ago: nobody claims until it has had time.
+                    try
+                    {
+                        await Task.Delay(backoff, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (!Paused)
+                {
+                    try
+                    {
+                        await using var db = _store.CreateDbContext();
+                        claimed = await JobOperations.ClaimAsync(db, worker, _store.Clock.GetUtcNow().UtcDateTime, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    catch (Exception e) when (IsBusy(e))
+                    {
+                        // Another writer held the lock past the busy timeout; the queue is still there next time round.
+                    }
+                }
+
+                if (claimed is null)
+                {
+                    if (_options.ExitWhenIdle && Running == 0 && !Paused)
+                    {
+                        return;
+                    }
+
+                    if (_options.ExitWhenIdle && Paused && Running == 0)
+                    {
+                        JobLog.PausedExit(_logger);
+                        return;
+                    }
+
+                    try
+                    {
+                        await Task.Delay(_options.IdlePoll, token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                Interlocked.Increment(ref _running);
+                try
+                {
+                    await ExecuteAsync(claimed, worker, buffers, stopping).ConfigureAwait(false);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _running);
+                    if (buffers.Chunks.Outstanding != 0 || buffers.Batches.Outstanding != 0)
+                    {
+                        // A job left buffers out: never hand a short pool to the next file.
+                        JobLog.PoolsUnbalanced(_logger, claimed.Job.Id, buffers.Chunks.Outstanding, buffers.Batches.Outstanding);
+                        buffers.Batches.Dispose();
+                        buffers = new PipelineBuffers(_options.Pipeline);
+                    }
+                }
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            JobLog.SlotStopped(_logger, slot, e);
+            await fatal.CancelAsync().ConfigureAwait(false);
+            throw;
+        }
+        finally
+        {
+            buffers.Batches.Dispose();
+        }
+    }
+
+    private async Task ExecuteAsync(ClaimedJob claimed, string worker, PipelineBuffers buffers, CancellationToken stopping)
+    {
+        var job = claimed.Job;
+        var file = claimed.File;
+        var caseId = (ulong)job.CaseId;
+        var fileId = (ulong)file.Id;
+        var generation = (uint)job.Generation;
+        var committed = (uint)claimed.CommittedGeneration;
+        var progress = new PipelineProgress();
+        var total = Stopwatch.StartNew();
+        try
+        {
+            // The event store may already show a generation at or above the one SQLite allocated: the id belonged to
+            // a purged file, or this metadata file is older than the store. The attempt goes above it, so its rows
+            // are never the visible ones before its own commit.
+            var mirrored = await _events.ReadFileGenerationAsync(fileId, stopping).ConfigureAwait(false);
+            if (mirrored >= generation)
+            {
+                generation = mirrored + 1;
+                var raised = (int)generation;
+                await TerminalAsync(job.Id, db => JobOperations.RaiseGenerationAsync(db, job.Id, worker, raised, CancellationToken.None)).ConfigureAwait(false);
+                job.Generation = raised;
+            }
+
+            JobLog.Started(_logger, job.Id, file.Id, job.CaseId, job.Generation, job.Attempt, worker);
+            var source = ResolveSource(file);
+            var path = ResolvePath(file);
+            if (!File.Exists(path))
+            {
+                throw new JobFailedException($"the evidence file is not where the intake record says (stored_path '{file.StoredPath}')");
+            }
+
+            if (generation > 1)
+            {
+                // Rows of earlier attempts and of generations that were never committed. The committed parse stays.
+                await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, stopping).ConfigureAwait(false);
+            }
+
+            var identity = new FileIdentity(caseId, (ulong)(file.HostId ?? 0), fileId, generation, claimed.Host?.Name ?? string.Empty,
+                ZoneOffset(file.Timezone ?? claimed.Host?.Timezone), file.YearHint ?? 1970, ParseOptions(file.OverrideOptions), file.FileTime);
+            var compression = file.Compression is { Length: > 0 } c ? Names.Parse<CompressionKind>(c) : CompressionKind.None;
+            var encoding = Names.Parse<InputEncoding>(file.Encoding);
+
+            PipelineResult result;
+            long acked;
+            string sha256;
+            long hashedBytes;
+            TimeSpan hashTime;
+            var sink = _events.OpenSink(_options.Pipeline);
+            await using (sink.ConfigureAwait(false))
+            {
+                using var raw = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
+                using var hashing = new HashingReadStream(raw);
+                using var decoded = InputDecoding.OpenDecoded(hashing, compression, encoding);
+                using var progressStop = new CancellationTokenSource();
+                var progressWriter = Task.Run(() => ProgressLoopAsync(job.Id, progress, sink, progressStop.Token), CancellationToken.None);
+                try
+                {
+                    result = await new ParsePipeline(buffers, _loggers.CreateLogger<ParsePipeline>()).RunAsync(decoded, source, identity, sink, progress, stopping).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await progressStop.CancelAsync().ConfigureAwait(false);
+                    await progressWriter.ConfigureAwait(false);
+                }
+
+                acked = sink.AckedRows;
+                // A decoder may stop short of the end of the file; the digest is over every byte of it.
+                var scratch = new byte[1 << 20];
+                sha256 = hashing.DrainAndFinish(scratch);
+                hashedBytes = hashing.BytesHashed;
+                hashTime = hashing.HashTime;
+            }
+
+            if (!string.Equals(sha256, file.Sha256, StringComparison.Ordinal) || hashedBytes != file.Size)
+            {
+                await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
+                var mismatch = new IntegrityMismatch(sha256, hashedBytes);
+                await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, Now(), CancellationToken.None)).ConfigureAwait(false);
+                JobLog.Quarantined(_logger, job.Id, file.Id, file.Sha256, sha256);
+                return;
+            }
+
+            if (acked != result.Rows)
+            {
+                throw new JobFailedException($"the event store acknowledged {acked} of the {result.Rows} rows the parsers produced");
+            }
+
+            var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
+            await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, Now(), CancellationToken.None)).ConfigureAwait(false);
+            try
+            {
+                await _events.CommitFileGenerationsAsync([new(fileId, generation)], CancellationToken.None).ConfigureAwait(false);
+                if (generation > 1)
+                {
+                    await _events.DeleteFileGenerationsBelowAsync(caseId, fileId, generation, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e)
+            {
+                // SQLite is the truth and already says done; the sync writes the event store's row as soon as it answers.
+                Interlocked.Exchange(ref _syncNeeded, 1);
+                JobLog.CommitNotMirrored(_logger, job.Id, file.Id, e.Message);
+            }
+
+            var seconds = result.Elapsed.TotalSeconds;
+            JobLog.Done(_logger, job.Id, file.Id, job.Generation, result.Rows, result.Rejects, result.Bytes, seconds,
+                seconds > 0 ? result.Bytes / 1e6 / seconds : 0, hashTime.TotalSeconds, total.Elapsed.TotalSeconds);
+        }
+        catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+        {
+            // A graceful stop: the attempt's rows go, the job waits for the next start. If either step fails the job
+            // stays in parsing and the next start's reconciler does the same thing.
+            try
+            {
+                await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
+                await using var db = _store.CreateDbContext();
+                await JobOperations.RequeueAsync(db, job.Id, "interrupted by a shutdown of the worker; queued again", countAttempt: false, _options.MaxAttempts, Now(), CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                JobLog.StopNotClean(_logger, job.Id, e.Message);
+            }
+        }
+        catch (JobCommitException)
+        {
+            throw;
+        }
+        catch (Exception e) when (IsMemoryLimit(e))
+        {
+            // The server ran out of memory for this insert (241). That passes: the attempt's rows go, the job waits
+            // in the queue, and nothing is claimed for a while. It counts as an attempt, so it cannot repeat for ever.
+            var message = Describe(e);
+            Interlocked.Exchange(ref _claimNotBefore, Stopwatch.GetTimestamp() + (long)(_options.MemoryLimitBackoff.TotalSeconds * Stopwatch.Frequency));
+            try
+            {
+                await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception deleteFailure)
+            {
+                JobLog.DeleteAfterFailure(_logger, job.Id, deleteFailure.Message);
+            }
+
+            var outcome = RequeueOutcome.NotParsing;
+            var reason = $"the event store refused the insert for memory and the job was queued again: {message}";
+            await TerminalAsync(job.Id, async db => outcome = await JobOperations.RequeueAsync(db, job.Id, reason, countAttempt: true, _options.MaxAttempts, Now(), CancellationToken.None).ConfigureAwait(false)).ConfigureAwait(false);
+            JobLog.MemoryLimit(_logger, job.Id, file.Id, job.Attempt, outcome.ToString(), _options.MemoryLimitBackoff.TotalSeconds);
+        }
+        catch (Exception e)
+        {
+            var message = Describe(e);
+            JobLog.Failed(_logger, job.Id, file.Id, message);
+            try
+            {
+                await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception deleteFailure)
+            {
+                // The rows carry a generation that is never committed, so they stay invisible; the next attempt on the file removes them.
+                JobLog.DeleteAfterFailure(_logger, job.Id, deleteFailure.Message);
+            }
+
+            await TerminalAsync(job.Id, db => JobOperations.FailAsync(db, job.Id, worker, message, Now(), CancellationToken.None)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A write that ends a job. While another writer holds the SQLite lock it is tried again until
+    /// <see cref="JobRunnerOptions.CommitBusyTimeout"/>; past that the runner stops with the job still in
+    /// <c>parsing</c>, and the next start recovers it.
+    /// </summary>
+    private async Task TerminalAsync(long jobId, Func<MetadataDb, Task> write)
+    {
+        var waited = Stopwatch.StartNew();
+        var announced = false;
+        while (true)
+        {
+            try
+            {
+                await using var db = _store.CreateDbContext();
+                await write(db).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception e) when (IsBusy(e))
+            {
+                if (waited.Elapsed >= _options.CommitBusyTimeout)
+                {
+                    throw new JobCommitException($"job {jobId}: the metadata store stayed locked for {waited.Elapsed.TotalSeconds:F0} s; the job is left in parsing for the next start", e);
+                }
+
+                if (!announced)
+                {
+                    announced = true;
+                    JobLog.CommitWaiting(_logger, jobId);
+                }
+
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task ProgressLoopAsync(long jobId, PipelineProgress progress, IJobSink sink, CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(_options.ProgressInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
+            {
+                var acked = sink.AckedRows;
+                var parsed = progress.ChunksParsed;
+                var rows = progress.Rows;
+                // The store acknowledges INSERTs, not chunks: the chunk figure is the acknowledged share of the parsed chunks.
+                var chunksAcked = rows == 0 ? 0 : (long)(parsed * (double)Math.Min(acked, rows) / rows);
+                try
+                {
+                    await using var db = _store.CreateDbContext();
+                    await JobOperations.WriteProgressAsync(db, jobId, progress.ChunksRead, parsed, chunksAcked, acked, progress.Rejects, progress.BytesRead, stop).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception e)
+                {
+                    // Advisory: a busy store costs one tick of the progress bar, never the job.
+                    JobLog.ProgressSkipped(_logger, jobId, e.Message);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task MaintenanceLoopAsync(CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(_options.WatermarkInterval);
+        DateOnly? lastBackup = null;
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
+            {
+                try
+                {
+                    await CheckWatermarkAsync(stop).ConfigureAwait(false);
+                    if (Interlocked.Exchange(ref _syncNeeded, 0) == 1)
+                    {
+                        try
+                        {
+                            await new StartupReconciler(_store, _events, _options, _logger).SyncGenerationsAsync(stop).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            Interlocked.Exchange(ref _syncNeeded, 1);
+                            throw;
+                        }
+                    }
+
+                    lastBackup = await NightlyBackupAsync(lastBackup, stop).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception e)
+                {
+                    JobLog.MaintenanceFailed(_logger, e.Message);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task CheckWatermarkAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<DiskSpace> storeDisks = [];
+        try
+        {
+            storeDisks = await _events.DiskSpaceAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            JobLog.StoreDisksUnread(_logger, e.Message);
+        }
+
+        var reading = _watermark.Read(storeDisks);
+        await using var db = _store.CreateDbContext();
+        if (reading.Paused)
+        {
+            var reason = reading.Describe();
+            if (!Paused)
+            {
+                await JobOperations.PauseAsync(db, _store.Audit, reason, reading.Details(), cancellationToken).ConfigureAwait(false);
+                Volatile.Write(ref _paused, 1);
+                JobLog.Paused(_logger, reason);
+            }
+            else
+            {
+                // Jobs queued since the pause began say why they wait; no second audit row.
+                await db.Jobs.Where(j => j.State == JobState.Queued && j.Message == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.Message, JobOperations.PausedPrefix + reason), cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else if (Paused)
+        {
+            var lowest = reading.Volumes.OrderBy(v => v.FreeBytes - _watermark.MarkFor(v)).First();
+            var details = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["volume"] = lowest.Name,
+                ["free_bytes"] = lowest.FreeBytes,
+                ["total_bytes"] = lowest.TotalBytes,
+                ["mark_bytes"] = _watermark.MarkFor(lowest),
+            };
+            await JobOperations.ResumeAsync(db, _store.Audit, details, cancellationToken).ConfigureAwait(false);
+            Volatile.Write(ref _paused, 0);
+            JobLog.Resumed(_logger, lowest.Name, lowest.FreeBytes);
+        }
+    }
+
+    private async Task<DateOnly?> NightlyBackupAsync(DateOnly? lastBackup, CancellationToken cancellationToken)
+    {
+        if (_options.NightlyBackupAtUtc is not { } at)
+        {
+            return lastBackup;
+        }
+
+        var now = _store.Clock.GetUtcNow().UtcDateTime;
+        var today = DateOnly.FromDateTime(now);
+        if (lastBackup is null)
+        {
+            // The newest nightly row in the chain says whether today's was taken before a restart.
+            await using var db = _store.CreateDbContext();
+            var newest = await db.Audit.AsNoTracking().Where(a => a.Action == AuditActions.Backup && a.DetailsJson.Contains("\"reason\":\"" + SqliteBackup.ReasonNightly + "\""))
+                .OrderByDescending(a => a.Seq).Select(a => (DateTime?)a.TsUtc).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            lastBackup = newest is { } ts ? DateOnly.FromDateTime(ts) : DateOnly.MinValue;
+        }
+
+        if (lastBackup >= today || TimeOnly.FromDateTime(now) < at)
+        {
+            return lastBackup;
+        }
+
+        var directory = _options.BackupDirectory ?? SqliteBackup.DefaultDirectory(_store.Path);
+        var backup = await SqliteBackup.TakeAsync(_store, directory, SqliteBackup.ReasonNightly, AuditActions.SystemActor, null, cancellationToken).ConfigureAwait(false);
+        JobLog.BackupTaken(_logger, backup.Path, backup.Sha256);
+        return today;
+    }
+
+    private ILogSource ResolveSource(EvidenceFile file)
+    {
+        // A file always resolves: the override, what the detector chose, or the generic source for a row that
+        // carries neither (written before detection recorded a fallback).
+        var id = file.OverrideSource ?? file.DetectedSource;
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            id = FormatDetector.GenericSourceId;
+        }
+
+        if (!_sources.TryGet(id, out _))
+        {
+            throw new JobFailedException($"no log source called '{id}' is registered in this build");
+        }
+
+        return _sources.Create(id);
+    }
+
+    private string ResolvePath(EvidenceFile file)
+    {
+        if (Path.IsPathRooted(file.StoredPath))
+        {
+            return file.StoredPath;
+        }
+
+        var root = _options.EvidenceRoot ?? throw new JobFailedException($"stored_path '{file.StoredPath}' is relative and no evidence root is configured");
+        return Path.Combine(root, file.CaseId.ToString(CultureInfo.InvariantCulture), file.StoredPath);
+    }
+
+    private static TimeSpan ZoneOffset(string? zone)
+    {
+        if (string.IsNullOrWhiteSpace(zone) || zone.Equals("UTC", StringComparison.OrdinalIgnoreCase))
+        {
+            return TimeSpan.Zero;
+        }
+
+        if (zone[0] is '+' or '-' && TimeSpan.TryParse(zone.AsSpan(1), CultureInfo.InvariantCulture, out var offset))
+        {
+            return zone[0] == '-' ? -offset : offset;
+        }
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(zone).GetUtcOffset(DateTime.UtcNow);
+        }
+        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            throw new JobFailedException($"unknown timezone '{zone}' on the file or its host; use an IANA id or an offset like +02:00", e);
+        }
+    }
+
+    private static Dictionary<string, string>? ParseOptions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var options = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                options[property.Name] = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString()! : property.Value.GetRawText();
+            }
+
+            return options.Count == 0 ? null : options;
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        {
+            throw new JobFailedException("override_options is not a JSON object of source options", e);
+        }
+    }
+
+    private DateTime Now() => _store.Clock.GetUtcNow().UtcDateTime;
+}
+
+/// <summary>The job cannot succeed as it stands; the message is what the job row keeps.</summary>
+public sealed class JobFailedException : Exception
+{
+    public JobFailedException()
+    {
+    }
+
+    public JobFailedException(string message)
+        : base(message)
+    {
+    }
+
+    public JobFailedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>The metadata store would not take a job's final write; the runner stops and the next start recovers the job.</summary>
+public sealed class JobCommitException : Exception
+{
+    public JobCommitException()
+    {
+    }
+
+    public JobCommitException(string message)
+        : base(message)
+    {
+    }
+
+    public JobCommitException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}

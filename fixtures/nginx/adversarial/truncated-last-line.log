@@ -1,0 +1,7 @@
+203.0.113.7 - - [01/Mar/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 612 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"
+10.0.0.5 - jsmith [01/Mar/2026:00:00:01 +0000] "POST /login HTTP/1.1" 302 0 "https://example.com/login" "curl/8.11.0"
+10.0.0.5 frank jsmith [01/Mar/2026:00:00:02 +0000] "GET /admin HTTP/1.1" 403 199 "-" "-"
+198.51.100.23 - - [01/Mar/2026:00:00:03 +0000] "GET /search?q=shell&page=2 HTTP/2.0" 200 5120 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+2001:db8:85a3::8a2e:370:7334 - - [01/Mar/2026:00:00:04 +0000] "GET /api/v1/users HTTP/1.1" 200 1024 "-" "python-requests/2.32.3"
+2a02:1234:5678:9abc:def0:1111:2222:3333 - - [01/Mar/2026:00:00:05 +0000] "HEAD /health HTTP/1.1" 200 0 "-" "Go-http-client/2.0"
+203.0.113.7 - - [01/Mar/20

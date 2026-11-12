@@ -1,0 +1,5 @@
+file	kind	source	band	layout	encoding	containers	format	flags
+capture.pcap	rejected	-	none	-	utf8	-	pcap	-
+capture-big-endian.pcap	rejected	-	none	-	utf8	-	pcap	-
+capture-nanosecond.pcap	rejected	-	none	-	utf8	-	pcap	-
+capture.pcapng	rejected	-	none	-	utf8	-	pcapng	-

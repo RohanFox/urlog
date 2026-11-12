@@ -1,0 +1,24 @@
+Mar  1 00:00:01 db-01 postfix/smtpd[58840]: connect from unknown[198.51.100.8]
+Mar  1 00:00:02 web-01 sshd[46538]: Accepted publickey for oracle from 203.0.113.9 port 5954 ssh2
+Mar  1 00:00:04 web-01 dovecot[27182]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.53, lip=10.0.0.5, TLS
+Mar  1 00:00:05 app-02 CRON[13256]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:08 app-02 sshd[31208]: Failed password for invalid user alice from 198.51.100.29 port 54111 ssh2
+Mar  1 00:00:12 db-01 sudo[63346]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:12 db-01 dovecot[25392]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.35, lip=10.0.0.5, TLS
+Mar  1 00:00:17 fw-01 systemd: Started Session 934 of user oracle.
+Mar  1 00:00:22 mail-01 sudo[14674]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:26 mail-01 dovecot[22138]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.34, lip=10.0.0.5, TLS
+Mar  1 00:00:30 fw-01 CRON[29457]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:35 web-01 postfix/smtpd[34494]: connect from unknown[203.0.113.29]
+Mar  1 00:00:35 mail-01 systemd: Started Session 69 of user root.
+Mar  1 00:00:36 db-01 sudo[59419]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:40 app-02 CRON[469]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:44 fw-01 postfix/smtpd[43908]: connect from unknown[192.0.2.7]
+Mar  1 00:00:44 app-02 sshd[6683]: Connection closed by 192.0.2.23 port 29476 [preauth]
+Mar  1 00:00:45 mail-01 dovecot[6222]: imap-login: Login: user=<root>, method=PLAIN, rip=198.51.100.42, lip=10.0.0.5, TLS
+Mar  1 00:00:45 fw-01 systemd: Started Session 991 of user admin.
+Mar  1 00:00:50 fw-01 systemd: Started Session 212 of user deploy.
+Mar  1 00:00:54 web-01 CRON[39008]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:59 db-01 kernel: [75657.461196] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:02 db-01 dovecot[36023]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.2, lip=10.0.0.5, TLS
+Mar  1 00:01:03 app-02 dovecot[39420]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.4, lip=10.0.0.5, TLS

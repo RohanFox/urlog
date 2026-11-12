@@ -1,0 +1,21 @@
+time,level,message
+2026-03-01T00:00:00.102Z,INFO,cache miss for key user:885
+2026-03-01T00:00:03.757Z,INFO,retrying upstream call, attempt 577
+2026-03-01T00:00:08.053Z,WARN,connection pool size 497
+2026-03-01T00:00:12.785Z,ERROR,worker 37 heartbeat
+2026-03-01T00:00:16.601Z,INFO,worker 158 heartbeat
+2026-03-01T00:00:17.984Z,DEBUG,request handled in 268 ms
+2026-03-01T00:00:18.285Z,INFO,request handled in 213 ms
+2026-03-01T00:00:20.540Z,ERROR,cache miss for key user:267
+2026-03-01T00:00:25.312Z,ERROR,retrying upstream call, attempt 412
+2026-03-01T00:00:25.749Z,WARN,request handled in 225 ms
+2026-03-01T00:00:28.752Z,WARN,worker 199 heartbeat
+2026-03-01T00:00:29.701Z,DEBUG,connection pool size 824
+2026-03-01T00:00:32.824Z,ERROR,worker 832 heartbeat
+2026-03-01T00:00:33.464Z,WARN,worker 208 heartbeat
+2026-03-01T00:00:36.208Z,DEBUG,retrying upstream call, attempt 457
+2026-03-01T00:00:40.472Z,WARN,worker 361 heartbeat
+2026-03-01T00:00:41.295Z,ERROR,connection pool size 484
+2026-03-01T00:00:44.826Z,ERROR,worker 285 heartbeat
+2026-03-01T00:00:49.048Z,DEBUG,worker 668 heartbeat
+2026-03-01T00:00:52.003Z,DEBUG,worker 172 heartbeat

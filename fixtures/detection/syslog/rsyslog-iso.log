@@ -1,0 +1,24 @@
+2026-03-01T00:00:03.601000+02:00 db-01 systemd: Started Session 70 of user deploy.
+2026-03-01T00:00:05.906000+02:00 web-01 systemd: Started Session 936 of user admin.
+2026-03-01T00:00:09.491000+02:00 db-01 CRON[32636]: (admin) CMD (/usr/local/bin/backup.sh)
+2026-03-01T00:00:10.510000+02:00 web-01 postfix/smtpd[17815]: connect from unknown[192.0.2.25]
+2026-03-01T00:00:10.713000+02:00 app-02 sudo[39362]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+2026-03-01T00:00:15.696000+02:00 web-01 sshd[26339]: Connection closed by 198.51.100.60 port 39079 [preauth]
+2026-03-01T00:00:19.237000+02:00 app-02 postfix/smtpd[27120]: connect from unknown[198.51.100.10]
+2026-03-01T00:00:23.914000+02:00 web-01 kernel: [5589.321609] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+2026-03-01T00:00:26.546000+02:00 fw-01 sshd[30645]: Connection closed by 203.0.113.60 port 2137 [preauth]
+2026-03-01T00:00:28.944000+02:00 db-01 kernel: [31969.855875] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+2026-03-01T00:00:31.090000+02:00 db-01 CRON[37112]: (root) CMD (/usr/local/bin/backup.sh)
+2026-03-01T00:00:35.947000+02:00 mail-01 systemd: Started Session 474 of user deploy.
+2026-03-01T00:00:39.463000+02:00 app-02 sudo[4133]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+2026-03-01T00:00:41.126000+02:00 app-02 CRON[54496]: (admin) CMD (/usr/local/bin/backup.sh)
+2026-03-01T00:00:41.359000+02:00 app-02 CRON[14452]: (oracle) CMD (/usr/local/bin/backup.sh)
+2026-03-01T00:00:44.881000+02:00 mail-01 sshd[43599]: Accepted publickey for root from 198.51.100.26 port 53836 ssh2
+2026-03-01T00:00:47.103000+02:00 db-01 sudo[21963]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+2026-03-01T00:00:51.713000+02:00 fw-01 sudo[12653]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+2026-03-01T00:00:51.919000+02:00 app-02 systemd: Started Session 45 of user bob.
+2026-03-01T00:00:55.851000+02:00 db-01 dovecot[38846]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.24, lip=10.0.0.5, TLS
+2026-03-01T00:00:59.953000+02:00 web-01 postfix/smtpd[38550]: connect from unknown[198.51.100.3]
+2026-03-01T00:01:01.875000+02:00 fw-01 dovecot[23143]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.57, lip=10.0.0.5, TLS
+2026-03-01T00:01:02.569000+02:00 db-01 postfix/smtpd[46876]: connect from unknown[203.0.113.2]
+2026-03-01T00:01:05.935000+02:00 app-02 dovecot[38380]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.2, lip=10.0.0.5, TLS

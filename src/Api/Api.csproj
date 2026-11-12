@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The API host: ASP.NET Core on Kestrel, minimal APIs under /api/v1, local accounts, sessions, roles, the case ACL.
+       TLS is the reverse proxy's; Kestrel listens on 127.0.0.1:5080 by default (appsettings.json). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- OpenAPI generation is deferred by the design record; api.http is the request list. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Urlog.Api.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <!-- The job runner the backend hosts parses with every registered source. -->
+    <ProjectReference Include="../Sources/Sources.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Update="api.http" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+</Project>

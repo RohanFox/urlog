@@ -1,0 +1,24 @@
+<85>Mar  1 00:00:01 mail-01 sudo[51878]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<22>Mar  1 00:00:02 web-01 dovecot[6982]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.25, lip=10.0.0.5, TLS
+<78>Mar  1 00:00:07 db-01 CRON[35046]: (admin) CMD (/usr/local/bin/backup.sh)
+<78>Mar  1 00:00:11 web-01 CRON[2816]: (deploy) CMD (/usr/local/bin/backup.sh)
+<78>Mar  1 00:00:14 db-01 CRON[52976]: (oracle) CMD (/usr/local/bin/backup.sh)
+<22>Mar  1 00:00:18 db-01 postfix/smtpd[25939]: connect from unknown[198.51.100.27]
+<6>Mar  1 00:00:21 mail-01 kernel: [49292.464469] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<78>Mar  1 00:00:23 db-01 CRON[22856]: (root) CMD (/usr/local/bin/backup.sh)
+<38>Mar  1 00:00:24 db-01 sshd[54390]: Failed password for invalid user bob from 203.0.113.19 port 28159 ssh2
+<6>Mar  1 00:00:26 web-01 kernel: [95862.444724] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<6>Mar  1 00:00:29 mail-01 kernel: [12360.919836] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<22>Mar  1 00:00:31 db-01 dovecot[39433]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.51, lip=10.0.0.5, TLS
+<78>Mar  1 00:00:33 fw-01 CRON[32861]: (admin) CMD (/usr/local/bin/backup.sh)
+<38>Mar  1 00:00:38 web-01 sshd[64972]: Accepted publickey for alice from 192.0.2.47 port 4540 ssh2
+<30>Mar  1 00:00:40 app-02 systemd: Started Session 889 of user alice.
+<6>Mar  1 00:00:44 fw-01 kernel: [5729.959769] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<22>Mar  1 00:00:47 web-01 dovecot[13325]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.46, lip=10.0.0.5, TLS
+<85>Mar  1 00:00:48 db-01 sudo[16750]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<22>Mar  1 00:00:51 db-01 postfix/smtpd[53233]: connect from unknown[192.0.2.28]
+<85>Mar  1 00:00:55 fw-01 sudo[38274]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<78>Mar  1 00:00:56 app-02 CRON[7772]: (alice) CMD (/usr/local/bin/backup.sh)
+<38>Mar  1 00:00:58 fw-01 sshd[53264]: Failed password for invalid user oracle from 192.0.2.11 port 49489 ssh2
+<22>Mar  1 00:01:02 mail-01 postfix/smtpd[44167]: connect from unknown[192.0.2.45]
+<22>Mar  1 00:01:07 db-01 postfix/smtpd[25792]: connect from unknown[192.0.2.55]

@@ -1,0 +1,20 @@
+2026-03-01 00:00:04.548 DEBUG worker 96 heartbeat
+2026-03-01 00:00:06.873 INFO cache miss for key user:308
+2026-03-01 00:00:09.418 ERROR worker 847 heartbeat
+2026-03-01 00:00:11.967 WARN retrying upstream call, attempt 149
+2026-03-01 00:00:16.539 DEBUG request handled in 41 ms
+2026-03-01 00:00:19.076 WARN request handled in 670 ms
+2026-03-01 00:00:23.403 INFO worker 721 heartbeat
+2026-03-01 00:00:24.264 INFO retrying upstream call, attempt 475
+2026-03-01 00:00:25.551 WARN retrying upstream call, attempt 57
+2026-03-01 00:00:27.321 WARN request handled in 248 ms
+Mar  1 00:00:04 fw-01 sshd[22619]: Connection closed by 203.0.113.54 port 32071 [preauth]
+Mar  1 00:00:06 fw-01 CRON[53851]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:10 db-01 postfix/smtpd[28238]: connect from unknown[192.0.2.17]
+Mar  1 00:00:11 app-02 CRON[54942]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:15 app-02 sudo[35883]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:20 db-01 systemd: Started Session 355 of user deploy.
+Mar  1 00:00:20 db-01 sudo[18849]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:21 db-01 kernel: [30602.390002] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:22 mail-01 sshd[30240]: Connection closed by 203.0.113.49 port 55693 [preauth]
+Mar  1 00:00:26 fw-01 kernel: [69587.823515] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.

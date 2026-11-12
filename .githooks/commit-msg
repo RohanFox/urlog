@@ -1,0 +1,57 @@
+#!/bin/sh
+# Commit message gate for this repository. Installed with: powershell -File tools/install-hooks.ps1
+# (which sets core.hooksPath=.githooks; on Linux: git config core.hooksPath .githooks).
+# The commit format is in CONTRIBUTING.md. Self-test: tools/pre-merge.ps1.
+#
+# Rejects a message when
+#   - the subject is not "type(scope): subject" or "type: subject" with an allowed type
+#   - the subject is longer than 72 characters
+# Comment lines (starting with #) and everything below the scissors line are ignored.
+# Subjects git writes itself are exempt: "Merge ...", "Revert ...", "fixup! ..." and "squash! ...".
+
+types='feat|fix|perf|refactor|test|docs|build|ci|style|revert|chore'
+max_subject=72
+
+file=$1
+if [ -z "$file" ] || [ ! -f "$file" ]; then
+  echo "commit-msg: no message file" >&2
+  exit 1
+fi
+
+LC_ALL=C
+export LC_ALL
+
+# The message as git will record it: no scissors block, no comment lines, no carriage returns.
+msg=$(sed -e '/^# -\{1,\} >8 -\{1,\}$/,$d' -e '/^#/d' "$file" | tr -d '\r')
+subject=$(printf '%s\n' "$msg" | sed -n '/[^[:space:]]/{p;q;}')
+
+fail=0
+reject() {
+  echo "commit-msg: $1" >&2
+  fail=1
+}
+
+if [ -z "$subject" ]; then
+  echo "commit-msg: empty message" >&2
+  exit 1
+fi
+
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) ;;
+  *)
+    if ! printf '%s\n' "$subject" | grep -Eq "^($types)(\([a-z0-9][a-z0-9-]*\))?: [^[:space:]]"; then
+      reject "subject must be 'type(scope): subject' or 'type: subject'; types: $(printf '%s' "$types" | tr '|' ' ')"
+    fi
+    # Characters, not bytes: UTF-8 continuation bytes are not counted.
+    length=$(printf '%s' "$subject" | tr -d '\200-\277' | wc -c | tr -d ' ')
+    if [ "$length" -gt "$max_subject" ]; then
+      reject "subject is $length characters, the limit is $max_subject"
+    fi
+    ;;
+esac
+
+if [ "$fail" -ne 0 ]; then
+  echo "commit-msg: message rejected (see CONTRIBUTING.md)" >&2
+  exit 1
+fi
+exit 0

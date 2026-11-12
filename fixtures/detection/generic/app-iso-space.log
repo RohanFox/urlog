@@ -1,0 +1,20 @@
+2026-03-01 00:00:00.652 INFO  [main] com.example.App - worker 203 heartbeat
+2026-03-01 00:00:02.002 DEBUG  [main] com.example.App - request handled in 724 ms
+2026-03-01 00:00:03.002 ERROR  [main] com.example.App - retrying upstream call, attempt 657
+2026-03-01 00:00:03.594 INFO  [main] com.example.App - cache miss for key user:605
+2026-03-01 00:00:08.013 DEBUG  [main] com.example.App - cache miss for key user:885
+2026-03-01 00:00:10.676 ERROR  [main] com.example.App - worker 569 heartbeat
+2026-03-01 00:00:14.273 WARN  [main] com.example.App - connection pool size 228
+2026-03-01 00:00:16.235 INFO  [main] com.example.App - retrying upstream call, attempt 161
+2026-03-01 00:00:19.679 WARN  [main] com.example.App - cache miss for key user:685
+2026-03-01 00:00:24.335 WARN  [main] com.example.App - worker 275 heartbeat
+2026-03-01 00:00:28.704 WARN  [main] com.example.App - connection pool size 676
+2026-03-01 00:00:32.748 DEBUG  [main] com.example.App - connection pool size 896
+2026-03-01 00:00:35.934 DEBUG  [main] com.example.App - cache miss for key user:388
+2026-03-01 00:00:37.702 ERROR  [main] com.example.App - retrying upstream call, attempt 727
+2026-03-01 00:00:41.614 INFO  [main] com.example.App - worker 371 heartbeat
+2026-03-01 00:00:42.259 WARN  [main] com.example.App - connection pool size 469
+2026-03-01 00:00:44.452 WARN  [main] com.example.App - retrying upstream call, attempt 180
+2026-03-01 00:00:48.190 DEBUG  [main] com.example.App - connection pool size 586
+2026-03-01 00:00:48.378 ERROR  [main] com.example.App - connection pool size 853
+2026-03-01 00:00:52.663 ERROR  [main] com.example.App - worker 59 heartbeat

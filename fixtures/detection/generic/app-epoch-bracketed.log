@@ -1,0 +1,20 @@
+[1772323200.159] INFO retrying upstream call, attempt 9
+[1772323201.613] WARN connection pool size 2
+[1772323204.417] INFO worker 876 heartbeat
+[1772323206.998] WARN request handled in 368 ms
+[1772323208.738] INFO retrying upstream call, attempt 533
+[1772323213.650] DEBUG request handled in 889 ms
+[1772323217.363] DEBUG retrying upstream call, attempt 546
+[1772323219.109] DEBUG request handled in 500 ms
+[1772323223.635] ERROR worker 268 heartbeat
+[1772323228.285] ERROR worker 814 heartbeat
+[1772323232.597] INFO request handled in 859 ms
+[1772323235.065] DEBUG request handled in 370 ms
+[1772323238.056] INFO connection pool size 387
+[1772323238.810] INFO connection pool size 285
+[1772323243.785] INFO retrying upstream call, attempt 25
+[1772323247.687] INFO cache miss for key user:144
+[1772323252.284] INFO worker 858 heartbeat
+[1772323252.982] WARN retrying upstream call, attempt 735
+[1772323255.824] ERROR retrying upstream call, attempt 741
+[1772323259.800] WARN connection pool size 307

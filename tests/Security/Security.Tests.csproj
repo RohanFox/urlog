@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The per-case isolation tests (design record, "Security"; ADR 0001) against the pinned ClickHouse LTS.
+       Needs Docker (Testcontainers), so it runs from tools/pre-merge.ps1, never from the pre-commit hook.
+       Every test here is a permanent guarantee: an unauthorised user reads zero rows, the raw-SQL gate refuses
+       the hostile corpus, the query user's grants and constraints hold. Never mark one Slow or skip it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CHTCP0001: the TCP client is the admin side of these tests (migrations, seeding); see ADR 0002. -->
+    <NoWarn>$(NoWarn);CHTCP0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="ClickHouse.Driver" />
+    <PackageReference Include="Testcontainers.ClickHouse" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Core/Core.csproj" />
+    <ProjectReference Include="../../src/Query/Query.csproj" />
+  </ItemGroup>
+</Project>

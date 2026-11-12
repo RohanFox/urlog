@@ -1,0 +1,279 @@
+# Field catalog (design record, "Query language"). The canonical field names analysts type, where each one lives, how it compares,
+# and the vendor spellings that resolve to it. Field names resolve through this file before transpilation; parsers
+# only ever write canonical columns (src/Core/Sources/EventColumn.cs) and the extras keys listed here.
+#
+# type:
+#   time     ts: DateTime64(3, 'UTC'); compared as instants (earliest=/latest= and the range picker)
+#   keyword  a LowCardinality column, lowercased at ingest: field=value compares the lowercased value, exact
+#   string   a String column stored as logged: field=value is exact and case-sensitive; field=*v* is ILIKE
+#   int      an unsigned integer column: numeric compare and ranges
+#   ip       an IPv6 column (IPv4 mapped): equality on the address, CIDR with field=10.0.0.0/8
+#   text     message (the logical column: an alias over raw) and raw: bare terms search message through the
+#            text index; field=value is a substring compare and is flagged unindexed
+#   extra    a known extras key: extras[key] = value, string compare, flagged unindexed
+#
+# Adding an alias is a change here plus a test vector. Adding a column is a migration plus a design-record update.
+# Aliases are matched case-insensitively and must be unique across the catalog (the loader refuses duplicates).
+version: 1
+fields:
+  - name: _time
+    column: ts
+    type: time
+    description: Event time, UTC
+    aliases: ["@timestamp", timestamp, time, ts, time_local, time_iso8601, msec, TimeCreated]
+  - name: host.name
+    column: host
+    type: keyword
+    description: Host the event belongs to (per event for syslog and EVTX, the intake default otherwise)
+    aliases: [host, hostname, syslog.hostname, Computer]
+  - name: program
+    column: program
+    type: keyword
+    description: Logging program (syslog tag, nginx, EVTX provider)
+    aliases: [app_name, appname, tag, syslogtag, programname, log.syslog.appname, provider]
+  - name: log.level
+    column: severity
+    type: keyword
+    description: Severity as rsyslog names it (emerg ... debug)
+    aliases: [severity, level, syslogseverity-text, log.syslog.severity.name]
+  - name: event.code
+    column: event_code
+    type: int
+    description: Numeric event code (EVTX EventID; the HTTP status for nginx)
+    aliases: [EventID, event_id, EventCode]
+  - name: event.action
+    column: event_action
+    type: keyword
+    description: What happened (logon, access, ...)
+    aliases: [action]
+  - name: event.outcome
+    column: event_outcome
+    type: keyword
+    description: success or failure
+    aliases: [outcome]
+  - name: user.name
+    column: user_name
+    type: string
+    description: User name as logged
+    aliases: [user, username, remote_user, TargetUserName, SubjectUserName]
+  - name: source.ip
+    column: source_ip
+    type: ip
+    description: Client or source address
+    aliases: [src_ip, src, remote_addr, IpAddress, c-ip, clientip, client_ip]
+  - name: destination.ip
+    column: destination_ip
+    type: ip
+    description: Destination address
+    aliases: [dst_ip, dst, dest_ip, dest, s-ip]
+  - name: process.name
+    column: process_name
+    type: keyword
+    description: Process or image name (EVTX)
+    aliases: [process, image]
+  - name: url.path
+    column: url_path
+    type: string
+    description: Request path without the query string
+    aliases: [uri, url, path, uri_path, cs-uri-stem]
+  - name: http.response.status_code
+    column: http_status
+    type: int
+    description: HTTP status
+    aliases: [status, http_status, status_code, sc-status]
+  - name: message
+    column: message
+    type: text
+    description: The human-readable core of the event (a slice of raw, indexed for bare terms)
+    aliases: [msg, _msg]
+  - name: raw
+    column: raw
+    type: text
+    description: The record byte for byte
+    aliases: [_raw, line]
+  - name: http.request.method
+    column: http_method
+    type: keyword
+    description: HTTP method (lowercased)
+    aliases: [method, request_method, http_method, cs-method]
+  - name: http.version
+    column: http_version
+    type: keyword
+    description: HTTP protocol version without the HTTP/ prefix
+    aliases: [server_protocol, http_version, cs-version]
+  - name: http.response.body.bytes
+    column: http_response_body_bytes
+    type: int
+    description: Response body bytes ($body_bytes_sent, %b)
+    aliases: [body_bytes_sent, bytes, sc-bytes, http_response_body_bytes]
+  - name: http.request.referrer
+    column: http_referrer
+    type: string
+    description: Referer header as logged
+    aliases: [referer, referrer, http_referer, http_referrer]
+  - name: user_agent.original
+    column: user_agent
+    type: string
+    description: User-Agent header as logged
+    aliases: [useragent, user_agent, http_user_agent, ua]
+  - name: url.query
+    column: url_query
+    type: string
+    description: Query string after the ?
+    aliases: [args, query_string, query, url_query, cs-uri-query]
+  - name: log.syslog.facility.name
+    column: syslog_facility
+    type: keyword
+    description: Syslog facility (kern ... local7)
+    aliases: [facility, syslogfacility-text, syslog_facility]
+  - name: process.pid
+    column: process_pid
+    type: int
+    description: Process id ([pid] in syslog, numeric PROCID)
+    aliases: [pid, procid, process_pid, ProcessId]
+  - name: file.id
+    column: file_id
+    type: int
+    description: Evidence file id (provenance)
+    aliases: [file_id]
+  - name: file.offset
+    column: file_offset
+    type: int
+    description: Byte offset of the record in the decoded file
+    aliases: [file_offset, offset]
+  - name: host.id
+    column: host_id
+    type: int
+    description: Host id (provenance)
+    aliases: [host_id]
+  # Known extras keys: equality and wildcards on a string compare, unindexed. The vendor variable names are the aliases.
+  - name: url.original
+    extra: url.original
+    type: extra
+    description: Full request target as logged ($request_uri)
+    aliases: [request_uri]
+  - name: event.duration
+    extra: event.duration
+    type: extra
+    description: Request time as integer nanoseconds ($request_time)
+    aliases: [request_time, duration]
+  - name: http.response.bytes
+    extra: http.response.bytes
+    type: extra
+    description: Response bytes including headers ($bytes_sent)
+    aliases: [bytes_sent]
+  - name: http.request.bytes
+    extra: http.request.bytes
+    type: extra
+    description: Request bytes ($request_length)
+    aliases: [request_length]
+  - name: network.forwarded_ip
+    extra: network.forwarded_ip
+    type: extra
+    description: X-Forwarded-For as logged, may be a list
+    aliases: [http_x_forwarded_for, x_forwarded_for, X-Forwarded-For, forwarded_ip]
+  - name: url.domain
+    extra: url.domain
+    type: extra
+    description: Host header ($host)
+    aliases: [http_host, vhost]
+  - name: server.domain
+    extra: server.domain
+    type: extra
+    description: Server name ($server_name)
+    aliases: [server_name]
+  - name: url.scheme
+    extra: url.scheme
+    type: extra
+    description: http or https ($scheme)
+    aliases: [scheme]
+  - name: http.request.id
+    extra: http.request.id
+    type: extra
+    description: Request id ($request_id, $req_id)
+    aliases: [request_id, req_id]
+  - name: source.geo.country_iso_code
+    extra: source.geo.country_iso_code
+    type: extra
+    description: GeoIP country code
+    aliases: [geoip_country_code, geoip2_data_country_code, country]
+  - name: upstream.addr
+    extra: upstream.addr
+    type: extra
+    description: Upstream address ($upstream_addr)
+    aliases: [upstream_addr]
+  - name: upstream.status
+    extra: upstream.status
+    type: extra
+    description: Upstream status ($upstream_status)
+    aliases: [upstream_status]
+  - name: upstream.response_time
+    extra: upstream.response_time
+    type: extra
+    description: Upstream response time ($upstream_response_time)
+    aliases: [upstream_response_time]
+  - name: upstream.response_length
+    extra: upstream.response_length
+    type: extra
+    description: Upstream response length ($upstream_response_length)
+    aliases: [upstream_response_length]
+  - name: upstream.cache_status
+    extra: upstream.cache_status
+    type: extra
+    description: Upstream cache status ($upstream_cache_status)
+    aliases: [upstream_cache_status]
+  - name: source.address
+    extra: source.address
+    type: extra
+    description: Client token that is not an IP address (HostnameLookups, "unknown")
+    aliases: []
+  - name: http.request.line
+    extra: http.request.line
+    type: extra
+    description: A request that does not split into method and target
+    aliases: [request_line]
+  - name: ident
+    extra: ident
+    type: extra
+    description: Apache %l identity when not -
+    aliases: []
+  - name: trailing
+    extra: trailing
+    type: extra
+    description: Bytes after the last field of the layout
+    aliases: []
+  - name: log.syslog.procid
+    extra: log.syslog.procid
+    type: extra
+    description: Non-numeric PROCID or [x]
+    aliases: []
+  - name: log.syslog.msgid
+    extra: log.syslog.msgid
+    type: extra
+    description: RFC 5424 MSGID
+    aliases: [msgid]
+  - name: log.syslog.structured_data
+    extra: log.syslog.structured_data
+    type: extra
+    description: Structured data that did not fit a key (fallback); parameters are log.syslog.structured_data.<sd-id>.<param>
+    aliases: [structured_data]
+  - name: postfix.daemon
+    extra: postfix.daemon
+    type: extra
+    description: The daemon after postfix/ in the tag
+    aliases: [daemon]
+  - name: event.sequence
+    extra: event.sequence
+    type: extra
+    description: Cisco sequence number
+    aliases: [seq, sequence]
+  - name: reject_reason
+    extra: reject_reason
+    type: extra
+    description: Why a record was not parsed (set on rows the parser rejected)
+    aliases: [reject]
+  - name: timestamp.source
+    extra: timestamp.source
+    type: extra
+    description: Where the time of a generic row came from when its line carries none (previous, file, none)
+    aliases: [ts_source]

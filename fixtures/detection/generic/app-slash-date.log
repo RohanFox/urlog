@@ -1,0 +1,20 @@
+2026/03/01 00:00:04 [DEBUG] 77#0: retrying upstream call, attempt 35
+2026/03/01 00:00:08 [WARN] 77#0: retrying upstream call, attempt 453
+2026/03/01 00:00:09 [ERROR] 77#0: connection pool size 546
+2026/03/01 00:00:10 [WARN] 77#0: request handled in 344 ms
+2026/03/01 00:00:11 [DEBUG] 77#0: retrying upstream call, attempt 319
+2026/03/01 00:00:15 [WARN] 77#0: retrying upstream call, attempt 138
+2026/03/01 00:00:18 [WARN] 77#0: worker 28 heartbeat
+2026/03/01 00:00:19 [WARN] 77#0: retrying upstream call, attempt 62
+2026/03/01 00:00:24 [WARN] 77#0: connection pool size 308
+2026/03/01 00:00:26 [ERROR] 77#0: connection pool size 83
+2026/03/01 00:00:28 [ERROR] 77#0: cache miss for key user:174
+2026/03/01 00:00:30 [ERROR] 77#0: worker 625 heartbeat
+2026/03/01 00:00:32 [DEBUG] 77#0: cache miss for key user:841
+2026/03/01 00:00:33 [INFO] 77#0: retrying upstream call, attempt 574
+2026/03/01 00:00:37 [DEBUG] 77#0: retrying upstream call, attempt 301
+2026/03/01 00:00:38 [WARN] 77#0: retrying upstream call, attempt 799
+2026/03/01 00:00:39 [DEBUG] 77#0: connection pool size 426
+2026/03/01 00:00:43 [WARN] 77#0: request handled in 603 ms
+2026/03/01 00:00:46 [INFO] 77#0: retrying upstream call, attempt 312
+2026/03/01 00:00:50 [DEBUG] 77#0: request handled in 669 ms

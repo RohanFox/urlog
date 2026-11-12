@@ -1,0 +1,90 @@
+<!--
+  Development users. The `default` user (password in compose.dev.yml) is created by the image
+  entrypoint from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD, so it is not declared here. `urlog_query` is the
+  read-only user the backend queries through: restricted profile plus the two grants below (
+  docs/adr/0001-case-isolation.md).
+
+  Accounts:
+    default         admin: migrations (`urlog migrate`), definer of events_v; never held by the backend at runtime
+    urlog_query     read: SELECT on events_v and field_stats, readonly=2, constrained limits
+    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit, field statistics
+-->
+<clickhouse>
+    <users>
+        <!-- The query path's user (ADR 0001, ADR 0003): readonly=2 so the per-request SQL_allowed_cases setting goes
+             through, and exactly two grants. Listing grants here replaces the "everything" a users.xml user gets by
+             default: no SELECT on events or file_generation (events_v reads both as its definer), no dictGet, no table
+             functions (url/file/s3/remote need READ ON URL/FILE/... and are refused), no system.* beyond what every
+             user may read, no CREATE TEMPORARY TABLE. tests/Security/GrantTests.cs asserts each refusal. -->
+        <urlog_query>
+            <password>urlog_query</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>urlog_query</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT SELECT ON default.events_v</query>
+                <query>GRANT SELECT ON default.field_stats</query>
+            </grants>
+        </urlog_query>
+        <!-- The write path's user (design record "Write path"): inserts, the re-parse protocol, case deletion and
+             the field-statistics task. The backend holds this and urlog_query at runtime, never the admin account
+             (migrations: `urlog migrate`). Measured on 26.8.36.3: there is no ALTER DROP PARTITION privilege, the
+             partition drop is checked against ALTER DELETE like the lightweight delete. ALTER DELETE lets this account delete any rows
+             of events and of field_stats; it cannot create, alter, truncate or drop anything, read events_v, or use a table function.
+             tests/Security/GrantTests.cs pins the list and each refusal.
+             DEV STUB: the ::/0 network and the password equal to the name are for the development stack only; a
+             production users.d restricts both backend accounts to the backend's network and takes the passwords
+             from secrets. -->
+        <urlog_ingest>
+            <password>urlog_ingest</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>urlog_ingest</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT INSERT, SELECT ON default.events</query>
+                <query>GRANT ALTER DELETE ON default.events</query>
+                <query>GRANT INSERT, SELECT ON default.file_generation</query>
+                <!-- ALTER DELETE: a case's statistics are removed when the case is deleted or purged, and replaced
+                     when they are recomputed (migration 0004; decided 2026-11-11). -->
+                <query>GRANT INSERT, ALTER DELETE ON default.field_stats</query>
+                <query>GRANT SELECT ON system.parts</query>
+                <query>GRANT SELECT ON system.merges</query>
+                <query>GRANT SELECT ON system.mutations</query>
+                <!-- Free and total bytes per disk, for the ingest watermark: the job runner pauses the queue before
+                     the volume the rows land on fills. Names and byte counts only. -->
+                <query>GRANT SELECT ON system.disks</query>
+            </grants>
+        </urlog_ingest>
+    </users>
+
+    <profiles>
+        <urlog_query>
+            <!-- readonly=2: settings may be sent (needed for SQL_allowed_cases), no writes, no DDL. -->
+            <readonly>2</readonly>
+            <allow_ddl>0</allow_ddl>
+            <max_execution_time>60</max_execution_time>
+            <max_memory_usage>4000000000</max_memory_usage>
+            <max_result_rows>1000000</max_result_rows>
+            <result_overflow_mode>break</result_overflow_mode>
+            <!-- 1-3 analysts, a search is at most three server queries in flight; the API answers 429 above it. -->
+            <max_concurrent_queries_for_user>4</max_concurrent_queries_for_user>
+            <constraints>
+                <max_concurrent_queries_for_user><readonly/></max_concurrent_queries_for_user>
+                <!-- A query cannot raise its own limits (query-security). -->
+                <max_execution_time><readonly/></max_execution_time>
+                <max_memory_usage><readonly/></max_memory_usage>
+                <max_result_rows><readonly/></max_result_rows>
+                <allow_ddl><readonly/></allow_ddl>
+            </constraints>
+        </urlog_query>
+        <urlog_ingest>
+            <!-- No readonly and no allow_ddl=0: ALTER ... DROP PARTITION is DDL to that setting, so "no DDL" is the
+                 absence of grants. One bound: a runaway statistics query or insert cannot take the server's memory. -->
+            <max_memory_usage>4000000000</max_memory_usage>
+        </urlog_ingest>
+    </profiles>
+</clickhouse>

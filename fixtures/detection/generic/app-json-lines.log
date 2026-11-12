@@ -1,0 +1,20 @@
+{"time":"2026-03-01T00:00:02.578Z","level":"ERROR","msg":"worker 703 heartbeat"}
+{"time":"2026-03-01T00:00:07.380Z","level":"ERROR","msg":"request handled in 378 ms"}
+{"time":"2026-03-01T00:00:07.521Z","level":"WARN","msg":"cache miss for key user:40"}
+{"time":"2026-03-01T00:00:11.570Z","level":"INFO","msg":"cache miss for key user:81"}
+{"time":"2026-03-01T00:00:11.604Z","level":"ERROR","msg":"retrying upstream call, attempt 654"}
+{"time":"2026-03-01T00:00:12.032Z","level":"INFO","msg":"cache miss for key user:425"}
+{"time":"2026-03-01T00:00:14.791Z","level":"WARN","msg":"cache miss for key user:291"}
+{"time":"2026-03-01T00:00:14.843Z","level":"INFO","msg":"request handled in 223 ms"}
+{"time":"2026-03-01T00:00:16.436Z","level":"DEBUG","msg":"worker 619 heartbeat"}
+{"time":"2026-03-01T00:00:20.786Z","level":"ERROR","msg":"retrying upstream call, attempt 264"}
+{"time":"2026-03-01T00:00:23.027Z","level":"WARN","msg":"connection pool size 72"}
+{"time":"2026-03-01T00:00:26.497Z","level":"WARN","msg":"cache miss for key user:369"}
+{"time":"2026-03-01T00:00:29.384Z","level":"DEBUG","msg":"connection pool size 531"}
+{"time":"2026-03-01T00:00:33.850Z","level":"DEBUG","msg":"cache miss for key user:88"}
+{"time":"2026-03-01T00:00:38.204Z","level":"DEBUG","msg":"cache miss for key user:819"}
+{"time":"2026-03-01T00:00:39.858Z","level":"WARN","msg":"retrying upstream call, attempt 416"}
+{"time":"2026-03-01T00:00:44.144Z","level":"INFO","msg":"connection pool size 617"}
+{"time":"2026-03-01T00:00:45.667Z","level":"INFO","msg":"request handled in 815 ms"}
+{"time":"2026-03-01T00:00:47.785Z","level":"DEBUG","msg":"worker 704 heartbeat"}
+{"time":"2026-03-01T00:00:50.983Z","level":"WARN","msg":"retrying upstream call, attempt 814"}

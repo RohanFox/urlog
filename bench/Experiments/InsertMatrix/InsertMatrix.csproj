@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Insert-path measurement harness (docs/adr/0004-native-protocol-client.md): the driver's column API against a Native block
+    writer that serialises EventBatch directly, 1/2/4/8 connections, with and without the text index, with
+    ClickHouse CPU (docker stats) and system.merges recorded per cell. It is a measurement tool, not shipped code,
+    so it is not in urlog.sln and not in the gate. Run from the repository root:
+      dotnet run -c Release -\-project bench/Experiments/InsertMatrix -\- [-\-rows=4000000] [-\-blocks=250000,500000]
+        [-\-conns=1,2,4,8] [-\-paths=native,driver] [-\-index=off,on] [-\-out=<csv>]
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>InsertMatrix</AssemblyName>
+    <RootNamespace>Urlog.Experiments.InsertMatrix</RootNamespace>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <!-- CHTCP0001: experimental TCP client used on purpose, see docs/adr/0002-clickhouse-driver.md.
+         CA1303/CA1305: a console measurement tool prints with the invariant culture (InvariantGlobalization is on);
+         resource strings and explicit providers on every WriteLine would hide the numbers in noise. -->
+    <NoWarn>$(NoWarn);CHTCP0001;CA1303;CA1305</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Core/Core.csproj" />
+    <ProjectReference Include="../../../src/Sources/Sources.csproj" />
+    <ProjectReference Include="../../Bench.csproj" />
+  </ItemGroup>
+</Project>

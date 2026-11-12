@@ -1,0 +1,24 @@
+Mar  1 00:00:01 app-02 sudo[16924]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:03 app-02 sshd[64928]: Connection closed by 198.51.100.34 port 20140 [preauth]
+Mar  1 00:00:06 web-01 sudo[2042]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:10 db-01 sshd[2567]: Accepted publickey for root from 192.0.2.20 port 7450 ssh2
+Mar  1 00:00:14 fw-01 sudo[43587]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:18 app-02 sudo[54644]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:21 mail-01 sudo[18770]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:24 app-02 sshd[22592]: Connection closed by 192.0.2.32 port 36568 [preauth]
+Mar  1 00:00:26 db-01 sudo[16003]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:27 web-01 sshd[62698]: Connection closed by 192.0.2.32 port 45266 [preauth]
+Mar  1 00:00:31 db-01 sshd[2534]: Connection closed by 198.51.100.47 port 61569 [preauth]
+Mar  1 00:00:32 app-02 sshd[59524]: Connection closed by 192.0.2.51 port 5409 [preauth]
+Mar  1 00:00:33 db-01 sudo[42490]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:35 db-01 sshd[11185]: Failed password for invalid user bob from 198.51.100.4 port 39200 ssh2
+Mar  1 00:00:35 fw-01 sudo[60741]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:38 mail-01 sshd[36435]: Failed password for invalid user admin from 192.0.2.27 port 47415 ssh2
+Mar  1 00:00:40 app-02 sudo[48222]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:44 fw-01 sudo[3082]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:47 db-01 sshd[63978]: Failed password for invalid user alice from 198.51.100.3 port 44680 ssh2
+Mar  1 00:00:50 app-02 sshd[25208]: Connection closed by 203.0.113.44 port 14511 [preauth]
+Mar  1 00:00:52 web-01 sudo[45695]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:53 mail-01 sshd[58631]: Connection closed by 203.0.113.21 port 10531 [preauth]
+Mar  1 00:00:54 fw-01 sudo[54056]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:56 web-01 sudo[40166]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx

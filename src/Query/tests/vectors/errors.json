@@ -1,0 +1,542 @@
+[
+  {
+    "name": "verb-eval",
+    "spl": "| eval x=1",
+    "error": {
+      "offset": 2,
+      "length": 4,
+      "message": "not supported in v1: eval"
+    }
+  },
+  {
+    "name": "verb-top",
+    "spl": "| top host",
+    "error": {
+      "offset": 2,
+      "length": 3,
+      "message": "not supported in v1: top (use stats count by <field> | sort -count | head)"
+    }
+  },
+  {
+    "name": "verb-rare",
+    "spl": "| rare host",
+    "error": {
+      "offset": 2,
+      "length": 4,
+      "message": "not supported in v1: rare (use stats count by <field> | sort -count | head)"
+    }
+  },
+  {
+    "name": "verb-where",
+    "spl": "| where count > 5",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "not supported in v1: where"
+    }
+  },
+  {
+    "name": "verb-table",
+    "spl": "host=a | table host",
+    "error": {
+      "offset": 9,
+      "length": 5,
+      "message": "not supported in v1: table"
+    }
+  },
+  {
+    "name": "verb-rex",
+    "spl": "| rex field=raw \"(?P<x>.*)\"",
+    "error": {
+      "offset": 2,
+      "length": 3,
+      "message": "not supported in v1: rex"
+    }
+  },
+  {
+    "name": "verb-timechart",
+    "spl": "| timechart span=1h count",
+    "error": {
+      "offset": 2,
+      "length": 9,
+      "message": "not supported in v1: timechart"
+    }
+  },
+  {
+    "name": "verb-join",
+    "spl": "| join host [search x]",
+    "error": {
+      "offset": 2,
+      "length": 4,
+      "message": "not supported in v1: join"
+    }
+  },
+  {
+    "name": "verb-transaction",
+    "spl": "| transaction host",
+    "error": {
+      "offset": 2,
+      "length": 11,
+      "message": "not supported in v1: transaction"
+    }
+  },
+  {
+    "name": "verb-dedup",
+    "spl": "| dedup host",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "not supported in v1: dedup"
+    }
+  },
+  {
+    "name": "verb-lookup",
+    "spl": "| lookup x",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: lookup"
+    }
+  },
+  {
+    "name": "verb-fields",
+    "spl": "| fields host",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: fields"
+    }
+  },
+  {
+    "name": "verb-rename",
+    "spl": "| rename host as h",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: rename"
+    }
+  },
+  {
+    "name": "verb-append",
+    "spl": "| append [search x]",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: append"
+    }
+  },
+  {
+    "name": "stats-dc",
+    "spl": "| stats dc(src_ip)",
+    "error": {
+      "offset": 8,
+      "length": 2,
+      "message": "not supported in v1: stats dc(...) (only count by <field>)"
+    }
+  },
+  {
+    "name": "stats-sum",
+    "spl": "| stats sum(bytes) by host",
+    "error": {
+      "offset": 8,
+      "length": 3,
+      "message": "not supported in v1: stats sum(...) (only count by <field>)"
+    }
+  },
+  {
+    "name": "stats-count-with-argument",
+    "spl": "| stats count(host)",
+    "error": {
+      "offset": 8,
+      "length": 5,
+      "message": "not supported in v1: stats count(...) (only count by <field>)"
+    }
+  },
+  {
+    "name": "stats-second-function",
+    "spl": "| stats count dc(host) by program",
+    "error": {
+      "offset": 14,
+      "length": 2,
+      "message": "not supported in v1: stats dc(...) (only count by <field>)"
+    }
+  },
+  {
+    "name": "stats-unknown-word",
+    "spl": "| stats foo",
+    "error": {
+      "offset": 8,
+      "length": 3,
+      "message": "stats: expected count, got 'foo'"
+    }
+  },
+  {
+    "name": "stats-nothing",
+    "spl": "| stats",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "stats: expected count"
+    }
+  },
+  {
+    "name": "unterminated-quote",
+    "spl": "message=\"abc",
+    "error": {
+      "offset": 8,
+      "length": 4,
+      "message": "unterminated quoted string"
+    }
+  },
+  {
+    "name": "missing-close-paren",
+    "spl": "(host=a OR host=b",
+    "error": {
+      "offset": 0,
+      "length": 1,
+      "message": "missing ')'"
+    }
+  },
+  {
+    "name": "unmatched-close-paren",
+    "spl": "host=a)",
+    "error": {
+      "offset": 6,
+      "length": 1,
+      "message": "unmatched ')'"
+    }
+  },
+  {
+    "name": "empty-parens",
+    "spl": "()",
+    "error": {
+      "offset": 0,
+      "length": 2,
+      "message": "empty parentheses"
+    }
+  },
+  {
+    "name": "dangling-or",
+    "spl": "host=a OR",
+    "error": {
+      "offset": 7,
+      "length": 2,
+      "message": "expected an expression after OR"
+    }
+  },
+  {
+    "name": "dangling-not",
+    "spl": "NOT",
+    "error": {
+      "offset": 0,
+      "length": 3,
+      "message": "expected an expression after NOT"
+    }
+  },
+  {
+    "name": "dangling-and",
+    "spl": "host=a AND",
+    "error": {
+      "offset": 7,
+      "length": 3,
+      "message": "expected an expression after AND"
+    }
+  },
+  {
+    "name": "operator-without-field",
+    "spl": "=5",
+    "error": {
+      "offset": 0,
+      "length": 1,
+      "message": "unexpected '=': a comparison needs a field name before it"
+    }
+  },
+  {
+    "name": "value-missing",
+    "spl": "host=",
+    "error": {
+      "offset": 4,
+      "length": 1,
+      "message": "expected a value after '='"
+    }
+  },
+  {
+    "name": "unquoted-value-with-operator",
+    "spl": "url_query=a=1",
+    "error": {
+      "offset": 11,
+      "length": 1,
+      "message": "unexpected '=': quote a value that contains operators"
+    }
+  },
+  {
+    "name": "ordering-on-string",
+    "spl": "host>a",
+    "error": {
+      "offset": 0,
+      "length": 6,
+      "message": "host.name is a string: <, >, <= and >= need a numeric or time field"
+    }
+  },
+  {
+    "name": "ordering-on-ip",
+    "spl": "src_ip<10.0.0.1",
+    "error": {
+      "offset": 0,
+      "length": 15,
+      "message": "source.ip is an address: use =, != or a CIDR like 10.0.0.0/8"
+    }
+  },
+  {
+    "name": "int-not-a-number",
+    "spl": "status=abc",
+    "error": {
+      "offset": 7,
+      "length": 3,
+      "message": "http.response.status_code expects an unsigned integer, got 'abc'"
+    }
+  },
+  {
+    "name": "int-wildcard",
+    "spl": "status=4*",
+    "error": {
+      "offset": 7,
+      "length": 2,
+      "message": "http.response.status_code is numeric: wildcards do not apply"
+    }
+  },
+  {
+    "name": "ip-invalid",
+    "spl": "src_ip=999.1.1.1",
+    "error": {
+      "offset": 7,
+      "length": 9,
+      "message": "'999.1.1.1' is not an IP address"
+    }
+  },
+  {
+    "name": "cidr-prefix-too-long",
+    "spl": "src_ip=10.0.0.0/40",
+    "error": {
+      "offset": 7,
+      "length": 11,
+      "message": "'10.0.0.0/40': an IPv4 prefix is at most /32"
+    }
+  },
+  {
+    "name": "ip-wildcard",
+    "spl": "src_ip=10.0.*",
+    "error": {
+      "offset": 7,
+      "length": 6,
+      "message": "source.ip is an address: use a CIDR instead of a wildcard"
+    }
+  },
+  {
+    "name": "in-with-wildcard",
+    "spl": "host IN (web*, db-01)",
+    "error": {
+      "offset": 9,
+      "length": 4,
+      "message": "IN takes exact values; use field=val* OR field=other* for wildcards"
+    }
+  },
+  {
+    "name": "in-empty-list",
+    "spl": "host IN ()",
+    "error": {
+      "offset": 9,
+      "length": 1,
+      "message": "IN needs a list of values: IN (a, b)"
+    }
+  },
+  {
+    "name": "in-unterminated",
+    "spl": "host IN (a, b",
+    "error": {
+      "offset": 8,
+      "length": 1,
+      "message": "IN list: expected ',' or ')'"
+    }
+  },
+  {
+    "name": "index-not-a-number",
+    "spl": "index=case-31",
+    "error": {
+      "offset": 0,
+      "length": 13,
+      "message": "index 'case-31' is not a case id"
+    }
+  },
+  {
+    "name": "index-not-allowed",
+    "spl": "index=9",
+    "error": {
+      "offset": 0,
+      "length": 7,
+      "message": "index 9 is not an allowed case"
+    }
+  },
+  {
+    "name": "index-inside-or",
+    "spl": "host=a OR index=1",
+    "error": {
+      "offset": 10,
+      "length": 7,
+      "message": "index= sets the scope of the whole search and cannot sit inside OR, NOT or parentheses"
+    }
+  },
+  {
+    "name": "index-twice",
+    "spl": "index=1 index=7",
+    "error": {
+      "offset": 8,
+      "length": 7,
+      "message": "index= given twice"
+    }
+  },
+  {
+    "name": "earliest-not-a-time",
+    "spl": "earliest=yesterday",
+    "error": {
+      "offset": 0,
+      "length": 18,
+      "message": "'yesterday' is not a time: use -24h, -7d@d, now, or ISO 8601 (2026-03-01T00:00:00Z)"
+    }
+  },
+  {
+    "name": "range-empty",
+    "spl": "earliest=now latest=-1d",
+    "error": {
+      "offset": 13,
+      "length": 10,
+      "message": "the time range is empty: 2026-03-15 12:00:00.000 to 2026-03-14 12:00:00.000"
+    }
+  },
+  {
+    "name": "head-zero",
+    "spl": "| head 0",
+    "error": {
+      "offset": 7,
+      "length": 1,
+      "message": "head: the count must be between 1 and 1,000,000"
+    }
+  },
+  {
+    "name": "head-too-big",
+    "spl": "| head 2000000",
+    "error": {
+      "offset": 7,
+      "length": 7,
+      "message": "head: the count must be between 1 and 1,000,000"
+    }
+  },
+  {
+    "name": "head-not-a-number",
+    "spl": "| head ten",
+    "error": {
+      "offset": 7,
+      "length": 3,
+      "message": "head: expected a number, got 'ten'"
+    }
+  },
+  {
+    "name": "sort-without-fields",
+    "spl": "| sort",
+    "error": {
+      "offset": 2,
+      "length": 4,
+      "message": "sort: expected one or more fields, like sort -count"
+    }
+  },
+  {
+    "name": "sort-with-row-limit",
+    "spl": "| sort 10 -count",
+    "error": {
+      "offset": 7,
+      "length": 2,
+      "message": "sort: a row limit is not supported here; use head N"
+    }
+  },
+  {
+    "name": "sort-after-stats-unknown-key",
+    "spl": "| stats count by host | sort -program",
+    "error": {
+      "offset": 29,
+      "length": 8,
+      "message": "sort after stats: 'program' is neither count nor a by field"
+    }
+  },
+  {
+    "name": "stats-after-sort",
+    "spl": "| sort host | stats count",
+    "error": {
+      "offset": 14,
+      "length": 11,
+      "message": "stats must come before sort and head"
+    }
+  },
+  {
+    "name": "stats-twice",
+    "spl": "| stats count | stats count",
+    "error": {
+      "offset": 16,
+      "length": 11,
+      "message": "a second stats is not supported in v1"
+    }
+  },
+  {
+    "name": "pipe-without-command",
+    "spl": "host=a |",
+    "error": {
+      "offset": 7,
+      "length": 1,
+      "message": "expected a command after '|'"
+    }
+  },
+  {
+    "name": "stats-as-without-name",
+    "spl": "| stats count as",
+    "error": {
+      "offset": 14,
+      "length": 2,
+      "message": "expected a name after 'as'"
+    }
+  },
+  {
+    "name": "stats-by-without-field",
+    "spl": "| stats count by",
+    "error": {
+      "offset": 14,
+      "length": 2,
+      "message": "expected a field name after 'by'"
+    }
+  },
+  {
+    "name": "time-field-not-a-time",
+    "spl": "_time>yesterday",
+    "error": {
+      "offset": 6,
+      "length": 9,
+      "message": "'yesterday' is not a time: use -24h, -7d@d, now, or ISO 8601 (2026-03-01T00:00:00Z)"
+    }
+  },
+  {
+    "name": "field-name-with-backtick",
+    "spl": "| stats count by a`b",
+    "error": {
+      "offset": 17,
+      "length": 3,
+      "message": "'a`b' is not a field name"
+    }
+  },
+  {
+    "name": "comma-outside-list",
+    "spl": "host=a, host=b",
+    "error": {
+      "offset": 6,
+      "length": 1,
+      "message": "unexpected ','"
+    }
+  }
+]

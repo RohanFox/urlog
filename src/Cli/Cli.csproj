@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- `urlog ingest|query|verify-audit|bench` -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>urlog</AssemblyName>
+    <!-- The driver's TCP client is experimental (CHTCP0001); suppressed once per project, see docs/adr/0002-clickhouse-driver.md. -->
+    <NoWarn>$(NoWarn);CHTCP0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <ProjectReference Include="../Sources/Sources.csproj" />
+    <ProjectReference Include="../Query/Query.csproj" />
+  </ItemGroup>
+</Project>

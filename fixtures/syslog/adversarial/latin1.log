@@ -1,0 +1,2 @@
+<38>Jan  1 00:00:00 web-01 sshd[1]: Invalid user café from 10.0.0.7
+<38>Jan  1 00:00:01 web-01 sshd[1]: Invalid user José from 10.0.0.7

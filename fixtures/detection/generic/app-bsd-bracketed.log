@@ -1,0 +1,20 @@
+[Mar  1 00:00:01] INFO worker: cache miss for key user:676
+[Mar  1 00:00:04] INFO worker: worker 270 heartbeat
+[Mar  1 00:00:07] ERROR worker: retrying upstream call, attempt 162
+[Mar  1 00:00:08] INFO worker: connection pool size 420
+[Mar  1 00:00:13] DEBUG worker: cache miss for key user:734
+[Mar  1 00:00:15] DEBUG worker: worker 462 heartbeat
+[Mar  1 00:00:18] ERROR worker: worker 331 heartbeat
+[Mar  1 00:00:21] ERROR worker: connection pool size 835
+[Mar  1 00:00:25] DEBUG worker: retrying upstream call, attempt 418
+[Mar  1 00:00:25] INFO worker: request handled in 467 ms
+[Mar  1 00:00:28] WARN worker: retrying upstream call, attempt 692
+[Mar  1 00:00:29] DEBUG worker: cache miss for key user:143
+[Mar  1 00:00:34] DEBUG worker: worker 578 heartbeat
+[Mar  1 00:00:37] DEBUG worker: worker 338 heartbeat
+[Mar  1 00:00:39] WARN worker: request handled in 397 ms
+[Mar  1 00:00:44] ERROR worker: cache miss for key user:480
+[Mar  1 00:00:44] WARN worker: worker 535 heartbeat
+[Mar  1 00:00:46] ERROR worker: connection pool size 598
+[Mar  1 00:00:48] INFO worker: worker 682 heartbeat
+[Mar  1 00:00:53] INFO worker: worker 589 heartbeat

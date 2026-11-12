@@ -1,0 +1,24 @@
+Mar  1 00:00:02 app-02 postfix/smtpd[10155]: connect from unknown[203.0.113.60]
+Mar  1 00:00:02 db-01 postfix/smtpd[36946]: connect from unknown[192.0.2.60]
+Mar  1 00:00:03 fw-01 postfix/smtpd[13215]: connect from unknown[198.51.100.19]
+Mar  1 00:00:05 mail-01 kernel: [96534.814996] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:06 fw-01 dovecot[46964]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.52, lip=10.0.0.5, TLS
+Mar  1 00:00:11 web-01 kernel: [2142.299640] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:14 web-01 kernel: [89332.362732] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:18 app-02 sshd[23904]: Failed password for invalid user alice from 198.51.100.52 port 42303 ssh2
+Mar  1 00:00:19 web-01 sudo[36603]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:22 db-01 systemd: Started Session 680 of user bob.
+Mar  1 00:00:27 web-01 sudo[12096]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:28 mail-01 dovecot[51283]: imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.35, lip=10.0.0.5, TLS
+Mar  1 00:00:31 web-01 kernel: [8991.385583] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:36 mail-01 kernel: [71061.980917] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:40 app-02 postfix/smtpd[3234]: connect from unknown[203.0.113.60]
+Mar  1 00:00:40 db-01 sshd[14080]: Accepted publickey for admin from 198.51.100.19 port 11556 ssh2
+Mar  1 00:00:42 fw-01 CRON[14423]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:45 app-02 sshd[31128]: Accepted publickey for admin from 192.0.2.18 port 10492 ssh2
+Mar  1 00:00:49 app-02 kernel: [72117.832215] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:50 mail-01 systemd: Started Session 421 of user oracle.
+Mar  1 00:00:53 fw-01 postfix/smtpd[18748]: connect from unknown[203.0.113.27]
+Mar  1 00:00:58 mail-01 postfix/smtpd[12475]: connect from unknown[192.0.2.37]
+Mar  1 00:01:01 app-02 CRON[57684]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:04 app-02 postfix/smtpd[17525]: connect from unknown[203.0.113.42]

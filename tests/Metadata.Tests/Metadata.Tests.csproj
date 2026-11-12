@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The metadata store: migrations on an empty file, WAL and the busy timeout, the Postgres-portability proof,
+       and the domain rules (case lifecycle, case-scoped hosts, files only into an active case). SQLite on temp files,
+       no Docker: the pre-commit hook runs this project with the other unit tests. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <!-- Test-only: the model is built against Npgsql to generate a script; nothing ever connects to Postgres. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Core/Core.csproj" />
+  </ItemGroup>
+</Project>

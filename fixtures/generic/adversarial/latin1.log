@@ -1,0 +1,20 @@
+2026-03-01 00:00:01.834 WARN dépôt créé: connection pool size 584
+2026-03-01 00:00:03.774 ERROR dépôt créé: connection pool size 787
+2026-03-01 00:00:07.304 DEBUG dépôt créé: cache miss for key user:768
+2026-03-01 00:00:10.450 INFO dépôt créé: request handled in 499 ms
+2026-03-01 00:00:11.134 DEBUG dépôt créé: connection pool size 152
+2026-03-01 00:00:13.867 INFO dépôt créé: connection pool size 203
+2026-03-01 00:00:16.187 INFO dépôt créé: retrying upstream call, attempt 729
+2026-03-01 00:00:20.603 DEBUG dépôt créé: worker 590 heartbeat
+2026-03-01 00:00:23.883 DEBUG dépôt créé: worker 803 heartbeat
+2026-03-01 00:00:27.666 DEBUG dépôt créé: request handled in 503 ms
+2026-03-01 00:00:30.488 INFO dépôt créé: cache miss for key user:874
+2026-03-01 00:00:32.339 DEBUG dépôt créé: connection pool size 659
+2026-03-01 00:00:32.608 WARN dépôt créé: connection pool size 778
+2026-03-01 00:00:36.319 DEBUG dépôt créé: cache miss for key user:712
+2026-03-01 00:00:36.587 DEBUG dépôt créé: cache miss for key user:453
+2026-03-01 00:00:37.400 WARN dépôt créé: request handled in 812 ms
+2026-03-01 00:00:41.335 WARN dépôt créé: worker 719 heartbeat
+2026-03-01 00:00:42.843 WARN dépôt créé: connection pool size 477
+2026-03-01 00:00:44.682 ERROR dépôt créé: connection pool size 41
+2026-03-01 00:00:47.947 WARN dépôt créé: worker 371 heartbeat

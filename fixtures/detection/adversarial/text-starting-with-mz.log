@@ -1,0 +1,22 @@
+MZ-7 unit started
+MZ-7 unit calibrated
+2026-03-01 00:00:02.685 ERROR MZ-7 request handled in 55 ms
+2026-03-01 00:00:03.446 DEBUG MZ-7 cache miss for key user:394
+2026-03-01 00:00:08.105 ERROR MZ-7 cache miss for key user:215
+2026-03-01 00:00:12.667 ERROR MZ-7 cache miss for key user:205
+2026-03-01 00:00:14.196 INFO MZ-7 worker 151 heartbeat
+2026-03-01 00:00:16.201 ERROR MZ-7 worker 36 heartbeat
+2026-03-01 00:00:16.298 WARN MZ-7 request handled in 800 ms
+2026-03-01 00:00:20.820 ERROR MZ-7 worker 110 heartbeat
+2026-03-01 00:00:25.040 WARN MZ-7 cache miss for key user:367
+2026-03-01 00:00:26.351 DEBUG MZ-7 retrying upstream call, attempt 43
+2026-03-01 00:00:30.032 ERROR MZ-7 retrying upstream call, attempt 547
+2026-03-01 00:00:31.942 WARN MZ-7 connection pool size 731
+2026-03-01 00:00:35.101 INFO MZ-7 cache miss for key user:764
+2026-03-01 00:00:39.724 ERROR MZ-7 retrying upstream call, attempt 214
+2026-03-01 00:00:40.665 DEBUG MZ-7 worker 87 heartbeat
+2026-03-01 00:00:44.674 DEBUG MZ-7 retrying upstream call, attempt 359
+2026-03-01 00:00:48.094 WARN MZ-7 worker 497 heartbeat
+2026-03-01 00:00:49.139 ERROR MZ-7 cache miss for key user:44
+2026-03-01 00:00:52.461 WARN MZ-7 connection pool size 774
+2026-03-01 00:00:53.331 ERROR MZ-7 cache miss for key user:18

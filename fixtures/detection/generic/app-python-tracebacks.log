@@ -1,0 +1,40 @@
+2026-03-01 00:00:23,362 ERROR worker: job 0 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 29, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:24,801 ERROR worker: job 1 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 170, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:27,161 ERROR worker: job 2 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 195, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:31,691 ERROR worker: job 3 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 146, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:36,527 ERROR worker: job 4 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 231, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:41,005 ERROR worker: job 5 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 30, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:45,790 ERROR worker: job 6 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 167, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'
+2026-03-01 00:00:47,643 ERROR worker: job 7 failed
+Traceback (most recent call last):
+  File "/srv/app/worker.py", line 109, in run
+    handle(job)
+ValueError: invalid literal for int() with base 10: 'x'

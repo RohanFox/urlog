@@ -1,0 +1,24 @@
+Mar  1 00:00:01 db-01 dovecot[13889]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.46, lip=10.0.0.5, TLS
+Mar  1 00:00:02 app-02 kernel: [24313.777776] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:05 app-02 systemd: Started Session 66 of user deploy.
+Mar  1 00:00:08 mail-01 kernel: [74874.922726] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:12 db-01 sshd[33083]: Accepted publickey for oracle from 192.0.2.12 port 53565 ssh2
+Mar  1 00:00:13 fw-01 systemd: Started Session 914 of user bob.
+Mar  1 00:00:18 db-01 sshd[17994]: Failed password for invalid user oracle from 203.0.113.57 port 31125 ssh2
+Mar  1 00:00:19 db-01 postfix/smtpd[58600]: connect from unknown[192.0.2.60]
+Mar  1 00:00:20 web-01 postfix/smtpd[14219]: connect from unknown[198.51.100.47]
+Mar  1 00:00:24 db-01 kernel: [37642.884879] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:25 mail-01 sshd[42282]: Connection closed by 192.0.2.53 port 22137 [preauth]
+Mar  1 00:00:28 db-01 sudo[41135]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:29 fw-01 sshd[49820]: Accepted publickey for root from 203.0.113.37 port 55108 ssh2
+Mar  1 00:00:30 fw-01 CRON[17774]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:33 app-02 sshd[54077]: Connection closed by 203.0.113.35 port 60507 [preauth]
+Mar  1 00:00:35 web-01 systemd: Started Session 906 of user oracle.
+Mar  1 00:00:37 fw-01 systemd: Started Session 126 of user deploy.
+Mar  1 00:00:39 fw-01 sshd[53208]: Accepted publickey for oracle from 192.0.2.32 port 20620 ssh2
+Mar  1 00:00:42 db-01 kernel: [7594.066956] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:47 app-02 sudo[35596]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:48 db-01 dovecot[43507]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.49, lip=10.0.0.5, TLS
+Mar  1 00:00:51 web-01 CRON[35770]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:53 app-02 sshd[44117]: Connection closed by 198.51.100.10 port 38747 [preauth]
+Mar  1 00:00:57 fw-01 sshd[6867]: Failed password for invalid user bob from 203.0.113.31 port 26335 ssh2

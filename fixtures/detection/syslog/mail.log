@@ -1,0 +1,24 @@
+Mar  1 00:00:03 mail-01 postfix/smtpd[62398]: connect from unknown[198.51.100.48]
+Mar  1 00:00:03 web-01 postfix/smtpd[28533]: connect from unknown[203.0.113.3]
+Mar  1 00:00:04 fw-01 postfix/smtpd[3477]: connect from unknown[198.51.100.44]
+Mar  1 00:00:09 db-01 dovecot[1306]: imap-login: Login: user=<root>, method=PLAIN, rip=192.0.2.30, lip=10.0.0.5, TLS
+Mar  1 00:00:09 db-01 dovecot[3986]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.45, lip=10.0.0.5, TLS
+Mar  1 00:00:09 mail-01 dovecot[40244]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.6, lip=10.0.0.5, TLS
+Mar  1 00:00:11 db-01 postfix/smtpd[62929]: connect from unknown[198.51.100.11]
+Mar  1 00:00:11 fw-01 dovecot[64552]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.1, lip=10.0.0.5, TLS
+Mar  1 00:00:15 fw-01 postfix/smtpd[46100]: connect from unknown[198.51.100.15]
+Mar  1 00:00:16 fw-01 dovecot[23575]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.30, lip=10.0.0.5, TLS
+Mar  1 00:00:19 db-01 postfix/smtpd[44049]: connect from unknown[198.51.100.56]
+Mar  1 00:00:21 web-01 dovecot[36549]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.32, lip=10.0.0.5, TLS
+Mar  1 00:00:25 web-01 postfix/smtpd[11766]: connect from unknown[203.0.113.42]
+Mar  1 00:00:29 app-02 postfix/smtpd[4985]: connect from unknown[192.0.2.15]
+Mar  1 00:00:32 fw-01 postfix/smtpd[2274]: connect from unknown[192.0.2.51]
+Mar  1 00:00:36 web-01 dovecot[39536]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.26, lip=10.0.0.5, TLS
+Mar  1 00:00:38 db-01 postfix/smtpd[8165]: connect from unknown[198.51.100.43]
+Mar  1 00:00:40 mail-01 postfix/smtpd[1402]: connect from unknown[203.0.113.36]
+Mar  1 00:00:44 fw-01 dovecot[17366]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.56, lip=10.0.0.5, TLS
+Mar  1 00:00:46 web-01 postfix/smtpd[19296]: connect from unknown[198.51.100.20]
+Mar  1 00:00:49 app-02 postfix/smtpd[6966]: connect from unknown[203.0.113.19]
+Mar  1 00:00:53 fw-01 postfix/smtpd[40237]: connect from unknown[203.0.113.57]
+Mar  1 00:00:54 db-01 postfix/smtpd[20634]: connect from unknown[198.51.100.37]
+Mar  1 00:00:58 app-02 dovecot[14960]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.53, lip=10.0.0.5, TLS

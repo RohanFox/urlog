@@ -1,0 +1,5 @@
+<38>Jan  1 00:00:00 web-01 sshd[1234]: Accepted publickey for deploy from 10.0.0.7 port 51234 ssh2
+<86>Jan  1 00:00:01 web-01 systemd[1]: Started Session 1 of user deploy.
+<165>1 2026-01-01T00:00:02Z web-01 app 42 - [meta sequenceId="1"] structured
+Jan  1 00:00:03 db-01 kernel: [1.000000] plain line without PRI
+<38>Jan  1 00:0

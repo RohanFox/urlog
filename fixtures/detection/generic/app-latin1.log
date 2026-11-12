@@ -1,0 +1,20 @@
+2026-03-01 00:00:02.610 INFO création du dépôt: cache miss for key user:687
+2026-03-01 00:00:05.449 WARN création du dépôt: retrying upstream call, attempt 45
+2026-03-01 00:00:06.967 ERROR création du dépôt: worker 286 heartbeat
+2026-03-01 00:00:07.916 WARN création du dépôt: retrying upstream call, attempt 130
+2026-03-01 00:00:12.281 ERROR création du dépôt: request handled in 556 ms
+2026-03-01 00:00:16.876 INFO création du dépôt: worker 382 heartbeat
+2026-03-01 00:00:17.885 DEBUG création du dépôt: retrying upstream call, attempt 654
+2026-03-01 00:00:21.205 INFO création du dépôt: cache miss for key user:49
+2026-03-01 00:00:24.416 WARN création du dépôt: retrying upstream call, attempt 708
+2026-03-01 00:00:28.118 ERROR création du dépôt: retrying upstream call, attempt 896
+2026-03-01 00:00:31.196 DEBUG création du dépôt: retrying upstream call, attempt 73
+2026-03-01 00:00:31.543 ERROR création du dépôt: retrying upstream call, attempt 787
+2026-03-01 00:00:36.084 INFO création du dépôt: retrying upstream call, attempt 327
+2026-03-01 00:00:38.190 WARN création du dépôt: cache miss for key user:561
+2026-03-01 00:00:41.423 INFO création du dépôt: retrying upstream call, attempt 381
+2026-03-01 00:00:45.448 WARN création du dépôt: retrying upstream call, attempt 1
+2026-03-01 00:00:46.122 INFO création du dépôt: connection pool size 878
+2026-03-01 00:00:47.418 WARN création du dépôt: retrying upstream call, attempt 531
+2026-03-01 00:00:51.762 WARN création du dépôt: connection pool size 135
+2026-03-01 00:00:54.046 WARN création du dépôt: worker 424 heartbeat

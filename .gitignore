@@ -1,0 +1,21 @@
+bin/
+obj/
+.vs/
+node_modules/
+web/dist/
+bench/data/
+datasets/data/
+*.db
+*.db-wal
+*.db-shm
+# Fixtures are test inputs with every kind of name: no rule above may hide one.
+!fixtures/**
+.env
+.env.*
+BenchmarkDotNet.Artifacts*/
+TestResults/
+*.user
+bench/*.log
+src/Api/data/
+src/Api/wwwroot/
+.local/

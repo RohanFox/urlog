@@ -1,0 +1,4 @@
+file	kind	source	band	layout	encoding	containers	format	flags
+system.journal	unparsed	-	none	-	utf8	-	journal-binary	-
+user-1000.journal.gz	unparsed	-	none	-	utf8	gzip	journal-binary	-
+Security.evtx	unparsed	-	none	-	utf8	-	evtx	-

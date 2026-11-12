@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BenchmarkDotNet harness. Always run with -c Release. See bench/README.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <!-- BenchmarkDotNet rebuilds the project for its child process and locates the csproj by assembly name,
+         so the assembly must be called like the project file. Namespaces stay Urlog.Bench. -->
+    <AssemblyName>Bench</AssemblyName>
+    <!-- CHTCP0001: experimental TCP client used on purpose, see docs/adr/0002-clickhouse-driver.md -->
+    <NoWarn>$(NoWarn);CHTCP0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Experiments/ holds standalone measurement consoles (InsertMatrix) with their own csproj; not part of this assembly. -->
+    <Compile Remove="Experiments/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="ClickHouse.Driver" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../src/Core/Core.csproj" />
+    <ProjectReference Include="../src/Sources/Sources.csproj" />
+  </ItemGroup>
+</Project>

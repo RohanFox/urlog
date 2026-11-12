@@ -1,0 +1,24 @@
+Mar  1 00:00:00 app-02 dovecot[39515]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.54, lip=10.0.0.5, TLS
+Mar  1 00:00:04 db-01 sudo[2919]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:08 web-01 sshd[46324]: Failed password for invalid user bob from 203.0.113.1 port 53709 ssh2
+Mar  1 00:00:10 mail-01 kernel: [30903.527899] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:14 fw-01 sshd[54587]: Connection closed by 203.0.113.40 port 59698 [preauth]
+Mar  1 00:00:18 fw-01 sshd[48613]: Accepted publickey for deploy from 203.0.113.25 port 14716 ssh2
+Mar  1 00:00:22 db-01 dovecot[9634]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.11, lip=10.0.0.5, TLS
+Mar  1 00:00:22 web-01 sshd[26522]: Failed password for invalid user alice from 198.51.100.28 port 6283 ssh2
+Mar  1 00:00:25 app-02 kernel: [93845.674810] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:30 app-02 CRON[32032]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:34 mail-01 systemd: Started Session 604 of user alice.
+Mar  1 00:00:35 web-01 postfix/smtpd[59933]: connect from unknown[203.0.113.51]
+Mar  1 00:00:35 app-02 kernel: [96301.038291] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:36 mail-01 dovecot[48124]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.4, lip=10.0.0.5, TLS
+Mar  1 00:00:39 fw-01 sudo[14072]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:44 app-02 postfix/smtpd[49552]: connect from unknown[192.0.2.3]
+Mar  1 00:00:48 web-01 systemd: Started Session 614 of user admin.
+Mar  1 00:00:52 fw-01 kernel: [50781.024406] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:56 fw-01 postfix/smtpd[10122]: connect from unknown[203.0.113.38]
+Mar  1 00:00:59 web-01 sshd[29552]: Connection closed by 203.0.113.29 port 48378 [preauth]
+Mar  1 00:01:03 mail-01 CRON[34645]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:06 mail-01 CRON[25795]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:07 db-01 CRON[58239]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:12 web-01 sshd[5606]: Failed password for invalid user oracle from 203.0.113.58 port 28931 ssh2

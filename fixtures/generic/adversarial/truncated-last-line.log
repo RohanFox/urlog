@@ -1,0 +1,20 @@
+2026-03-01 00:00:04.548 DEBUG worker 96 heartbeat
+2026-03-01 00:00:06.873 INFO cache miss for key user:308
+2026-03-01 00:00:09.418 ERROR worker 847 heartbeat
+2026-03-01 00:00:11.967 WARN retrying upstream call, attempt 149
+2026-03-01 00:00:16.539 DEBUG request handled in 41 ms
+2026-03-01 00:00:19.076 WARN request handled in 670 ms
+2026-03-01 00:00:23.403 INFO worker 721 heartbeat
+2026-03-01 00:00:24.264 INFO retrying upstream call, attempt 475
+2026-03-01 00:00:25.551 WARN retrying upstream call, attempt 57
+2026-03-01 00:00:27.321 WARN request handled in 248 ms
+2026-03-01 00:00:28.978 WARN connection pool size 678
+2026-03-01 00:00:30.254 WARN cache miss for key user:487
+2026-03-01 00:00:32.945 ERROR connection pool size 199
+2026-03-01 00:00:37.538 WARN cache miss for key user:627
+2026-03-01 00:00:42.453 INFO connection pool size 652
+2026-03-01 00:00:44.893 ERROR worker 263 heartbeat
+2026-03-01 00:00:47.625 ERROR connection pool size 534
+2026-03-01 00:00:49.790 ERROR worker 427 heartbeat
+2026-03-01 00:00:50.784 DEBUG cache miss for key user:131
+2026-03-01 00:00:55.027 INFO cache miss 

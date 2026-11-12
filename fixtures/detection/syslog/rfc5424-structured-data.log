@@ -1,0 +1,24 @@
+<78>1 2026-03-01T00:00:02.932Z web-01 CRON 8043 ID47 [meta sequenceId="9825"][origin ip="192.0.2.13"] (deploy) CMD (/usr/local/bin/backup.sh)
+<6>1 2026-03-01T00:00:03.803Z web-01 kernel - ID47 [meta sequenceId="7567"][origin ip="203.0.113.19"] [91296.215842] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<78>1 2026-03-01T00:00:05.910Z web-01 CRON 23739 ID47 [meta sequenceId="6725"][origin ip="192.0.2.28"] (admin) CMD (/usr/local/bin/backup.sh)
+<30>1 2026-03-01T00:00:06.966Z db-01 systemd - ID47 [meta sequenceId="7362"][origin ip="198.51.100.33"] Started Session 582 of user oracle.
+<6>1 2026-03-01T00:00:07.332Z fw-01 kernel - ID47 [meta sequenceId="7668"][origin ip="198.51.100.33"] [26684.051568] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<30>1 2026-03-01T00:00:10.204Z app-02 systemd - ID47 [meta sequenceId="4192"][origin ip="192.0.2.31"] Started Session 715 of user oracle.
+<38>1 2026-03-01T00:00:15.108Z db-01 sshd 45655 ID47 [meta sequenceId="629"][origin ip="203.0.113.17"] Connection closed by 198.51.100.24 port 59790 [preauth]
+<30>1 2026-03-01T00:00:16.129Z web-01 systemd - ID47 [meta sequenceId="9895"][origin ip="198.51.100.48"] Started Session 410 of user deploy.
+<22>1 2026-03-01T00:00:17.353Z db-01 dovecot 32911 ID47 [meta sequenceId="2543"][origin ip="192.0.2.5"] imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.40, lip=10.0.0.5, TLS
+<78>1 2026-03-01T00:00:22.098Z fw-01 CRON 22667 ID47 [meta sequenceId="52"][origin ip="203.0.113.2"] (alice) CMD (/usr/local/bin/backup.sh)
+<22>1 2026-03-01T00:00:22.504Z mail-01 dovecot 33572 ID47 [meta sequenceId="6688"][origin ip="192.0.2.10"] imap-login: Login: user=<deploy>, method=PLAIN, rip=203.0.113.33, lip=10.0.0.5, TLS
+<30>1 2026-03-01T00:00:23.621Z app-02 systemd - ID47 [meta sequenceId="5939"][origin ip="203.0.113.52"] Started Session 471 of user oracle.
+<38>1 2026-03-01T00:00:28.217Z db-01 sshd 13749 ID47 [meta sequenceId="7783"][origin ip="198.51.100.28"] Failed password for invalid user root from 203.0.113.28 port 20345 ssh2
+<6>1 2026-03-01T00:00:32.295Z app-02 kernel - ID47 [meta sequenceId="5117"][origin ip="203.0.113.17"] [80264.087612] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<22>1 2026-03-01T00:00:34.982Z app-02 postfix-smtpd 35786 ID47 [meta sequenceId="8468"][origin ip="203.0.113.32"] connect from unknown[203.0.113.13]
+<78>1 2026-03-01T00:00:35.088Z mail-01 CRON 38993 ID47 [meta sequenceId="808"][origin ip="198.51.100.58"] (alice) CMD (/usr/local/bin/backup.sh)
+<6>1 2026-03-01T00:00:36.412Z app-02 kernel - ID47 [meta sequenceId="2738"][origin ip="198.51.100.59"] [9058.902940] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<85>1 2026-03-01T00:00:40.844Z web-01 sudo 6480 ID47 [meta sequenceId="1280"][origin ip="192.0.2.31"] oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<78>1 2026-03-01T00:00:42.456Z db-01 CRON 25250 ID47 [meta sequenceId="5383"][origin ip="203.0.113.40"] (deploy) CMD (/usr/local/bin/backup.sh)
+<38>1 2026-03-01T00:00:43.535Z mail-01 sshd 32726 ID47 [meta sequenceId="3035"][origin ip="198.51.100.6"] Connection closed by 192.0.2.12 port 11364 [preauth]
+<38>1 2026-03-01T00:00:48.472Z fw-01 sshd 24339 ID47 [meta sequenceId="4549"][origin ip="192.0.2.29"] Accepted publickey for oracle from 198.51.100.53 port 12045 ssh2
+<6>1 2026-03-01T00:00:50.570Z fw-01 kernel - ID47 [meta sequenceId="8528"][origin ip="192.0.2.21"] [5539.271328] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<85>1 2026-03-01T00:00:52.511Z fw-01 sudo 62203 ID47 [meta sequenceId="2553"][origin ip="192.0.2.18"] root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<85>1 2026-03-01T00:00:57.117Z fw-01 sudo 41619 ID47 [meta sequenceId="4330"][origin ip="203.0.113.38"] deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx

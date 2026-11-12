@@ -1,0 +1,5 @@
+2026-03-01T00:00:00Z host-a sshd[1]: Accepted publickey for root from 10.0.0.5
+2026-03-01T00:00:01Z host-a sshd[1]: session opened
+2026-03-01T00:00:02Z host-a CRON[7]: (root) CMD (run-parts /etc/cron.hourly)
+2026-03-01T00:00:03Z host-a kernel: Ünïcödé line with non-ASCII bytes
+2026-03-01T00:00:04Z host-a sudo: pam_unix(sudo:session): session closed

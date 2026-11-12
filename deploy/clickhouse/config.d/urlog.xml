@@ -1,0 +1,13 @@
+<!-- Server overrides for the development stack. Mirrors docs/design-record.md, "Scale" and "Security". -->
+<clickhouse>
+    <!-- Leave 40 % of RAM to the backend's parse pipeline during ingest (design record). -->
+    <max_server_memory_usage_to_ram_ratio>0.6</max_server_memory_usage_to_ram_ratio>
+
+    <!-- Per-query custom settings carry the allowed-case list for events_v (docs/adr/0001-case-isolation.md). -->
+    <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
+    <!-- Keep logs readable on a laptop. -->
+    <logger>
+        <level>information</level>
+    </logger>
+</clickhouse>

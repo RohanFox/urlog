@@ -1,0 +1,800 @@
+Mar  1 00:00:04 mail-01 systemd: Started Session 168 of user oracle.
+Mar  1 00:00:06 app-02 kernel: [74468.464254] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:09 web-01 CRON[27065]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:14 web-01 kernel: [72366.650823] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:17 app-02 systemd: Started Session 154 of user admin.
+Mar  1 00:00:18 fw-01 kernel: [12026.726854] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:21 app-02 dovecot[34772]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.29, lip=10.0.0.5, TLS
+Mar  1 00:00:22 mail-01 systemd: Started Session 498 of user deploy.
+Mar  1 00:00:24 fw-01 systemd: Started Session 527 of user root.
+Mar  1 00:00:28 db-01 postfix/smtpd[44816]: connect from unknown[203.0.113.6]
+Mar  1 00:00:32 db-01 kernel: [85975.785246] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:33 db-01 CRON[23779]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:36 mail-01 sudo[42014]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:38 db-01 sshd[15706]: Connection closed by 203.0.113.40 port 49794 [preauth]
+Mar  1 00:00:42 fw-01 systemd: Started Session 503 of user alice.
+Mar  1 00:00:46 web-01 sudo[17474]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:48 db-01 sudo[7877]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:50 app-02 sshd[12373]: Failed password for invalid user root from 192.0.2.10 port 63219 ssh2
+Mar  1 00:00:52 web-01 postfix/smtpd[52255]: connect from unknown[203.0.113.56]
+Mar  1 00:00:54 app-02 CRON[10656]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:58 web-01 CRON[9291]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:02 mail-01 kernel: [74097.484090] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:03 db-01 kernel: [63862.262622] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:03 fw-01 CRON[48495]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:06 db-01 postfix/smtpd[8946]: connect from unknown[198.51.100.19]
+Mar  1 00:01:08 web-01 dovecot[34085]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.54, lip=10.0.0.5, TLS
+Mar  1 00:01:13 app-02 CRON[4661]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:14 db-01 CRON[4735]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:15 db-01 CRON[21923]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:01:17 db-01 kernel: [90172.136859] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:18 fw-01 sudo[29459]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:01:21 db-01 postfix/smtpd[25057]: connect from unknown[203.0.113.35]
+Mar  1 00:01:25 app-02 sshd[43689]: Failed password for invalid user admin from 198.51.100.41 port 8992 ssh2
+Mar  1 00:01:28 fw-01 dovecot[32816]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.13, lip=10.0.0.5, TLS
+Mar  1 00:01:33 db-01 sshd[4885]: Failed password for invalid user root from 203.0.113.11 port 30265 ssh2
+Mar  1 00:01:36 db-01 systemd: Started Session 752 of user root.
+Mar  1 00:01:40 fw-01 postfix/smtpd[15528]: connect from unknown[203.0.113.4]
+Mar  1 00:01:42 db-01 dovecot[10510]: imap-login: Login: user=<root>, method=PLAIN, rip=198.51.100.43, lip=10.0.0.5, TLS
+Mar  1 00:01:44 mail-01 dovecot[43413]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.10, lip=10.0.0.5, TLS
+Mar  1 00:01:48 web-01 sudo[39210]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:01:51 mail-01 sudo[27037]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:01:52 web-01 systemd: Started Session 23 of user deploy.
+Mar  1 00:01:53 app-02 sudo[47823]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:01:57 web-01 kernel: [89602.206765] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:57 web-01 kernel: [1997.871195] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:59 web-01 kernel: [89960.447826] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:02 web-01 sshd[30046]: Accepted publickey for alice from 203.0.113.11 port 4260 ssh2
+Mar  1 00:02:07 app-02 sudo[45280]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:02:12 app-02 sshd[57249]: Failed password for invalid user admin from 203.0.113.22 port 32187 ssh2
+Mar  1 00:02:14 web-01 kernel: [40214.219707] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:15 fw-01 dovecot[14151]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.55, lip=10.0.0.5, TLS
+Mar  1 00:02:18 app-02 dovecot[25895]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.7, lip=10.0.0.5, TLS
+Mar  1 00:02:19 web-01 CRON[1205]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:02:21 app-02 CRON[15414]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:02:25 web-01 sshd[14809]: Accepted publickey for bob from 203.0.113.23 port 50283 ssh2
+Mar  1 00:02:28 app-02 postfix/smtpd[7354]: connect from unknown[198.51.100.53]
+Mar  1 00:02:31 fw-01 systemd: Started Session 885 of user alice.
+Mar  1 00:02:33 web-01 CRON[22601]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:02:33 db-01 kernel: [31836.539318] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:33 fw-01 kernel: [91982.521863] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:35 db-01 sudo[22732]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:02:37 web-01 sshd[33442]: Accepted publickey for alice from 198.51.100.5 port 52172 ssh2
+Mar  1 00:02:40 app-02 sudo[19914]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:02:45 mail-01 systemd: Started Session 201 of user deploy.
+Mar  1 00:02:46 web-01 dovecot[19853]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.1, lip=10.0.0.5, TLS
+Mar  1 00:02:50 fw-01 CRON[58373]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:02:54 fw-01 kernel: [4187.304561] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:56 db-01 kernel: [90118.996750] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:56 app-02 kernel: [62313.242355] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:02:58 mail-01 kernel: [33611.950836] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:02 db-01 postfix/smtpd[20124]: connect from unknown[192.0.2.18]
+Mar  1 00:03:04 web-01 dovecot[63527]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.27, lip=10.0.0.5, TLS
+Mar  1 00:03:05 app-02 kernel: [14930.555710] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:06 fw-01 systemd: Started Session 953 of user oracle.
+Mar  1 00:03:10 mail-01 systemd: Started Session 95 of user deploy.
+Mar  1 00:03:13 db-01 systemd: Started Session 658 of user root.
+Mar  1 00:03:14 web-01 sshd[62277]: Accepted publickey for oracle from 198.51.100.4 port 60045 ssh2
+Mar  1 00:03:14 app-02 kernel: [58950.016741] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:19 web-01 kernel: [45974.863496] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:22 db-01 sshd[41078]: Connection closed by 198.51.100.30 port 55437 [preauth]
+Mar  1 00:03:23 mail-01 postfix/smtpd[45540]: connect from unknown[203.0.113.9]
+Mar  1 00:03:27 web-01 systemd: Started Session 239 of user root.
+Mar  1 00:03:30 mail-01 sudo[11437]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:03:34 db-01 sudo[28092]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:03:35 web-01 sudo[56554]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:03:36 mail-01 postfix/smtpd[45172]: connect from unknown[198.51.100.14]
+Mar  1 00:03:41 db-01 sudo[52253]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:03:43 app-02 kernel: [1587.931749] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:48 db-01 kernel: [99594.048677] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:03:50 web-01 CRON[62032]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:03:54 mail-01 sshd[40856]: Failed password for invalid user admin from 198.51.100.1 port 38108 ssh2
+Mar  1 00:03:58 app-02 CRON[61164]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:03 db-01 sshd[57089]: Failed password for invalid user oracle from 198.51.100.57 port 64015 ssh2
+Mar  1 00:04:05 fw-01 dovecot[28612]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.26, lip=10.0.0.5, TLS
+Mar  1 00:04:09 db-01 sshd[59431]: Accepted publickey for bob from 203.0.113.36 port 41782 ssh2
+Mar  1 00:04:10 db-01 CRON[5238]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:12 web-01 CRON[30745]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:16 app-02 sshd[51179]: Connection closed by 198.51.100.38 port 28860 [preauth]
+Mar  1 00:04:20 web-01 systemd: Started Session 511 of user bob.
+Mar  1 00:04:23 app-02 sudo[48206]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:04:24 fw-01 CRON[8627]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:28 fw-01 CRON[52502]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:29 web-01 sudo[3562]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:04:30 fw-01 dovecot[17389]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.19, lip=10.0.0.5, TLS
+Mar  1 00:04:31 db-01 systemd: Started Session 817 of user root.
+Mar  1 00:04:31 fw-01 sshd[26489]: Connection closed by 198.51.100.18 port 44537 [preauth]
+Mar  1 00:04:32 db-01 systemd: Started Session 177 of user admin.
+Mar  1 00:04:33 web-01 dovecot[47496]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.9, lip=10.0.0.5, TLS
+Mar  1 00:04:36 app-02 sudo[52950]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:04:40 db-01 CRON[38249]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:45 web-01 sshd[63183]: Accepted publickey for root from 192.0.2.56 port 21327 ssh2
+Mar  1 00:04:48 mail-01 sshd[5700]: Connection closed by 198.51.100.12 port 22358 [preauth]
+Mar  1 00:04:48 app-02 kernel: [41796.335983] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:04:52 web-01 CRON[26448]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:04:56 db-01 kernel: [22123.213453] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:04:59 web-01 postfix/smtpd[30819]: connect from unknown[203.0.113.13]
+Mar  1 00:05:02 web-01 systemd: Started Session 999 of user root.
+Mar  1 00:05:05 mail-01 sudo[20171]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:05:07 mail-01 sshd[43544]: Failed password for invalid user oracle from 203.0.113.5 port 41419 ssh2
+Mar  1 00:05:11 db-01 CRON[54478]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:05:12 mail-01 dovecot[20934]: imap-login: Login: user=<root>, method=PLAIN, rip=192.0.2.22, lip=10.0.0.5, TLS
+Mar  1 00:05:12 mail-01 sudo[56454]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:05:15 web-01 sshd[35993]: Failed password for invalid user deploy from 198.51.100.45 port 17939 ssh2
+Mar  1 00:05:18 fw-01 sshd[64816]: Connection closed by 192.0.2.13 port 61497 [preauth]
+Mar  1 00:05:21 web-01 systemd: Started Session 388 of user bob.
+Mar  1 00:05:22 mail-01 kernel: [70469.469511] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:05:24 mail-01 sudo[24571]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:05:25 mail-01 systemd: Started Session 291 of user oracle.
+Mar  1 00:05:30 db-01 sshd[63456]: Accepted publickey for root from 198.51.100.42 port 63836 ssh2
+Mar  1 00:05:32 app-02 systemd: Started Session 121 of user oracle.
+Mar  1 00:05:36 web-01 CRON[40793]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:05:39 app-02 systemd: Started Session 193 of user admin.
+Mar  1 00:05:41 app-02 systemd: Started Session 290 of user oracle.
+Mar  1 00:05:44 app-02 postfix/smtpd[16237]: connect from unknown[203.0.113.50]
+Mar  1 00:05:48 fw-01 sshd[30615]: Accepted publickey for admin from 203.0.113.10 port 51963 ssh2
+Mar  1 00:05:49 app-02 CRON[359]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:05:53 fw-01 systemd: Started Session 468 of user root.
+Mar  1 00:05:55 mail-01 systemd: Started Session 249 of user root.
+Mar  1 00:05:55 fw-01 CRON[44264]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:05:59 mail-01 kernel: [89921.218792] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:02 web-01 CRON[13360]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:06:03 web-01 CRON[61884]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:06:04 db-01 sshd[46656]: Accepted publickey for alice from 192.0.2.60 port 43671 ssh2
+Mar  1 00:06:06 app-02 systemd: Started Session 244 of user root.
+Mar  1 00:06:06 mail-01 postfix/smtpd[55546]: connect from unknown[203.0.113.37]
+Mar  1 00:06:11 db-01 sshd[15051]: Connection closed by 192.0.2.47 port 33121 [preauth]
+Mar  1 00:06:14 db-01 systemd: Started Session 988 of user bob.
+Mar  1 00:06:19 mail-01 sudo[59338]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:06:23 db-01 kernel: [44769.562353] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:25 mail-01 kernel: [6630.227510] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:30 fw-01 dovecot[29495]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.60, lip=10.0.0.5, TLS
+Mar  1 00:06:32 web-01 kernel: [68035.937301] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:35 app-02 postfix/smtpd[8126]: connect from unknown[192.0.2.5]
+Mar  1 00:06:35 mail-01 systemd: Started Session 356 of user alice.
+Mar  1 00:06:36 app-02 kernel: [53655.737906] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:39 mail-01 sudo[43296]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:06:44 fw-01 dovecot[62596]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.28, lip=10.0.0.5, TLS
+Mar  1 00:06:44 mail-01 CRON[27932]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:06:45 app-02 kernel: [5117.920884] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:06:48 web-01 systemd: Started Session 222 of user deploy.
+Mar  1 00:06:50 app-02 CRON[15405]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:06:54 mail-01 systemd: Started Session 58 of user deploy.
+Mar  1 00:06:55 app-02 sshd[7286]: Accepted publickey for deploy from 203.0.113.28 port 15557 ssh2
+Mar  1 00:06:55 app-02 CRON[13625]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:06:58 app-02 CRON[48214]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:02 app-02 CRON[53547]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:04 web-01 postfix/smtpd[18346]: connect from unknown[192.0.2.54]
+Mar  1 00:07:08 fw-01 dovecot[9868]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.56, lip=10.0.0.5, TLS
+Mar  1 00:07:12 db-01 systemd: Started Session 41 of user bob.
+Mar  1 00:07:15 db-01 kernel: [40417.698152] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:07:19 db-01 dovecot[33822]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.6, lip=10.0.0.5, TLS
+Mar  1 00:07:23 db-01 dovecot[35042]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.12, lip=10.0.0.5, TLS
+Mar  1 00:07:23 fw-01 systemd: Started Session 83 of user oracle.
+Mar  1 00:07:27 mail-01 postfix/smtpd[39036]: connect from unknown[198.51.100.47]
+Mar  1 00:07:32 fw-01 sshd[19225]: Connection closed by 198.51.100.22 port 22381 [preauth]
+Mar  1 00:07:34 web-01 postfix/smtpd[64888]: connect from unknown[203.0.113.58]
+Mar  1 00:07:35 mail-01 sshd[45493]: Failed password for invalid user root from 192.0.2.49 port 22015 ssh2
+Mar  1 00:07:39 app-02 dovecot[19025]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.27, lip=10.0.0.5, TLS
+Mar  1 00:07:44 fw-01 dovecot[56566]: imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.19, lip=10.0.0.5, TLS
+Mar  1 00:07:45 db-01 CRON[51467]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:45 app-02 postfix/smtpd[50380]: connect from unknown[198.51.100.28]
+Mar  1 00:07:46 web-01 dovecot[58119]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.40, lip=10.0.0.5, TLS
+Mar  1 00:07:47 web-01 CRON[6233]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:48 web-01 postfix/smtpd[11017]: connect from unknown[192.0.2.7]
+Mar  1 00:07:50 db-01 kernel: [98281.280887] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:07:50 mail-01 postfix/smtpd[34077]: connect from unknown[203.0.113.59]
+Mar  1 00:07:50 web-01 CRON[33065]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:54 web-01 CRON[3831]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:07:59 db-01 dovecot[39276]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.14, lip=10.0.0.5, TLS
+Mar  1 00:08:03 web-01 postfix/smtpd[45093]: connect from unknown[203.0.113.51]
+Mar  1 00:08:07 fw-01 kernel: [69871.398108] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:08:10 db-01 sudo[30814]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:08:12 fw-01 sshd[14223]: Accepted publickey for bob from 192.0.2.17 port 1673 ssh2
+Mar  1 00:08:14 fw-01 postfix/smtpd[32774]: connect from unknown[192.0.2.53]
+Mar  1 00:08:16 db-01 sudo[45929]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:08:16 db-01 kernel: [96505.240029] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:08:16 db-01 dovecot[63310]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.27, lip=10.0.0.5, TLS
+Mar  1 00:08:17 web-01 sudo[21941]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:08:21 mail-01 dovecot[48104]: imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.43, lip=10.0.0.5, TLS
+Mar  1 00:08:22 mail-01 sudo[9538]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:08:26 web-01 sshd[43584]: Accepted publickey for alice from 198.51.100.34 port 8401 ssh2
+Mar  1 00:08:26 web-01 dovecot[55339]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.32, lip=10.0.0.5, TLS
+Mar  1 00:08:29 web-01 dovecot[20551]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.27, lip=10.0.0.5, TLS
+Mar  1 00:08:30 app-02 dovecot[42218]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.31, lip=10.0.0.5, TLS
+Mar  1 00:08:31 mail-01 CRON[61526]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:08:33 db-01 kernel: [73775.503083] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:08:36 db-01 kernel: [3522.833188] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:08:37 app-02 sshd[26749]: Failed password for invalid user alice from 203.0.113.37 port 17862 ssh2
+Mar  1 00:08:39 db-01 systemd: Started Session 708 of user oracle.
+Mar  1 00:08:41 web-01 postfix/smtpd[22517]: connect from unknown[203.0.113.23]
+Mar  1 00:08:43 web-01 systemd: Started Session 118 of user admin.
+Mar  1 00:08:44 fw-01 dovecot[31323]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.37, lip=10.0.0.5, TLS
+Mar  1 00:08:45 db-01 sudo[56744]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:08:49 app-02 CRON[39573]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:08:51 fw-01 postfix/smtpd[61852]: connect from unknown[192.0.2.52]
+Mar  1 00:08:54 db-01 kernel: [93257.166732] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:08:54 fw-01 systemd: Started Session 987 of user deploy.
+Mar  1 00:08:57 mail-01 CRON[43601]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:09:01 fw-01 sshd[35191]: Connection closed by 203.0.113.56 port 64189 [preauth]
+Mar  1 00:09:02 db-01 postfix/smtpd[40838]: connect from unknown[203.0.113.4]
+Mar  1 00:09:05 web-01 dovecot[64216]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.1, lip=10.0.0.5, TLS
+Mar  1 00:09:07 db-01 postfix/smtpd[42040]: connect from unknown[203.0.113.42]
+Mar  1 00:09:09 db-01 kernel: [72636.275762] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:10 db-01 kernel: [47048.468801] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:11 fw-01 systemd: Started Session 886 of user bob.
+Mar  1 00:09:11 mail-01 sudo[13801]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:09:14 web-01 CRON[53044]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:09:16 db-01 postfix/smtpd[1549]: connect from unknown[192.0.2.4]
+Mar  1 00:09:19 web-01 sshd[33182]: Failed password for invalid user deploy from 192.0.2.19 port 59806 ssh2
+Mar  1 00:09:24 mail-01 sshd[9161]: Failed password for invalid user deploy from 203.0.113.17 port 17496 ssh2
+Mar  1 00:09:28 fw-01 systemd: Started Session 491 of user bob.
+Mar  1 00:09:29 fw-01 kernel: [38325.439458] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:30 app-02 sudo[4121]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:09:33 db-01 kernel: [13518.278257] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:33 mail-01 postfix/smtpd[52787]: connect from unknown[198.51.100.58]
+Mar  1 00:09:35 mail-01 kernel: [26864.363340] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:37 mail-01 CRON[34060]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:09:42 web-01 dovecot[1100]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.37, lip=10.0.0.5, TLS
+Mar  1 00:09:47 app-02 CRON[36503]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:09:48 web-01 sudo[8171]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:09:52 db-01 kernel: [4290.721891] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:09:56 fw-01 CRON[49300]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:09:58 db-01 sshd[26774]: Connection closed by 198.51.100.36 port 30591 [preauth]
+Mar  1 00:10:00 web-01 CRON[27883]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:04 mail-01 systemd: Started Session 182 of user alice.
+Mar  1 00:10:06 web-01 sudo[35346]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:10:10 app-02 kernel: [15571.302325] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:10:11 web-01 dovecot[44766]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.27, lip=10.0.0.5, TLS
+Mar  1 00:10:11 fw-01 CRON[64028]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:13 db-01 dovecot[27782]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.33, lip=10.0.0.5, TLS
+Mar  1 00:10:18 web-01 dovecot[9214]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.22, lip=10.0.0.5, TLS
+Mar  1 00:10:20 web-01 CRON[6224]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:24 db-01 CRON[51861]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:26 app-02 sshd[20579]: Failed password for invalid user admin from 198.51.100.21 port 44869 ssh2
+Mar  1 00:10:29 mail-01 CRON[28744]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:31 fw-01 CRON[56238]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:32 web-01 kernel: [418.332861] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:10:33 db-01 dovecot[48931]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.44, lip=10.0.0.5, TLS
+Mar  1 00:10:35 db-01 postfix/smtpd[48934]: connect from unknown[198.51.100.39]
+Mar  1 00:10:38 mail-01 sudo[36409]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:10:43 db-01 CRON[53408]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:44 web-01 dovecot[59681]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.11, lip=10.0.0.5, TLS
+Mar  1 00:10:48 db-01 sshd[351]: Connection closed by 192.0.2.54 port 2064 [preauth]
+Mar  1 00:10:49 app-02 CRON[25412]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:10:49 fw-01 sudo[49630]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:10:51 fw-01 dovecot[48543]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.40, lip=10.0.0.5, TLS
+Mar  1 00:10:54 db-01 postfix/smtpd[11393]: connect from unknown[198.51.100.17]
+Mar  1 00:10:57 db-01 dovecot[19967]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.12, lip=10.0.0.5, TLS
+Mar  1 00:10:58 web-01 sudo[51872]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:11:01 fw-01 systemd: Started Session 509 of user alice.
+Mar  1 00:11:05 db-01 postfix/smtpd[14807]: connect from unknown[198.51.100.6]
+Mar  1 00:11:09 app-02 systemd: Started Session 457 of user bob.
+Mar  1 00:11:10 web-01 systemd: Started Session 25 of user deploy.
+Mar  1 00:11:13 web-01 sudo[35391]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:11:14 db-01 postfix/smtpd[21075]: connect from unknown[192.0.2.7]
+Mar  1 00:11:18 fw-01 sshd[23675]: Failed password for invalid user oracle from 198.51.100.34 port 12424 ssh2
+Mar  1 00:11:21 mail-01 CRON[32189]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:11:21 web-01 sshd[11992]: Failed password for invalid user admin from 198.51.100.20 port 38002 ssh2
+Mar  1 00:11:26 fw-01 kernel: [15072.499241] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:11:27 web-01 dovecot[60978]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.24, lip=10.0.0.5, TLS
+Mar  1 00:11:31 web-01 sudo[48813]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:11:32 db-01 sshd[28248]: Accepted publickey for admin from 192.0.2.26 port 64245 ssh2
+Mar  1 00:11:34 mail-01 sshd[32069]: Failed password for invalid user alice from 192.0.2.58 port 61311 ssh2
+Mar  1 00:11:37 app-02 postfix/smtpd[23472]: connect from unknown[192.0.2.32]
+Mar  1 00:11:39 web-01 systemd: Started Session 919 of user root.
+Mar  1 00:11:44 mail-01 dovecot[13171]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.38, lip=10.0.0.5, TLS
+Mar  1 00:11:45 app-02 sshd[20941]: Connection closed by 192.0.2.26 port 61423 [preauth]
+Mar  1 00:11:46 mail-01 CRON[37808]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:11:49 db-01 systemd: Started Session 488 of user deploy.
+Mar  1 00:11:51 mail-01 systemd: Started Session 704 of user admin.
+Mar  1 00:11:52 mail-01 postfix/smtpd[57537]: connect from unknown[198.51.100.19]
+Mar  1 00:11:53 db-01 dovecot[39050]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.10, lip=10.0.0.5, TLS
+Mar  1 00:11:56 app-02 dovecot[46963]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.57, lip=10.0.0.5, TLS
+Mar  1 00:12:01 db-01 sshd[3549]: Connection closed by 192.0.2.18 port 32915 [preauth]
+Mar  1 00:12:05 web-01 dovecot[25854]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.60, lip=10.0.0.5, TLS
+Mar  1 00:12:07 mail-01 sudo[60531]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:12:08 web-01 CRON[17663]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:12:10 web-01 dovecot[2513]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.45, lip=10.0.0.5, TLS
+Mar  1 00:12:14 app-02 dovecot[42037]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.41, lip=10.0.0.5, TLS
+Mar  1 00:12:16 app-02 kernel: [71953.232383] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:12:16 db-01 systemd: Started Session 576 of user deploy.
+Mar  1 00:12:19 app-02 sshd[41247]: Connection closed by 198.51.100.39 port 61057 [preauth]
+Mar  1 00:12:21 db-01 dovecot[10930]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.5, lip=10.0.0.5, TLS
+Mar  1 00:12:21 web-01 postfix/smtpd[15701]: connect from unknown[198.51.100.8]
+Mar  1 00:12:24 mail-01 CRON[8044]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:12:25 mail-01 systemd: Started Session 830 of user deploy.
+Mar  1 00:12:30 mail-01 sudo[46051]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:12:31 web-01 sshd[59472]: Accepted publickey for bob from 203.0.113.8 port 23273 ssh2
+Mar  1 00:12:36 web-01 dovecot[23992]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.43, lip=10.0.0.5, TLS
+Mar  1 00:12:40 mail-01 sshd[18513]: Connection closed by 192.0.2.25 port 18730 [preauth]
+Mar  1 00:12:40 app-02 postfix/smtpd[23162]: connect from unknown[192.0.2.19]
+Mar  1 00:12:41 db-01 systemd: Started Session 874 of user oracle.
+Mar  1 00:12:42 app-02 CRON[6611]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:12:43 web-01 systemd: Started Session 636 of user alice.
+Mar  1 00:12:44 web-01 dovecot[38864]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.38, lip=10.0.0.5, TLS
+Mar  1 00:12:47 app-02 sudo[21062]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:12:48 web-01 CRON[12051]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:12:51 db-01 sudo[44957]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:12:54 db-01 CRON[34857]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:12:56 app-02 kernel: [89828.660959] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:01 db-01 CRON[41567]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:02 app-02 postfix/smtpd[26363]: connect from unknown[192.0.2.50]
+Mar  1 00:13:06 mail-01 kernel: [32251.684880] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:10 fw-01 CRON[36497]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:11 web-01 kernel: [34948.880138] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:16 db-01 kernel: [81817.702487] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:20 db-01 CRON[62087]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:23 app-02 kernel: [36644.778454] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:25 db-01 systemd: Started Session 666 of user alice.
+Mar  1 00:13:30 web-01 dovecot[36056]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.56, lip=10.0.0.5, TLS
+Mar  1 00:13:33 mail-01 CRON[51416]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:36 mail-01 systemd: Started Session 483 of user deploy.
+Mar  1 00:13:37 app-02 CRON[11224]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:41 web-01 systemd: Started Session 504 of user oracle.
+Mar  1 00:13:44 db-01 CRON[42400]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:13:46 fw-01 sshd[12372]: Connection closed by 198.51.100.37 port 18366 [preauth]
+Mar  1 00:13:48 fw-01 systemd: Started Session 99 of user deploy.
+Mar  1 00:13:53 web-01 dovecot[58790]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.23, lip=10.0.0.5, TLS
+Mar  1 00:13:54 web-01 dovecot[16112]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.47, lip=10.0.0.5, TLS
+Mar  1 00:13:55 db-01 kernel: [7368.469027] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:13:56 mail-01 systemd: Started Session 901 of user alice.
+Mar  1 00:13:57 app-02 systemd: Started Session 922 of user deploy.
+Mar  1 00:14:01 mail-01 sshd[16148]: Connection closed by 192.0.2.25 port 39048 [preauth]
+Mar  1 00:14:05 web-01 sshd[17342]: Connection closed by 192.0.2.48 port 11066 [preauth]
+Mar  1 00:14:06 app-02 sshd[49976]: Connection closed by 203.0.113.36 port 1231 [preauth]
+Mar  1 00:14:09 mail-01 systemd: Started Session 29 of user oracle.
+Mar  1 00:14:13 app-02 CRON[21783]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:14:15 db-01 kernel: [48739.201868] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:14:18 mail-01 postfix/smtpd[54943]: connect from unknown[192.0.2.11]
+Mar  1 00:14:18 web-01 CRON[33972]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:14:20 fw-01 sudo[3744]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:14:23 app-02 kernel: [34857.156585] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:14:25 app-02 sudo[18130]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:14:29 db-01 sudo[28467]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:14:33 fw-01 sudo[35983]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:14:36 mail-01 CRON[41782]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:14:40 mail-01 kernel: [94263.697955] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:14:42 mail-01 CRON[60087]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:14:44 web-01 dovecot[59600]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.53, lip=10.0.0.5, TLS
+Mar  1 00:14:46 app-02 systemd: Started Session 888 of user admin.
+Mar  1 00:14:49 fw-01 sshd[53960]: Accepted publickey for root from 203.0.113.24 port 26209 ssh2
+Mar  1 00:14:52 db-01 kernel: [4.738627] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:14:56 app-02 systemd: Started Session 834 of user bob.
+Mar  1 00:15:00 mail-01 dovecot[37642]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.49, lip=10.0.0.5, TLS
+Mar  1 00:15:01 fw-01 kernel: [41689.250527] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:15:05 mail-01 sudo[12201]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:07 web-01 sudo[13328]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:12 web-01 sshd[52910]: Accepted publickey for bob from 198.51.100.15 port 27606 ssh2
+Mar  1 00:15:15 fw-01 systemd: Started Session 254 of user bob.
+Mar  1 00:15:16 fw-01 sudo[14686]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:21 web-01 postfix/smtpd[34508]: connect from unknown[192.0.2.33]
+Mar  1 00:15:26 db-01 sudo[9601]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:30 app-02 postfix/smtpd[5030]: connect from unknown[203.0.113.39]
+Mar  1 00:15:30 fw-01 systemd: Started Session 120 of user oracle.
+Mar  1 00:15:31 app-02 sudo[53444]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:33 web-01 systemd: Started Session 961 of user oracle.
+Mar  1 00:15:38 app-02 kernel: [38771.528788] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:15:42 app-02 CRON[55886]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:15:45 db-01 kernel: [292.126716] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:15:48 db-01 kernel: [96824.714619] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:15:52 app-02 sudo[64530]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:54 db-01 sudo[10883]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:15:56 app-02 kernel: [57831.355641] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:15:56 app-02 CRON[35066]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:15:57 app-02 dovecot[65353]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.21, lip=10.0.0.5, TLS
+Mar  1 00:16:01 web-01 postfix/smtpd[42790]: connect from unknown[198.51.100.3]
+Mar  1 00:16:05 db-01 dovecot[12456]: imap-login: Login: user=<alice>, method=PLAIN, rip=192.0.2.44, lip=10.0.0.5, TLS
+Mar  1 00:16:05 app-02 systemd: Started Session 216 of user deploy.
+Mar  1 00:16:07 mail-01 sudo[51011]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:16:11 mail-01 dovecot[19179]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.28, lip=10.0.0.5, TLS
+Mar  1 00:16:15 mail-01 dovecot[50299]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.47, lip=10.0.0.5, TLS
+Mar  1 00:16:15 app-02 postfix/smtpd[10887]: connect from unknown[192.0.2.18]
+Mar  1 00:16:16 fw-01 kernel: [41036.471284] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:16:20 db-01 systemd: Started Session 181 of user root.
+Mar  1 00:16:21 mail-01 dovecot[20898]: imap-login: Login: user=<deploy>, method=PLAIN, rip=203.0.113.38, lip=10.0.0.5, TLS
+Mar  1 00:16:26 db-01 postfix/smtpd[45099]: connect from unknown[192.0.2.18]
+Mar  1 00:16:28 web-01 CRON[61547]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:16:33 fw-01 sudo[14545]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:16:35 web-01 kernel: [33548.229521] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:16:39 web-01 postfix/smtpd[29412]: connect from unknown[192.0.2.42]
+Mar  1 00:16:43 web-01 systemd: Started Session 206 of user deploy.
+Mar  1 00:16:48 db-01 postfix/smtpd[10848]: connect from unknown[203.0.113.50]
+Mar  1 00:16:50 fw-01 kernel: [74988.560258] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:16:52 mail-01 CRON[11242]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:16:55 app-02 dovecot[21346]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.29, lip=10.0.0.5, TLS
+Mar  1 00:16:56 fw-01 kernel: [72755.356652] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:16:58 fw-01 sshd[20854]: Connection closed by 203.0.113.43 port 55651 [preauth]
+Mar  1 00:17:00 web-01 sshd[29818]: Connection closed by 203.0.113.41 port 1595 [preauth]
+Mar  1 00:17:03 app-02 dovecot[24143]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.7, lip=10.0.0.5, TLS
+Mar  1 00:17:05 mail-01 sshd[8783]: Accepted publickey for deploy from 192.0.2.35 port 26149 ssh2
+Mar  1 00:17:08 web-01 systemd: Started Session 801 of user root.
+Mar  1 00:17:13 web-01 postfix/smtpd[58532]: connect from unknown[198.51.100.28]
+Mar  1 00:17:17 fw-01 dovecot[8149]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.51, lip=10.0.0.5, TLS
+Mar  1 00:17:22 fw-01 kernel: [18007.815654] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:17:25 app-02 sudo[57057]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:17:28 mail-01 systemd: Started Session 4 of user bob.
+Mar  1 00:17:29 web-01 systemd: Started Session 770 of user alice.
+Mar  1 00:17:32 web-01 postfix/smtpd[15579]: connect from unknown[198.51.100.56]
+Mar  1 00:17:32 app-02 sudo[63562]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:17:37 mail-01 kernel: [63714.230104] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:17:40 web-01 kernel: [37145.625733] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:17:44 db-01 dovecot[14598]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.20, lip=10.0.0.5, TLS
+Mar  1 00:17:47 fw-01 postfix/smtpd[15828]: connect from unknown[192.0.2.30]
+Mar  1 00:17:51 db-01 kernel: [34639.349097] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:17:53 app-02 dovecot[37787]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.54, lip=10.0.0.5, TLS
+Mar  1 00:17:54 mail-01 sshd[20948]: Failed password for invalid user deploy from 203.0.113.8 port 1721 ssh2
+Mar  1 00:17:59 mail-01 sudo[17317]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:18:03 app-02 systemd: Started Session 10 of user admin.
+Mar  1 00:18:06 mail-01 sudo[32827]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:18:11 db-01 systemd: Started Session 68 of user deploy.
+Mar  1 00:18:11 web-01 CRON[30667]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:18:14 fw-01 dovecot[42415]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.6, lip=10.0.0.5, TLS
+Mar  1 00:18:18 fw-01 dovecot[35584]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.13, lip=10.0.0.5, TLS
+Mar  1 00:18:22 fw-01 systemd: Started Session 573 of user oracle.
+Mar  1 00:18:23 app-02 sshd[33079]: Failed password for invalid user admin from 192.0.2.31 port 21998 ssh2
+Mar  1 00:18:27 web-01 sudo[61443]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:18:28 mail-01 sudo[25059]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:18:30 app-02 dovecot[57004]: imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.57, lip=10.0.0.5, TLS
+Mar  1 00:18:33 fw-01 systemd: Started Session 975 of user admin.
+Mar  1 00:18:36 db-01 sshd[13827]: Connection closed by 192.0.2.6 port 9214 [preauth]
+Mar  1 00:18:39 mail-01 sudo[40269]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:18:44 db-01 sshd[44414]: Failed password for invalid user root from 192.0.2.19 port 54094 ssh2
+Mar  1 00:18:45 app-02 postfix/smtpd[31870]: connect from unknown[203.0.113.7]
+Mar  1 00:18:45 mail-01 systemd: Started Session 217 of user bob.
+Mar  1 00:18:46 fw-01 CRON[55571]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:18:51 mail-01 postfix/smtpd[54188]: connect from unknown[198.51.100.3]
+Mar  1 00:18:52 mail-01 dovecot[43469]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.2, lip=10.0.0.5, TLS
+Mar  1 00:18:56 mail-01 sshd[51979]: Connection closed by 198.51.100.52 port 26472 [preauth]
+Mar  1 00:18:59 fw-01 dovecot[27554]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.48, lip=10.0.0.5, TLS
+Mar  1 00:19:03 db-01 kernel: [80844.534019] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:19:03 app-02 CRON[6279]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:19:05 db-01 sudo[12691]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:19:07 app-02 CRON[65234]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:19:09 fw-01 kernel: [29861.398219] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:19:14 web-01 systemd: Started Session 692 of user bob.
+Mar  1 00:19:16 fw-01 sshd[64520]: Failed password for invalid user alice from 192.0.2.42 port 65501 ssh2
+Mar  1 00:19:17 fw-01 kernel: [11205.341672] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:19:18 mail-01 kernel: [42148.314150] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:19:20 db-01 systemd: Started Session 772 of user alice.
+Mar  1 00:19:24 app-02 systemd: Started Session 259 of user root.
+Mar  1 00:19:25 web-01 dovecot[8575]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.32, lip=10.0.0.5, TLS
+Mar  1 00:19:28 app-02 systemd: Started Session 961 of user admin.
+Mar  1 00:19:32 db-01 postfix/smtpd[22857]: connect from unknown[198.51.100.14]
+Mar  1 00:19:36 app-02 postfix/smtpd[58231]: connect from unknown[192.0.2.3]
+Mar  1 00:19:38 db-01 kernel: [2097.255807] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:19:42 db-01 sshd[3736]: Connection closed by 198.51.100.23 port 44168 [preauth]
+Mar  1 00:19:46 db-01 dovecot[22002]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.49, lip=10.0.0.5, TLS
+Mar  1 00:19:50 web-01 dovecot[40435]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.59, lip=10.0.0.5, TLS
+Mar  1 00:19:53 web-01 systemd: Started Session 771 of user admin.
+Mar  1 00:19:58 web-01 sudo[29185]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:02 app-02 sudo[52424]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:05 web-01 kernel: [52439.617611] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:20:08 mail-01 sudo[59395]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:08 app-02 sshd[61934]: Failed password for invalid user root from 192.0.2.40 port 14342 ssh2
+Mar  1 00:20:09 web-01 dovecot[58623]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.43, lip=10.0.0.5, TLS
+Mar  1 00:20:12 web-01 sudo[6481]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:13 app-02 CRON[36839]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:20:15 mail-01 systemd: Started Session 827 of user admin.
+Mar  1 00:20:16 db-01 sshd[13586]: Connection closed by 198.51.100.35 port 16574 [preauth]
+Mar  1 00:20:20 db-01 postfix/smtpd[37832]: connect from unknown[198.51.100.41]
+Mar  1 00:20:20 fw-01 CRON[28782]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:20:22 db-01 postfix/smtpd[7414]: connect from unknown[203.0.113.55]
+Mar  1 00:20:27 app-02 CRON[34538]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:20:31 web-01 kernel: [12252.469288] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:20:36 mail-01 systemd: Started Session 299 of user oracle.
+Mar  1 00:20:37 db-01 postfix/smtpd[46499]: connect from unknown[192.0.2.16]
+Mar  1 00:20:38 mail-01 CRON[13393]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:20:42 mail-01 postfix/smtpd[53296]: connect from unknown[203.0.113.53]
+Mar  1 00:20:44 fw-01 postfix/smtpd[42321]: connect from unknown[203.0.113.14]
+Mar  1 00:20:46 mail-01 sudo[63654]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:46 web-01 CRON[58061]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:20:47 app-02 systemd: Started Session 576 of user oracle.
+Mar  1 00:20:48 mail-01 sudo[17845]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:48 app-02 sshd[27924]: Failed password for invalid user admin from 198.51.100.15 port 4005 ssh2
+Mar  1 00:20:53 mail-01 dovecot[25700]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.43, lip=10.0.0.5, TLS
+Mar  1 00:20:54 app-02 postfix/smtpd[26477]: connect from unknown[192.0.2.27]
+Mar  1 00:20:56 db-01 sudo[63098]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:20:56 app-02 postfix/smtpd[28909]: connect from unknown[198.51.100.48]
+Mar  1 00:21:00 db-01 sudo[23417]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:21:02 db-01 kernel: [20228.269662] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:21:06 web-01 systemd: Started Session 112 of user bob.
+Mar  1 00:21:07 web-01 systemd: Started Session 806 of user oracle.
+Mar  1 00:21:09 app-02 systemd: Started Session 238 of user root.
+Mar  1 00:21:14 app-02 sudo[60200]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:21:16 db-01 kernel: [11678.292669] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:21:17 db-01 CRON[8009]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:21:17 mail-01 systemd: Started Session 686 of user bob.
+Mar  1 00:21:22 web-01 systemd: Started Session 581 of user alice.
+Mar  1 00:21:24 db-01 dovecot[9648]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.6, lip=10.0.0.5, TLS
+Mar  1 00:21:27 fw-01 sudo[15245]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:21:31 app-02 CRON[26227]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:21:35 mail-01 kernel: [93179.538457] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:21:35 web-01 postfix/smtpd[23347]: connect from unknown[203.0.113.23]
+Mar  1 00:21:35 app-02 CRON[64169]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:21:40 fw-01 CRON[41195]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:21:44 db-01 sshd[35763]: Connection closed by 192.0.2.27 port 24252 [preauth]
+Mar  1 00:21:49 app-02 postfix/smtpd[36239]: connect from unknown[192.0.2.38]
+Mar  1 00:21:51 db-01 CRON[59395]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:21:53 fw-01 sshd[18300]: Accepted publickey for bob from 192.0.2.45 port 5483 ssh2
+Mar  1 00:21:56 db-01 sudo[33013]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:22:00 web-01 CRON[62422]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:04 fw-01 sshd[17432]: Accepted publickey for deploy from 192.0.2.3 port 43466 ssh2
+Mar  1 00:22:08 db-01 CRON[37373]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:11 web-01 CRON[64981]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:12 app-02 sudo[56631]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:22:17 web-01 kernel: [92727.047125] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:22:21 fw-01 sudo[59265]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:22:22 fw-01 postfix/smtpd[54995]: connect from unknown[203.0.113.59]
+Mar  1 00:22:22 web-01 sudo[41310]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:22:22 fw-01 systemd: Started Session 75 of user root.
+Mar  1 00:22:27 db-01 sshd[44868]: Accepted publickey for bob from 198.51.100.6 port 39398 ssh2
+Mar  1 00:22:29 db-01 systemd: Started Session 738 of user admin.
+Mar  1 00:22:33 fw-01 CRON[46014]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:34 db-01 CRON[54804]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:38 db-01 CRON[32424]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:22:41 web-01 sshd[62450]: Failed password for invalid user deploy from 198.51.100.59 port 47485 ssh2
+Mar  1 00:22:45 fw-01 sshd[31796]: Accepted publickey for root from 192.0.2.48 port 13408 ssh2
+Mar  1 00:22:49 web-01 systemd: Started Session 688 of user bob.
+Mar  1 00:22:49 db-01 kernel: [72734.570481] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:22:50 db-01 postfix/smtpd[62572]: connect from unknown[192.0.2.30]
+Mar  1 00:22:53 app-02 postfix/smtpd[61138]: connect from unknown[203.0.113.45]
+Mar  1 00:22:53 db-01 sudo[40303]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:22:54 web-01 systemd: Started Session 204 of user root.
+Mar  1 00:22:55 db-01 dovecot[57716]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.26, lip=10.0.0.5, TLS
+Mar  1 00:22:56 web-01 systemd: Started Session 483 of user admin.
+Mar  1 00:22:58 app-02 postfix/smtpd[10410]: connect from unknown[203.0.113.60]
+Mar  1 00:23:00 db-01 postfix/smtpd[23005]: connect from unknown[192.0.2.16]
+Mar  1 00:23:05 mail-01 postfix/smtpd[43812]: connect from unknown[203.0.113.54]
+Mar  1 00:23:09 mail-01 kernel: [41559.925780] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:23:11 db-01 CRON[43482]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:23:16 web-01 sshd[6184]: Accepted publickey for alice from 203.0.113.48 port 51359 ssh2
+Mar  1 00:23:20 fw-01 sshd[63345]: Connection closed by 192.0.2.22 port 28620 [preauth]
+Mar  1 00:23:22 db-01 systemd: Started Session 705 of user bob.
+Mar  1 00:23:26 app-02 dovecot[14564]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.3, lip=10.0.0.5, TLS
+Mar  1 00:23:26 app-02 postfix/smtpd[15343]: connect from unknown[198.51.100.57]
+Mar  1 00:23:27 db-01 dovecot[19652]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.30, lip=10.0.0.5, TLS
+Mar  1 00:23:30 app-02 sshd[56761]: Connection closed by 203.0.113.17 port 40238 [preauth]
+Mar  1 00:23:34 web-01 kernel: [74870.202408] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:23:38 app-02 sudo[18183]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:23:40 fw-01 sudo[36767]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:23:44 app-02 kernel: [75288.711916] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:23:46 app-02 kernel: [31039.617862] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:23:50 web-01 kernel: [8913.625895] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:23:55 mail-01 sshd[32300]: Failed password for invalid user alice from 192.0.2.7 port 57711 ssh2
+Mar  1 00:23:58 db-01 CRON[23938]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:24:01 fw-01 kernel: [75819.964957] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:02 fw-01 kernel: [39898.773703] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:03 db-01 kernel: [54110.505629] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:05 db-01 CRON[13863]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:24:10 fw-01 sudo[33697]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:24:14 fw-01 sshd[63066]: Failed password for invalid user deploy from 198.51.100.40 port 53820 ssh2
+Mar  1 00:24:16 mail-01 systemd: Started Session 416 of user admin.
+Mar  1 00:24:17 db-01 sshd[48670]: Accepted publickey for oracle from 203.0.113.52 port 54325 ssh2
+Mar  1 00:24:21 web-01 dovecot[18935]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.21, lip=10.0.0.5, TLS
+Mar  1 00:24:23 web-01 dovecot[61358]: imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.11, lip=10.0.0.5, TLS
+Mar  1 00:24:24 db-01 kernel: [52121.821320] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:26 mail-01 systemd: Started Session 118 of user deploy.
+Mar  1 00:24:28 web-01 systemd: Started Session 913 of user bob.
+Mar  1 00:24:32 fw-01 postfix/smtpd[8501]: connect from unknown[192.0.2.15]
+Mar  1 00:24:33 fw-01 postfix/smtpd[31726]: connect from unknown[203.0.113.3]
+Mar  1 00:24:35 fw-01 CRON[53174]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:24:40 web-01 CRON[20501]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:24:44 mail-01 dovecot[26445]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.16, lip=10.0.0.5, TLS
+Mar  1 00:24:49 mail-01 kernel: [13937.891532] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:51 db-01 CRON[48116]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:24:54 web-01 postfix/smtpd[43221]: connect from unknown[198.51.100.26]
+Mar  1 00:24:56 mail-01 kernel: [35710.933713] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:24:59 mail-01 kernel: [13373.476560] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:01 app-02 CRON[55158]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:01 db-01 CRON[24979]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:06 mail-01 kernel: [98853.651706] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:10 db-01 kernel: [29836.244907] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:14 app-02 CRON[41434]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:16 app-02 sudo[52428]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:25:18 mail-01 sudo[15982]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:25:20 fw-01 dovecot[54057]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.51, lip=10.0.0.5, TLS
+Mar  1 00:25:22 db-01 CRON[10750]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:23 fw-01 CRON[34439]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:25 fw-01 kernel: [84391.629501] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:30 app-02 kernel: [59429.823517] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:33 app-02 dovecot[26486]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.19, lip=10.0.0.5, TLS
+Mar  1 00:25:37 db-01 sshd[32724]: Failed password for invalid user root from 198.51.100.29 port 39987 ssh2
+Mar  1 00:25:39 web-01 kernel: [42172.290972] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:42 app-02 dovecot[37189]: imap-login: Login: user=<alice>, method=PLAIN, rip=203.0.113.9, lip=10.0.0.5, TLS
+Mar  1 00:25:43 app-02 CRON[43247]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:25:47 db-01 kernel: [76046.434886] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:49 app-02 systemd: Started Session 480 of user bob.
+Mar  1 00:25:49 db-01 kernel: [70140.240845] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:53 web-01 kernel: [50312.864597] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:25:58 fw-01 postfix/smtpd[23187]: connect from unknown[198.51.100.52]
+Mar  1 00:25:59 fw-01 postfix/smtpd[60081]: connect from unknown[198.51.100.27]
+Mar  1 00:25:59 fw-01 kernel: [79311.709006] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:26:00 app-02 sudo[62822]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:01 app-02 dovecot[61359]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.6, lip=10.0.0.5, TLS
+Mar  1 00:26:04 web-01 sudo[55717]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:08 mail-01 CRON[19429]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:26:13 app-02 postfix/smtpd[54241]: connect from unknown[192.0.2.42]
+Mar  1 00:26:14 db-01 kernel: [37522.921430] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:26:19 web-01 sudo[2500]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:19 fw-01 systemd: Started Session 889 of user bob.
+Mar  1 00:26:21 web-01 dovecot[49114]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.57, lip=10.0.0.5, TLS
+Mar  1 00:26:22 fw-01 CRON[29058]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:26:25 web-01 systemd: Started Session 563 of user alice.
+Mar  1 00:26:27 fw-01 sudo[42888]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:29 db-01 sudo[40188]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:32 fw-01 dovecot[39898]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.21, lip=10.0.0.5, TLS
+Mar  1 00:26:36 app-02 sshd[64089]: Accepted publickey for bob from 203.0.113.59 port 25147 ssh2
+Mar  1 00:26:37 app-02 sudo[6001]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:26:38 mail-01 dovecot[21040]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.54, lip=10.0.0.5, TLS
+Mar  1 00:26:40 mail-01 systemd: Started Session 886 of user oracle.
+Mar  1 00:26:41 fw-01 systemd: Started Session 206 of user bob.
+Mar  1 00:26:41 web-01 postfix/smtpd[58606]: connect from unknown[192.0.2.41]
+Mar  1 00:26:45 app-02 kernel: [48179.519286] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:26:47 web-01 CRON[54600]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:26:49 mail-01 systemd: Started Session 36 of user deploy.
+Mar  1 00:26:51 app-02 dovecot[51519]: imap-login: Login: user=<alice>, method=PLAIN, rip=198.51.100.24, lip=10.0.0.5, TLS
+Mar  1 00:26:56 fw-01 sshd[323]: Connection closed by 192.0.2.44 port 8273 [preauth]
+Mar  1 00:26:58 fw-01 sudo[56947]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:27:01 app-02 kernel: [79392.524829] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:27:04 app-02 CRON[54663]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:27:09 web-01 postfix/smtpd[59515]: connect from unknown[203.0.113.52]
+Mar  1 00:27:09 app-02 dovecot[3079]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.17, lip=10.0.0.5, TLS
+Mar  1 00:27:10 db-01 CRON[31847]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:27:13 fw-01 dovecot[15856]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.23, lip=10.0.0.5, TLS
+Mar  1 00:27:16 mail-01 CRON[13989]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:27:17 db-01 sshd[49709]: Failed password for invalid user oracle from 203.0.113.31 port 38394 ssh2
+Mar  1 00:27:21 mail-01 sshd[53114]: Accepted publickey for bob from 192.0.2.2 port 62613 ssh2
+Mar  1 00:27:25 app-02 systemd: Started Session 562 of user bob.
+Mar  1 00:27:29 web-01 postfix/smtpd[56371]: connect from unknown[198.51.100.57]
+Mar  1 00:27:30 web-01 postfix/smtpd[14657]: connect from unknown[198.51.100.7]
+Mar  1 00:27:31 mail-01 kernel: [79596.903991] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:27:32 web-01 CRON[44283]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:27:35 fw-01 postfix/smtpd[15447]: connect from unknown[192.0.2.15]
+Mar  1 00:27:39 db-01 kernel: [15029.498288] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:27:43 web-01 postfix/smtpd[41794]: connect from unknown[192.0.2.41]
+Mar  1 00:27:43 db-01 sshd[40804]: Accepted publickey for oracle from 192.0.2.55 port 34832 ssh2
+Mar  1 00:27:47 app-02 systemd: Started Session 495 of user oracle.
+Mar  1 00:27:49 db-01 systemd: Started Session 722 of user bob.
+Mar  1 00:27:53 db-01 CRON[19364]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:27:58 web-01 sshd[62099]: Failed password for invalid user deploy from 203.0.113.15 port 27644 ssh2
+Mar  1 00:28:02 mail-01 postfix/smtpd[57722]: connect from unknown[198.51.100.34]
+Mar  1 00:28:04 db-01 CRON[30963]: (bob) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:28:08 db-01 CRON[6201]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:28:12 db-01 kernel: [40265.485930] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:28:14 db-01 dovecot[34530]: imap-login: Login: user=<root>, method=PLAIN, rip=198.51.100.54, lip=10.0.0.5, TLS
+Mar  1 00:28:16 web-01 sudo[6140]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:28:20 fw-01 systemd: Started Session 789 of user admin.
+Mar  1 00:28:22 fw-01 sshd[45862]: Failed password for invalid user oracle from 203.0.113.27 port 19370 ssh2
+Mar  1 00:28:24 db-01 systemd: Started Session 919 of user deploy.
+Mar  1 00:28:25 mail-01 dovecot[61675]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.30, lip=10.0.0.5, TLS
+Mar  1 00:28:27 web-01 sudo[31471]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:28:29 fw-01 sshd[6641]: Connection closed by 203.0.113.6 port 52860 [preauth]
+Mar  1 00:28:34 web-01 sudo[27599]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:28:34 mail-01 CRON[21747]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:28:39 app-02 kernel: [74512.700221] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:28:42 fw-01 sshd[51309]: Connection closed by 203.0.113.8 port 63504 [preauth]
+Mar  1 00:28:46 db-01 CRON[1457]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:28:50 mail-01 sshd[37503]: Connection closed by 198.51.100.36 port 24577 [preauth]
+Mar  1 00:28:54 mail-01 sshd[4864]: Connection closed by 198.51.100.8 port 7164 [preauth]
+Mar  1 00:28:58 mail-01 dovecot[5579]: imap-login: Login: user=<admin>, method=PLAIN, rip=203.0.113.47, lip=10.0.0.5, TLS
+Mar  1 00:29:03 mail-01 sshd[538]: Accepted publickey for bob from 203.0.113.26 port 28816 ssh2
+Mar  1 00:29:04 mail-01 kernel: [28196.955023] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:29:08 web-01 sudo[8114]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:29:13 fw-01 sudo[25979]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:29:13 mail-01 CRON[25903]: (root) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:29:16 web-01 systemd: Started Session 545 of user oracle.
+Mar  1 00:29:18 fw-01 sshd[45444]: Accepted publickey for deploy from 192.0.2.50 port 27034 ssh2
+Mar  1 00:29:22 mail-01 dovecot[11541]: imap-login: Login: user=<deploy>, method=PLAIN, rip=198.51.100.10, lip=10.0.0.5, TLS
+Mar  1 00:29:23 fw-01 CRON[13797]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:29:24 fw-01 sudo[6693]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:29:25 mail-01 sshd[59011]: Failed password for invalid user deploy from 192.0.2.26 port 29407 ssh2
+Mar  1 00:29:26 web-01 sshd[17889]: Accepted publickey for deploy from 203.0.113.43 port 58545 ssh2
+Mar  1 00:29:28 app-02 sshd[46946]: Failed password for invalid user oracle from 192.0.2.25 port 4616 ssh2
+Mar  1 00:29:32 db-01 dovecot[41560]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.52, lip=10.0.0.5, TLS
+Mar  1 00:29:35 app-02 CRON[47087]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:29:35 web-01 postfix/smtpd[10724]: connect from unknown[192.0.2.41]
+Mar  1 00:29:38 fw-01 systemd: Started Session 962 of user oracle.
+Mar  1 00:29:40 app-02 kernel: [29774.515163] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:29:42 web-01 dovecot[15619]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.28, lip=10.0.0.5, TLS
+Mar  1 00:29:47 app-02 postfix/smtpd[38892]: connect from unknown[198.51.100.5]
+Mar  1 00:29:51 fw-01 sudo[23410]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:29:52 web-01 kernel: [624.772618] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:29:56 web-01 CRON[30583]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:29:57 db-01 sshd[63674]: Accepted publickey for oracle from 203.0.113.58 port 30936 ssh2
+Mar  1 00:29:58 mail-01 kernel: [86337.501730] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:02 web-01 systemd: Started Session 756 of user alice.
+Mar  1 00:30:03 mail-01 postfix/smtpd[11471]: connect from unknown[203.0.113.35]
+Mar  1 00:30:05 web-01 postfix/smtpd[5716]: connect from unknown[198.51.100.47]
+Mar  1 00:30:08 fw-01 kernel: [73901.028097] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:08 db-01 CRON[25790]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:30:08 web-01 kernel: [21834.186439] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:13 web-01 systemd: Started Session 946 of user deploy.
+Mar  1 00:30:17 app-02 sshd[56828]: Failed password for invalid user oracle from 192.0.2.1 port 34502 ssh2
+Mar  1 00:30:21 fw-01 systemd: Started Session 695 of user bob.
+Mar  1 00:30:22 db-01 sudo[7976]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:30:25 web-01 sshd[18032]: Failed password for invalid user alice from 192.0.2.45 port 43384 ssh2
+Mar  1 00:30:26 mail-01 dovecot[3654]: imap-login: Login: user=<oracle>, method=PLAIN, rip=192.0.2.43, lip=10.0.0.5, TLS
+Mar  1 00:30:26 db-01 dovecot[24737]: imap-login: Login: user=<oracle>, method=PLAIN, rip=198.51.100.53, lip=10.0.0.5, TLS
+Mar  1 00:30:30 web-01 systemd: Started Session 412 of user root.
+Mar  1 00:30:34 app-02 systemd: Started Session 472 of user bob.
+Mar  1 00:30:36 web-01 sudo[21313]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:30:36 web-01 kernel: [20335.911248] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:40 app-02 sshd[8062]: Connection closed by 198.51.100.15 port 5967 [preauth]
+Mar  1 00:30:43 db-01 sudo[29157]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:30:44 db-01 CRON[54073]: (oracle) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:30:45 app-02 CRON[45134]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:30:49 web-01 sshd[4700]: Connection closed by 192.0.2.46 port 22865 [preauth]
+Mar  1 00:30:51 mail-01 kernel: [45463.889815] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:54 mail-01 kernel: [21501.026778] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:30:59 db-01 dovecot[56027]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.43, lip=10.0.0.5, TLS
+Mar  1 00:31:01 app-02 kernel: [88192.213214] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:31:04 mail-01 sudo[57237]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:31:05 db-01 CRON[42850]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:31:09 web-01 postfix/smtpd[16819]: connect from unknown[192.0.2.4]
+Mar  1 00:31:11 db-01 CRON[19486]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:31:15 web-01 sudo[59455]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:31:18 db-01 postfix/smtpd[40736]: connect from unknown[192.0.2.29]
+Mar  1 00:31:19 web-01 CRON[7738]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:31:23 db-01 kernel: [11244.100457] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:31:24 web-01 sshd[18435]: Connection closed by 198.51.100.5 port 34403 [preauth]
+Mar  1 00:31:28 mail-01 kernel: [46757.144035] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:31:28 app-02 sshd[56878]: Connection closed by 198.51.100.45 port 62501 [preauth]
+Mar  1 00:31:32 app-02 systemd: Started Session 646 of user bob.
+Mar  1 00:31:35 fw-01 kernel: [28716.840828] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:31:37 fw-01 postfix/smtpd[52919]: connect from unknown[203.0.113.6]
+Mar  1 00:31:41 mail-01 sudo[36322]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:31:42 app-02 sshd[51668]: Failed password for invalid user deploy from 203.0.113.21 port 39233 ssh2
+Mar  1 00:31:43 web-01 kernel: [58768.076201] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:31:47 db-01 sudo[21647]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:31:50 db-01 sshd[32622]: Accepted publickey for oracle from 198.51.100.44 port 26319 ssh2
+Mar  1 00:31:54 fw-01 CRON[40121]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:31:55 web-01 dovecot[1564]: imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.55, lip=10.0.0.5, TLS
+Mar  1 00:32:00 app-02 systemd: Started Session 305 of user oracle.
+Mar  1 00:32:01 fw-01 systemd: Started Session 232 of user admin.
+Mar  1 00:32:04 web-01 postfix/smtpd[61402]: connect from unknown[203.0.113.5]
+Mar  1 00:32:09 db-01 kernel: [48628.360224] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:32:11 web-01 dovecot[56035]: imap-login: Login: user=<root>, method=PLAIN, rip=192.0.2.30, lip=10.0.0.5, TLS
+Mar  1 00:32:13 db-01 systemd: Started Session 581 of user root.
+Mar  1 00:32:16 app-02 postfix/smtpd[6138]: connect from unknown[192.0.2.39]
+Mar  1 00:32:20 db-01 sudo[47816]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:32:20 fw-01 postfix/smtpd[62331]: connect from unknown[192.0.2.58]
+Mar  1 00:32:25 web-01 dovecot[38241]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.17, lip=10.0.0.5, TLS
+Mar  1 00:32:26 app-02 dovecot[54420]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.10, lip=10.0.0.5, TLS
+Mar  1 00:32:30 web-01 sudo[36590]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:32:31 web-01 sshd[61063]: Failed password for invalid user oracle from 192.0.2.6 port 16457 ssh2
+Mar  1 00:32:34 mail-01 CRON[17797]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:32:34 db-01 dovecot[20070]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.9, lip=10.0.0.5, TLS
+Mar  1 00:32:36 fw-01 systemd: Started Session 595 of user root.
+Mar  1 00:32:36 web-01 systemd: Started Session 209 of user deploy.
+Mar  1 00:32:38 mail-01 sshd[51436]: Accepted publickey for bob from 203.0.113.26 port 38054 ssh2
+Mar  1 00:32:42 fw-01 kernel: [96164.682137] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:32:44 app-02 kernel: [82666.679831] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:32:45 app-02 postfix/smtpd[31676]: connect from unknown[198.51.100.14]
+Mar  1 00:32:49 db-01 dovecot[1422]: imap-login: Login: user=<root>, method=PLAIN, rip=192.0.2.49, lip=10.0.0.5, TLS
+Mar  1 00:32:54 mail-01 sshd[14049]: Connection closed by 192.0.2.1 port 61152 [preauth]
+Mar  1 00:32:57 db-01 systemd: Started Session 815 of user deploy.
+Mar  1 00:32:58 mail-01 sudo[32539]: oracle : TTY=pts/0 ; PWD=/home/oracle ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:00 app-02 postfix/smtpd[42792]: connect from unknown[198.51.100.19]
+Mar  1 00:33:03 web-01 systemd: Started Session 296 of user root.
+Mar  1 00:33:06 app-02 sshd[38449]: Connection closed by 192.0.2.37 port 31912 [preauth]
+Mar  1 00:33:10 web-01 systemd: Started Session 441 of user bob.
+Mar  1 00:33:11 fw-01 systemd: Started Session 485 of user admin.
+Mar  1 00:33:13 web-01 sudo[32067]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:18 db-01 sudo[44276]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:23 fw-01 sudo[43980]: deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:23 mail-01 CRON[63632]: (admin) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:33:25 app-02 dovecot[38485]: imap-login: Login: user=<bob>, method=PLAIN, rip=192.0.2.43, lip=10.0.0.5, TLS
+Mar  1 00:33:26 fw-01 kernel: [28570.624198] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:33:28 app-02 sshd[6226]: Connection closed by 198.51.100.47 port 39075 [preauth]
+Mar  1 00:33:30 fw-01 systemd: Started Session 379 of user alice.
+Mar  1 00:33:30 fw-01 systemd: Started Session 317 of user bob.
+Mar  1 00:33:35 mail-01 kernel: [87715.708157] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:33:36 db-01 sudo[32870]: admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:39 mail-01 sshd[61386]: Accepted publickey for admin from 203.0.113.29 port 48140 ssh2
+Mar  1 00:33:39 fw-01 kernel: [70789.423011] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:33:40 web-01 sudo[54978]: bob : TTY=pts/0 ; PWD=/home/bob ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:33:43 app-02 sshd[19174]: Accepted publickey for oracle from 198.51.100.27 port 25012 ssh2
+Mar  1 00:33:48 web-01 postfix/smtpd[22239]: connect from unknown[198.51.100.8]
+Mar  1 00:33:49 app-02 sshd[31555]: Accepted publickey for alice from 192.0.2.3 port 3128 ssh2
+Mar  1 00:33:52 mail-01 kernel: [86197.933673] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.

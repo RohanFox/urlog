@@ -1,0 +1,20 @@
+backend [01/Mar/2026:00:00:01 +0000] DEBUG worker 156 heartbeat
+backend [01/Mar/2026:00:00:05 +0000] ERROR retrying upstream call, attempt 325
+backend [01/Mar/2026:00:00:07 +0000] ERROR retrying upstream call, attempt 900
+backend [01/Mar/2026:00:00:09 +0000] ERROR retrying upstream call, attempt 39
+backend [01/Mar/2026:00:00:13 +0000] INFO worker 382 heartbeat
+backend [01/Mar/2026:00:00:15 +0000] INFO cache miss for key user:617
+backend [01/Mar/2026:00:00:17 +0000] ERROR request handled in 288 ms
+backend [01/Mar/2026:00:00:19 +0000] DEBUG worker 345 heartbeat
+backend [01/Mar/2026:00:00:20 +0000] ERROR retrying upstream call, attempt 627
+backend [01/Mar/2026:00:00:24 +0000] DEBUG retrying upstream call, attempt 789
+backend [01/Mar/2026:00:00:29 +0000] DEBUG connection pool size 107
+backend [01/Mar/2026:00:00:32 +0000] WARN worker 171 heartbeat
+backend [01/Mar/2026:00:00:34 +0000] DEBUG retrying upstream call, attempt 763
+backend [01/Mar/2026:00:00:36 +0000] WARN connection pool size 752
+backend [01/Mar/2026:00:00:39 +0000] INFO request handled in 538 ms
+backend [01/Mar/2026:00:00:43 +0000] DEBUG request handled in 102 ms
+backend [01/Mar/2026:00:00:48 +0000] ERROR retrying upstream call, attempt 323
+backend [01/Mar/2026:00:00:51 +0000] INFO connection pool size 481
+backend [01/Mar/2026:00:00:55 +0000] ERROR request handled in 826 ms
+backend [01/Mar/2026:00:00:59 +0000] WARN request handled in 836 ms

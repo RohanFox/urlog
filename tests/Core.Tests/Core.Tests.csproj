@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- xunit v3 test projects are executables run by Microsoft.Testing.Platform (see global.json "test"). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Core/Core.csproj" />
+    <!-- Built before these tests, not referenced: the runner lock test starts urlog as a child process. -->
+    <ProjectReference Include="../../src/Cli/Cli.csproj" ReferenceOutputAssembly="false" />
+    <!-- The registry generator runs over this assembly too, so the generated registry can be tested against a test source. -->
+    <ProjectReference Include="../../src/Core.SourceGen/Core.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

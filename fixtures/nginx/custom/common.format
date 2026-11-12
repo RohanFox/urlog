@@ -1,0 +1,1 @@
+$remote_addr $ident $remote_user [$time_local] "$request" $status $body_bytes_sent

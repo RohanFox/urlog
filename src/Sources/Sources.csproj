@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- One folder per ILogSource plugin (Nginx/, Syslog/, Evtx/, ...). No core changes per plugin.
+       The [LogSource] registry (Urlog.Sources.LogSourceRegistry) is generated at build time. -->
+  <ItemGroup>
+    <!-- tests/Sources.Tests checks the internal scanners against each other (NginxFastScanTests). -->
+    <InternalsVisibleTo Include="Urlog.Sources.Tests" />
+    <InternalsVisibleTo Include="Urlog.Bench.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <ProjectReference Include="../Core.SourceGen/Core.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

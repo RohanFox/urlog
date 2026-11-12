@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Chunking, framing, IBatchWriter, insert path, job runner, intake, audit, metadata store. -->
+  <PropertyGroup>
+    <!-- CHTCP0001: ClickHouse.Driver marks its native TCP client experimental. Ingest uses it for the control plane
+         (DDL, migrations, deletes) on purpose; the decision and the fallback are in docs/adr/0002-clickhouse-driver.md.
+         The insert data plane is our own protocol client (docs/adr/0004-native-protocol-client.md). -->
+    <NoWarn>$(NoWarn);CHTCP0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Urlog.Core.Tests" />
+    <InternalsVisibleTo Include="Urlog.Integration.Tests" />
+    <InternalsVisibleTo Include="Urlog.Metadata.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Decompression inside the chunk pipeline. gzip comes from System.IO.Compression. -->
+    <PackageReference Include="ZstdSharp.Port" />
+    <PackageReference Include="SharpCompress" />
+    <!-- Control-plane client and the LZ4 block codec for the Native writer. -->
+    <PackageReference Include="ClickHouse.Driver" />
+    <!-- The metadata store: SQLite via EF Core, schema kept Postgres-portable (tests/Metadata.Tests). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- Design-time only, for the dotnet-ef tool (manifest in .config/): see Metadata/DesignTimeFactory.cs for the command. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <!-- Local accounts: Argon2id password hashing, shared by the API and the CLI (Auth/PasswordHasher.cs). -->
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <!-- ILogger for the pipeline's debug log of failures after the first. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The ClickHouse migrations ship inside the assembly so a self-contained binary carries its own schema. -->
+    <EmbeddedResource Include="../../migrations/clickhouse/*.sql" LogicalName="migrations/clickhouse/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

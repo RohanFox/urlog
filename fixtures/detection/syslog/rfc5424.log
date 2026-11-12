@@ -1,0 +1,24 @@
+<78>1 2026-03-01T00:00:01.368Z app-02 CRON 56894 ID47 - (bob) CMD (/usr/local/bin/backup.sh)
+<38>1 2026-03-01T00:00:03.859Z db-01 sshd 30917 ID47 - Accepted publickey for root from 198.51.100.4 port 15913 ssh2
+<30>1 2026-03-01T00:00:05.119Z app-02 systemd - ID47 - Started Session 372 of user admin.
+<22>1 2026-03-01T00:00:08.746Z app-02 postfix-smtpd 47150 ID47 - connect from unknown[192.0.2.32]
+<78>1 2026-03-01T00:00:13.289Z fw-01 CRON 53508 ID47 - (oracle) CMD (/usr/local/bin/backup.sh)
+<85>1 2026-03-01T00:00:17.202Z web-01 sudo 13014 ID47 - admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<78>1 2026-03-01T00:00:21.234Z web-01 CRON 52344 ID47 - (oracle) CMD (/usr/local/bin/backup.sh)
+<22>1 2026-03-01T00:00:24.787Z db-01 postfix-smtpd 30528 ID47 - connect from unknown[203.0.113.49]
+<6>1 2026-03-01T00:00:27.995Z mail-01 kernel - ID47 - [67259.542404] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<22>1 2026-03-01T00:00:31.416Z app-02 dovecot 948 ID47 - imap-login: Login: user=<bob>, method=PLAIN, rip=198.51.100.58, lip=10.0.0.5, TLS
+<78>1 2026-03-01T00:00:32.819Z mail-01 CRON 8002 ID47 - (deploy) CMD (/usr/local/bin/backup.sh)
+<85>1 2026-03-01T00:00:34.675Z db-01 sudo 1195 ID47 - admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+<38>1 2026-03-01T00:00:38.178Z web-01 sshd 13964 ID47 - Accepted publickey for root from 192.0.2.15 port 40884 ssh2
+<22>1 2026-03-01T00:00:38.847Z app-02 dovecot 8641 ID47 - imap-login: Login: user=<admin>, method=PLAIN, rip=192.0.2.55, lip=10.0.0.5, TLS
+<78>1 2026-03-01T00:00:40.058Z fw-01 CRON 58190 ID47 - (admin) CMD (/usr/local/bin/backup.sh)
+<22>1 2026-03-01T00:00:41.803Z app-02 dovecot 62753 ID47 - imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.25, lip=10.0.0.5, TLS
+<38>1 2026-03-01T00:00:43.563Z mail-01 sshd 57030 ID47 - Connection closed by 192.0.2.53 port 29586 [preauth]
+<38>1 2026-03-01T00:00:45.653Z db-01 sshd 47932 ID47 - Accepted publickey for alice from 203.0.113.45 port 54618 ssh2
+<22>1 2026-03-01T00:00:47.709Z web-01 postfix-smtpd 9780 ID47 - connect from unknown[198.51.100.2]
+<6>1 2026-03-01T00:00:47.940Z web-01 kernel - ID47 - [34652.190352] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<22>1 2026-03-01T00:00:50.157Z db-01 dovecot 19768 ID47 - imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.17, lip=10.0.0.5, TLS
+<22>1 2026-03-01T00:00:54.513Z db-01 postfix-smtpd 47977 ID47 - connect from unknown[203.0.113.6]
+<6>1 2026-03-01T00:00:55.846Z mail-01 kernel - ID47 - [87739.705683] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+<78>1 2026-03-01T00:01:00.089Z fw-01 CRON 16466 ID47 - (bob) CMD (/usr/local/bin/backup.sh)

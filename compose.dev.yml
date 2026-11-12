@@ -1,0 +1,42 @@
+# Local development stack: ClickHouse only (backend and Caddy join in milestone 1).
+#   docker compose -f compose.dev.yml up -d
+#   docker compose -f compose.dev.yml down -v     # also drops the data volume
+# Ports are bound to 127.0.0.1 only. Credentials here are development stubs, never production values.
+name: urlog
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.36.3   # 26.8 LTS; pinned, see docs/adr/0002-clickhouse-driver.md
+    container_name: urlog-clickhouse
+    environment:
+      # The image entrypoint creates the admin user from these. Dev stub only.
+      # Accounts on this stack (deploy/clickhouse/users.d/urlog.xml):
+      #   default         admin: `urlog migrate`, benches' scratch tables, definer of events_v (never drop or rename)
+      #   urlog_query     read-only: SELECT on events_v and field_stats; `urlog query`, the API's search
+      #   urlog_ingest    write path: INSERT/SELECT/ALTER DELETE on events, INSERT/SELECT on file_generation, INSERT/ALTER DELETE on field_stats; `urlog ingest`
+      # The two backend accounts' ::/0 network and password = name are dev stubs as well.
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:8123:8123"   # HTTP (curl, HTTP client fallback)
+      - "127.0.0.1:9000:9000"   # native TCP (ClickHouse.Driver ClickHouseTcpClient)
+    volumes:
+      # Single-file mounts on purpose: mounting the whole config.d/users.d directory hides the image's own
+      # docker_related_config.xml (listen_host) and the entrypoint-generated default-user.xml.
+      - ./deploy/clickhouse/config.d/urlog.xml:/etc/clickhouse-server/config.d/urlog.xml:ro
+      - ./deploy/clickhouse/users.d/urlog.xml:/etc/clickhouse-server/users.d/urlog.xml:ro
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:

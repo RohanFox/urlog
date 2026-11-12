@@ -1,0 +1,473 @@
+# Design Record: Agentless Log Investigation Platform
+
+Nov 4, 2026 · @Rohan
+
+## Purpose and scope
+
+An open-source (Apache-2.0), agentless, post-hoc log investigation platform for CSIRT and incident-response analysts: the Splunk Search & Reporting experience, self-hosted, with no agents and no licence cost. Analysts upload evidence from Linux, Windows and application logs (web, mail) after an incident and investigate it interactively.
+
+**v1 is interactive search.** An analyst must be able to find things unaided: type a query, filter by clicking values, pivot, bookmark, export. Detection rules are v1.1 and are not designed here.
+
+**Users.** 1-3 analysts working concurrently on one deployment, each with their own investigations, with case-level sharing. Local accounts only.
+
+**Agentless** means evidence is copied onto the machine running the tool, by web upload or SFTP drop. No collectors, no syslog listener, no remote pull in v1.
+
+**Not in v1.** Real-time ingestion, alerting, dashboards builder, scheduled reports, detection rules, SSO/LDAP, clustering, PCAP.
+
+## Scale, reference hardware and deployment
+
+A small incident is about 50 GB of raw logs; a big one about 120 GB (2-4 systems, roughly one week). **Disk estimate (measured on the synthetic fixtures): 35-50 GB per 120 GB of raw logs, plus the original evidence files.** **nginx, measured on the evidence corpus (2026-11-11; 9.16 GB decoded, 24.3 M records of a 19-field custom layout, two hosts): 59 B/row on disk for 376-byte records, 6.4× (7.3× and 6.4× per host), the text index 12 B/row of it; 120 GB of such nginx is about 19 GB on disk.** The syslog figure below is fixture, not corpus (the corpus has no syslog files). A schema without per-column codecs measures 112 B/row for 223-byte nginx lines (2×), so the codecs were chosen from a per-column measurement: ZSTD(1) on every string, IPv6 and the Map, Delta on `file_offset`, T64 on the small integers, `message` an alias over `raw` instead of a copy, the eight most common extras keys as typed columns, LowCardinality Map keys. Result on the fixtures: 64 B/row for nginx (3.5×) and 57 B/row for syslog (2.4×), of which the text index is 12 and 23 B/row. Real logs repeat more than the fixtures, whose addresses, paths and agents are drawn from large pools: the corpus measurement confirmed it for nginx (above). `user_agent` stays `String`: on the corpus LowCardinality saves 1.4 B/row, 2.4 % of disk. The overall figure stays an estimate until IIS and EVTX, most of the corpus bytes, are measured.
+
+| Item | Value |
+| --- | --- |
+| Reference box | 8 cores, 32 GB RAM, NVMe SSD, Linux |
+| Concurrency | 1-3 analysts |
+| Per-case raw volume | 50 GB typical, 120 GB large |
+| Full ingest of 120 GB | 20 min at target, 40 min at floor |
+| ClickHouse topology | single node, no replication or sharding |
+
+**Deployment paths.** Docker Compose (backend + ClickHouse + reverse proxy) is primary and works on laptop, PC, VM or Docker host. A standalone Linux VM is supported with a .NET self-contained single binary, a systemd unit, and an install script that adds the official ClickHouse apt/rpm repository. No native Windows server install; Windows analysts use Docker Desktop or a Linux VM.
+
+HTTPS is terminated by the bundled reverse proxy (Caddy or nginx, self-signed by default), not by the backend.
+
+**ClickHouse memory cap.** Compose sets `max_server_memory_usage_to_ram_ratio` to 0.6 (≈19 GB on the reference box); the default lets ClickHouse take \~90 % of RAM and starves the backend's parse pipeline during ingest.
+
+## Technology stack
+
+One backend language, one analytics store, one metadata store. C# was chosen over C/C++ (velocity, memory safety, contributor story) and over Go (single-binary advantage disappears once Compose ships ClickHouse anyway). Sep, a .NET CSV parser, demonstrates multi-GB/s single-thread parsing with the same primitives, so .NET is not the throughput ceiling.
+
+| Layer | Choice | Notes |
+| --- | --- | --- |
+| Runtime | .NET 10 LTS | .NET 8 support ends 10 Nov 2026 |
+| Backend | ASP.NET on Kestrel | serves API and SPA |
+| Parsers | C#, `Span<byte>`, `SearchValues<byte>`, vectorised `IndexOf`, `Utf8Parser`, `ArrayPool` | zero per-line allocation |
+| Event store | ClickHouse 26.8 LTS (image pinned to 26.8.36.3), native TCP via `ClickHouse.Driver` 1.5 (`ClickHouseTcpClient`, experimental); HTTP client from the same package as fallback | `text` index GA since 26.2; driver decision in ADR 0002 |
+| Metadata store | SQLite via EF Core, WAL mode | users, cases, hosts, files, jobs, audit; schema kept Postgres-portable |
+| Frontend | React, TypeScript, Vite | built to `wwwroot`, SPA fallback |
+| Search bar | CodeMirror 6 + Lezer grammar | highlighting, autocomplete, inline errors |
+| Results | TanStack Table + Virtual + Query | fixed-row-height, cursor pagination, ≤10k rows client-side |
+| Charts | uPlot | histogram with brush-zoom; lazy chart module for `stats` |
+| UI primitives | Radix | nothing heavier; dark theme first |
+| Transport | SSE | histogram → first page → counts, progressively |
+| Upload | tus 1.0 | creation, termination, checksum extensions |
+| Licence | Apache-2.0 | datasets fetched by script, never vendored |
+
+## Data model
+
+`case 1→N host 1→N file`. The case is what analysts open, share and delete; the host is what they query; the file is provenance with its SHA-256. Every event row carries `(case_id, host_id, file_id, file_offset, parse_generation)`.
+
+**Host resolution is per event, not per file.** Formats that carry a hostname (syslog, EVTX `Computer`, journald `_HOSTNAME`) resolve automatically; a forwarded-events EVTX fans out to several hosts from one file. Formats that do not (nginx, Apache, IIS, app logs) get the host at intake: inferred from the archive path or filename (`web-01/nginx/access.log.3`), proposed in the UI, confirmed or bulk-assigned by the analyst. Unassigned files are flagged, never blocked.
+
+**Scope is strictly per case.** Hosts are created, matched and deduplicated only within the case the files were uploaded to. The same hostname in two cases is two unrelated host rows. There is no global host registry; cross-case search is a later feature.
+
+**Case lifecycle.** `active → closed → archived → soft-deleted → purged`.
+
+| State | Meaning |
+| --- | --- |
+| active | ingest and query allowed |
+| closed | ingest frozen; query allowed; evidence cannot change after the report is signed |
+| archived | intake directory compressed to one `.tar.zst` with a hash manifest; ClickHouse partitions dropped; re-importable |
+| soft-deleted | hidden for 7 days, recoverable; owner confirms by typing the case name |
+| purged | scheduled job drops partitions, deletes files, deletes metadata; admin role only |
+
+**Transitions (`CaseLifecycle` in `src/Core/Metadata`).** The table is the whole set: close (active → closed), reopen (closed → active), archive (closed → archived only, never from active), soft-delete from active, closed or archived, restore back to the state the case was in when it was deleted (`cases.prior_state`; the close or archive time is kept), re-import of an archive to closed (evidence that was frozen stays frozen), purge only from soft-deleted (`purging` → `purged`, resumable by the reconciler). Everything else, self-transitions included, is refused with both state names in the message; every `files` insert needs the case in active. Metadata ids are plain `INTEGER PRIMARY KEY` on SQLite and `bigint identity` on Postgres with no `AUTOINCREMENT`, so on SQLite an id can be reused after the row with the highest id is deleted (a purge of the newest case, then a create): audit rows name the case in `details_json`, not by id alone.
+
+Two-person approval for purge is a configuration flag, off by default. A configurable global disk watermark pauses ingest with a clear message instead of filling the volume.
+
+## ClickHouse schema
+
+One wide `events` table, never one table per case. Monthly partitions keep part counts sane at 1 M rows/s; the time predicate is served by `ts` in the sort key, not by the partition.
+
+```sql
+CREATE TABLE events (
+  case_id          UInt64,
+  host_id          UInt64,
+  file_id          UInt64,
+  file_offset      UInt64 CODEC(Delta, ZSTD(1)),
+  parse_generation UInt32,
+  ts               DateTime64(3, 'UTC') CODEC(Delta, ZSTD),
+  host             LowCardinality(String),
+  program          LowCardinality(String),
+  severity         LowCardinality(String),
+  event_code       UInt32 CODEC(T64, ZSTD(1)),
+  event_action     LowCardinality(String),
+  event_outcome    LowCardinality(String),
+  user_name        String CODEC(ZSTD(1)),
+  source_ip        IPv6 CODEC(ZSTD(1)),
+  destination_ip   IPv6 CODEC(ZSTD(1)),
+  process_name     LowCardinality(String),
+  url_path         String CODEC(ZSTD(1)),
+  http_status      UInt16 CODEC(T64, ZSTD(1)),
+  msg_off          UInt32 CODEC(ZSTD(1)),          -- where the message starts inside raw
+  msg_len          UInt32 CODEC(ZSTD(1)),          -- 0: the message is message_text
+  message_text     String CODEC(ZSTD(1)),          -- only for sources whose message is not a byte slice of the record
+  raw              String CODEC(ZSTD(1)),
+  extras           Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+  http_method              LowCardinality(String), -- the eight promoted columns: extras keys until then
+  http_version             LowCardinality(String),
+  http_response_body_bytes UInt64 CODEC(T64, ZSTD(1)),
+  http_referrer            String CODEC(ZSTD(1)),
+  user_agent               String CODEC(ZSTD(1)),
+  url_query                String CODEC(ZSTD(1)),
+  syslog_facility          LowCardinality(String),
+  process_pid              UInt32 CODEC(T64, ZSTD(1)),
+  message          String ALIAS if(msg_len = 0, message_text, substring(raw, msg_off + 1, msg_len)),
+  INDEX idx_msg lower(message) TYPE text(tokenizer = 'splitByNonAlpha')
+) ENGINE = MergeTree
+PARTITION BY (case_id, toYYYYMM(ts))
+ORDER BY (case_id, host, ts);
+```
+
+The full list is `src/Core/Sources/EventColumn.cs` (the Native block layout) and the field catalog. Low-cardinality string fields are lowercased at ingest so `field=value` is a direct equality. **`message` is one logical column**: an ALIAS over `raw` located by `msg_off`/`msg_len`, with `message_text` as the stored fallback for a source whose message is not a contiguous slice of its record (a rendered EVTX event, JSON with escapes); `raw` is always stored and never aliased. The text index is built on the alias and `EXPLAIN` shows it used through it; `events_v` names its columns because `SELECT *` leaves an alias out. Decided on measurement: the copy cost 12 B/row on nginx and 12.5 on syslog, the offsets cost 2.
+
+| Operation | Mechanism |
+| --- | --- |
+| Delete a case | `DROP PARTITION`, one per month the case spans; instant |
+| Parse or re-parse a file | a new `parse_generation` per attempt, a lightweight `DELETE` before the insert and after the commit (below) |
+| Hide uncommitted and stale rows | `events_v` shows only the committed generation of each file, from `file_generation` (below) |
+| Free-text search | `text` inverted index on `lower(message)` (GA since 26.2), tokenizer `splitByNonAlpha` (`default` is not a tokenizer name on 26.8); `tokenbf_v1` only as fallback on older servers |
+| Re-parse concurrency | serialised per case |
+
+**Parse or re-parse.** Every attempt writes a `parse_generation` no earlier attempt on the file used. Before the insert, a lightweight `DELETE` removes the file's rows of every generation except the committed one (what crashed or failed attempts left; skipped on a first attempt). After the commit, a second one removes the generations below the new one. Both carry `case_id` so they prune to the case's partitions. The committed parse is never deleted before its replacement is committed.
+
+**Visible rows.** `events_v` filters `(file_id, parse_generation) IN (SELECT file_id, argMax(current, updated_at) AS visible FROM file_generation GROUP BY file_id HAVING visible > 0)` (migration 0006): the newest row per file of the \`file\_generation\` ReplacingMergeTree, which the backend writes on every commit. A file with no row, or whose newest row is 0, shows nothing, so a first parse is invisible until its commit, and so is a file whose hash has not been compared yet. The set is built once per query from a snapshot: a query sees one generation per file for all of its rows, whatever commits while it runs. SQLite stays the source of truth and the startup reconciler re-syncs the two.
+
+Lightweight deletes are masks applied asynchronously and the mutation queue is sequential per table; the generation filter in `events_v` is what guarantees a half-finished parse or re-parse is never visible, and because a retry never reuses a generation, that holds whether or not a delete has applied. ClickHouse cannot read SQLite in the Compose topology, which is why `file_generation` is mirrored into ClickHouse. A dictionary over the mirror (`file_generation_dict`, reloaded after every commit, generation 1 for a file without a row) was rejected for two defects: uncommitted first parses were visible, and a reload landing while a query scanned gave that query two answers (measured: a `count()` in flight at a commit read 1,408 of 4,809,713 rows; a re-parse commit could mix generations in one result). Migration 0006 replaced the dictionary lookup with the per-query set and dropped the dictionary, its passwordless reader account `urlog_dict` and the write path's `SYSTEM RELOAD DICTIONARY` grant. Cost, measured on 25.2 M rows with the reference query `src_ip=X | stats count by url.path` (20 runs warm, three alternating passes): p95 206 / 217 / 212 ms against 200 / 205 / 206 ms for the dictionary form, median +3.4 %, p50 equal; `EXPLAIN indexes = 1` prunes partitions and the primary key on `case_id` and `ts` as before.
+
+**Schema migrations.** Numbered SQL files under `migrations/clickhouse/`, applied at backend startup and recorded in a `schema_migrations` table; the "add nullable column" versioning story has no other mechanism. Every migration is additive; a column's meaning never changes.
+
+## Intake
+
+Two paths deliver bytes; one integrity pipeline handles both. Evidence is read-only from the moment it lands, following NIST SP 800-86 and RFC 3227 practice.
+
+**Web upload.** tus 1.0 (creation, termination, checksum), 16 MB chunks, streamed to `intake/<case-id>/.uploads/<id>` with constant memory. Default limit 20 GB per file, configurable. Reverse proxy and framework are configured for unbuffered bodies (`proxy_request_buffering off`, no framework body limit on the tus route). Archives (`.gz`, `.zip`, `.tar.*`, xz, zstd, bzip2) are accepted; decompression happens in the parse pipeline, not at intake. No FTP.
+
+**SFTP drop.** `/var/lib/urlog/intake/<case-id>/` served by the OS sshd/sftp subsystem with a per-case Unix group; the tool writes no SFTP server. Watcher uses inotify `close_write` + `moved_to`, then requires the file size stable for 10 s before enqueueing. Documented convention: upload as `.part`, rename on completion. Periodic rescan every 60 s catches missed events (inotify overflow, NFS). On startup the watcher reconciles directory contents against the database.
+
+**Integrity, both paths.**
+
+1. SHA-256 streamed over raw bytes before any decompression, normalisation or parsing.
+2. File owned by the service user, mode 0440, under the per-case directory. No `chattr +i`: it needs a capability the service should not have and breaks purge on overlay and NFS.
+3. Idempotent on hash within a case: same bytes → one record, logged as duplicate, not re-parsed.
+4. Hash re-verified on every parse, in the same read: the job runner hashes the raw bytes as the pipeline reads them and compares the digest and the byte count with the intake record after the last byte, before anything is committed. The file's rows are invisible until that commit (the view above), so a file that fails the comparison was parsed and never shown: its rows are deleted, the job is `failed`, the file is `quarantined` and never queued again, and `integrity_mismatch` is written in the same transaction. A periodic integrity sweep re-hashes everything and writes results to the audit log.
+5. Intake record: `{case, sha256, size, original name, source (web/sftp), uploader or OS user, received-at, host, source timezone, encoding, detector guess, override}`.
+6. Hash-chained audit entry, then enqueue for parsing.
+
+**Source timezone.** Collected at intake: per-host default, per-file override, defaulting to UTC with a visible "assumed" badge on the host, the file and the TZ header. It populates `ParseContext.TimeZoneHint` and `YearHint` for formats with naive timestamps (RFC 3164 syslog, IIS, app logs). Formats carrying an offset ignore the hint. PCAP/PCAPNG is rejected with a clear message, not stored as raw.
+
+## Format detection
+
+A dropped file is classified without the analyst picking a type, and nothing is lost: text no source claims goes to the `generic` source, and a file that is not a log is kept as an artifact. The detector (`FormatDetector` in `src/Core/Detection`) is a pure function of the first 64 KB, the last 4 KB, the file name and the size. `DetectionSample` does the I/O around it, read-only and after the SHA-256 exists: it reads the two samples and, when the file is one compressed stream, decodes the first 64 KB of its content. The function itself never decompresses, because a bzip2 block does not fit a 64 KB compressed head.
+
+Every file ends as one of five kinds.
+
+| Kind | Meaning | What intake does |
+| --- | --- | --- |
+| `log` | parsed by the named source, `generic` at the fallback | records it, queues the parse |
+| `container` | zip, tar, or a second compression layer | expands it, detects each member, keeps the archive path for host inference |
+| `artifact` | not a log: a document, an image, an executable, a database, a key, an archive that is not expanded, an empty file, unknown binary | hashes and records it, never parses it |
+| `unparsed` | a log format this build recognises and has no parser for: the binary systemd journal, `.evtx` until its source exists | records it like an artifact, with a message; detected again when the source list changes |
+| `rejected` | PCAP and PCAPNG | refuses it with a message, stores nothing |
+
+**Rules, in order.** The first that applies decides.
+
+1. **Empty.** No bytes, or a compressed stream that holds none: artifact `empty`. It is listed like any other file, since an empty log is a finding.
+2. **Packet capture.** PCAP in either byte order and resolution, PCAPNG by its block type plus its byte-order magic (the block type alone is `\n\r\r\n`, which text can start with): rejected.
+3. **Compression.** gzip `1F 8B`, zstd, xz, bzip2: the layer goes into the container chain and detection continues on the decoded content. The parse pipeline removes one layer, so a second layer under the first makes the file a container. A stream that fails before any byte is decoded is artifact `damaged-<kind>`; one that fails later is flagged `decode_error` and detected from what was decoded.
+4. **Archive.** zip (`PK`) and tar (`ustar` at offset 257) are containers. A zip whose first entry is `[Content_Types].xml`, `mimetype` or `META-INF/`, or whose extension is an office or Java package one, is an artifact. The member list is not part of the result: a zip's directory is at the end of the file and a tar's is spread through it, so intake lists members when it reads the archive.
+5. **Known binary logs.** `ElfFile\0` is the EVTX source when one is registered, else `unparsed`. `LPKSHHRH` is the binary journal, `unparsed` with the `journalctl -o export` command in its message.
+6. **Artifact signatures.** The list is `MagicTable`: PDF, OLE2, RTF, PostScript, the common image and media headers, PE, ELF, Mach-O and Java class, dex, wasm, LNK, SQLite, ESE, registry hive, minidump, prefetch, PEM, KeePass, JKS, disk and memory image headers, and the archives that are not expanded (rar, 7z, cab, ar, rpm, xar), which carry the message "extract and upload the contents". A signature that is plain ASCII and belongs to a binary format (`MZ`, `regf`, `OggS`) counts only when a control byte follows within the first 64 bytes, so a text line that starts with those letters stays text. A two-byte signature (BMP, DER, TrueType, ICO) counts only together with its extension. `<?xml` is not on the list, because Event Viewer exports start with it.
+7. **Encoding.** A BOM; without one, UTF-16 when at least 90 % of one half of the byte pairs in the first 4 KB is NUL and under 10 % of the other half; otherwise UTF-8 with lossy replacement. The encoding is recorded on the file row, and the sample is transcoded to the UTF-8 the parse pipeline will produce before any source sees it.
+8. **Text that is a script or a page by its first line.** `#!`, `<?php`, `<!DOCTYPE html`, `<html`: artifact.
+9. **Scores.** Every registered source except `generic` scores the sample from 0 to 1 (`Sniff`, or `ISniffDetail.SniffDetailed` for a source with layouts): about 200 lines of the head and 50 of the tail. Every score is kept.
+10. **Decision.**
+    - Top score 0.8 or more: a log, parsed by that source, whatever the file is called. An artifact extension is recorded as the flag `extension_mismatch` with a message naming both. A second source at 0.8 or more makes the winner `probable`; ties go to the source registered first.
+    - Top score below 0.8 and an artifact extension (`ArtifactExtensions`: documents, images, executables, scripts and markup, databases, keys, media, disk and memory images, fonts, configuration): artifact. The extension is read after compression and rotation suffixes are removed, so `access.log.3.gz` is `log`. Extensions that log exports use (`log txt out err json jsonl ndjson csv tsv xml evtx journal`) are never on the list.
+    - Top score from 0.5 up to 0.8: a `probable` log, flagged in the UI.
+    - Top score below 0.5: a sample with binary bytes (any NUL, or more than 5 % control bytes) is artifact `unknown-binary`; anything else goes to `generic`, band `fallback`.
+    - Binary bytes in a file some source scores 0.5 or more do not change its kind. The file is a log with the flag `binary_bytes` and the share of such bytes in the sample is recorded: a log with a block of NULs in the middle, or NUL padding at the end, is a log and a finding.
+
+| Detector | Signature |
+| --- | --- |
+| journald export | `__CURSOR=` / `__REALTIME_TIMESTAMP=` key-value blocks |
+| syslog RFC 5424 | ` <PRI>1  ` + ISO timestamp |
+| syslog RFC 3164 | `<PRI>` or `Mon dd HH:MM:SS host` |
+| Postfix | syslog shape + `postfix/<daemon>[pid]:` → syslog with Postfix sub-parser |
+| nginx/Apache combined | `IP - ident [dd/Mon/yyyy:HH:MM:SS ±zz] "METHOD /path HTTP/x" status bytes "ref" "ua"`; 7-field common log as weaker match |
+| nginx error | `yyyy/mm/dd HH:MM:SS [level] pid#tid:` |
+| IIS W3C | `#Fields:` header |
+| JSON lines | every sampled line parses as an object; timestamp key heuristics `time`, `timestamp`, `@timestamp`, `ts` |
+| CSV | header row detected |
+
+Until a source in this table exists its files go to `generic`, and they are detected again when it is registered.
+
+**The detection record.** One per file, never per host or case: the winning source, its score and band, every other source's score, the layout name where the source reports one, the encoding and whether a BOM named it, the container chain, the format of a non-log, what decided (signature, extension, content, scores), the flags and the message, plus the detector's rule version and the ids of the sources registered at the time. It is stored on the file row as `detected_kind`, `detected_source`, `detected_confidence`, `detected_layout` and whole as JSON in `detection`. A record whose source list is older than the current one is stale. Detecting such files again belongs to the files API, and it is how a file that went to `generic` or `unparsed` reaches a parser added later. The layout is per file because the nginx source reports "layout unknown" at 0.6 when lines have its shape and no built-in layout fits, and two hosts behind one proxy can log two different custom layouts; a file with `nginx.log_format` in its options is scored against that layout only.
+
+**Manual override.** Per file in the UI, re-parse on change. The override is stored beside the detection record and never replaces it, also when it names a parser for a file the detector took for an artifact. Overrides can be bulk-applied to files with the same extension and detector result.
+
+**`generic` fallback** (`src/Sources/Generic`). One event per non-blank line, `message` = `raw` = the line, full-text indexed, nothing rejected. The timestamp is the leftmost of four shapes within the first 256 bytes of the line: ISO 8601 with or without a zone (`-` or `/` in the date, `T` or a space, a `.` or `,` fraction), BSD syslog (`Mmm d HH:MM:SS`, year from the line or tracked from the hint), Common Log Format, and a Unix epoch of 10 digits (optionally with a fraction) or 13 digits, the epoch only at the start of the line or behind a `ts`, `time` or `timestamp` key and only between 2000 and 2100. Shapes without a zone take the source timezone. This is the one regex in the parsers: a source-generated alternation run over a stack copy of the window, so it still allocates nothing per row; a candidate that is no real date (month 13) is skipped and the search continues. A line without a timestamp takes the last one found before it in the file, so a stack trace sorts with the event that produced it; before the first one it takes the file's own time (`ParseContext.FileTime`, from `files.file_time`: the modification time where intake knows it), and with neither the column keeps its default. Those rows say which in `extras['timestamp.source']` (`previous`, `file`, `none`). Carrying a timestamp forward needs the file in order, so the source is `Stateful`. A line longer than 1 MiB is written as 64 KiB records while more than 1 MiB of it remains and the rest as one record. Files that went to `generic` can always be parsed again when a parser is added, because the original bytes are kept. The source is outside the throughput SLO: its bench entry is reported and listed as ungated.
+
+**What the first real evidence set showed.** Recorded as shapes only. Uploads are not all logs: office documents, images, executables, database files and certificates sit next to them, which is why the artifact kind exists and why a fallback that turns every file into rows is wrong for them. Binary systemd journals arrive beside the text logs. Archives are nested (a tar inside a gzip inside a zip), and rar appears next to zip and tar. Windows events come in three forms: binary `.evtx`, Event Viewer XML exports in UTF-16, and EvtxECmd JSON and CSV. IIS W3C logs and SQL Server CSV exports (UTF-16, with `<c/>` standing for a newline inside a field) are common on Windows hosts. GitLab writes JSON lines with its own key set. Kubernetes nodes give CRI and Docker-JSON wrappers around application lines, klog, and ingress-nginx access logs. Rotated and compressed copies of plain logs are most of any upload. Two hosts behind one proxy used two different custom nginx layouts.
+
+**Testing.** `fixtures/detection/<group>/` holds whole synthetic files in the shapes exports have, at least 20 per registered source (`nginx`, `syslog`, `generic`), plus `adversarial` (nginx with JSON user agents, syslog without PRI, a UTF-16 Event Viewer export, mixed formats, logs with artifact names and an artifact with a log name, NUL blocks inside a log, damaged and doubled compression, empty files, text that starts like a binary signature), `artifact` (a signature and padding per family), `journal`, `rejected` and `container`. Each group's `expected.tsv` says what the detector must report per file (kind, source, band, layout, encoding, chain, format, flags), and one theory in `tests/Sources.Tests` walks the directories, so a new source adds a directory and is covered. The files are written by `FixtureWriter` in the same test project, with a fixed seed and its own gzip, xz, zip and tar encoders (stored blocks, so the bytes do not depend on a compression library's version), and a test requires the committed files to be what it writes, byte for byte. The rules alone, with sources that return fixed scores, are in `tests/Core.Tests/Detection`.
+
+**Measured** (dev box, quiet, Release). The detector on one sample with the nginx, syslog and generic sources registered (`DetectFormat`): 0.146 ms for an nginx or a syslog file, 0.120 ms for text no source claims, 0.107 ms for UTF-16 (448 KB allocated for the transcoded copy), 0.16 µs for a file decided by its signature, against a budget of 50 ms per file. The bench is reported and not gated (its syslog case measured 0.146 and 0.119 ms in two runs of the same code); the budget itself is a test over the fixture corpus. The detector theory over the fixture corpus (154 cases) runs in 1.3 s, and no file of it takes more than 50 ms (a test). The generic source on its 1 GiB fixture of mixed application-log lines (11.8 M lines, 31 % without a timestamp of their own, 0.8 % blank; `TokeniseGeneric`, one core): 754 MB/s and 8.2 M rows/s with 0 B per row, every non-blank line a row, no rejects, a timestamp found on exactly the lines that carry one. The number is recorded and not gated. `FileTime` in the parse context and the layout interface on the nginx source cost the gated tokenisers nothing measurable (`TokeniseNginx` 925.9 ms without and 936.1 ms with them, `TokeniseSyslog` 763.1 and 765.5 ms, both 0 B per row).
+
+## Parser plugin contract
+
+A source is one class; adding Dovecot means one class, one fixture pair, one benchmark fixture and one alias entry, with no core changes. Plugins never open a file, touch a socket, or allocate per event.
+
+```csharp
+interface ILogSource {
+    SourceInfo  Info    { get; }  // id, aliases, display name, version
+    Framing     Framing { get; }  // Line | MultiLine(startPattern) | BlankLineRecord | Binary(IChunkSplitter)
+    FieldSchema Schema  { get; }  // declared columns + types; which map to ts/host/severity/message
+    float Sniff(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, SniffContext ctx);
+    void  Parse(ReadOnlySequence<byte> framedChunk, ParseContext ctx, IBatchWriter batch);
+}
+```
+
+| Responsibility | Owner |
+| --- | --- |
+| File I/O, decompression, encoding, archive expansion | core |
+| 64 MB chunking split on record boundaries, framing per `Framing` | core |
+| Columnar `IBatchWriter`, flush at 100k rows, Native serialisation, inserts, backpressure | core |
+| Host/file/case assignment, metrics, error accounting | core |
+| Tokenising a framed chunk into typed columns | plugin |
+| Rejecting unparseable records via `ctx.Reject(span, reason)` → written as `raw` in the same batch | plugin reports, core writes |
+
+`ParseContext` supplies `FileId`, `DefaultHost`, `TimeZoneHint`, `YearHint`, and a per-file scratch slot for state such as last-seen timestamp for monotonic repair. `FileTime` is the file's own time as intake recorded it, for the generic source only. A source with layouts also implements `ISniffDetail`, which returns the layout name next to the confidence and receives the file's options; the detector calls it in place of `Sniff`. Core guarantees a framed chunk never splits a record.
+
+**Chunk pipeline** (`src/Core/Sources`, `src/Core/Pipeline`). `IBatchWriter` addresses the pinned columns by the `EventColumn` enum (`AppendUInt64/32/16`, `AppendTimestamp`, `AppendString`, `AppendIp`, `AppendExtra`, `CommitRow`); unset columns default, core stamps the identity columns and the default host, LowCardinality columns are ASCII-lowercased on the way in. `ctx.Reject(bytes, fileOffset, reason)` writes the record as a row with `raw` = `message` = the bytes and `extras['reject_reason']`. Plugins walk a chunk with `framedChunk.Records(Framing, ctx)`, a ref-struct enumerator that strips `\n`/`\r\n` and yields the decoded-stream offset of every record. The chunk reader cuts on the framing's last record boundary and carries the tail; a record longer than the chunk grows the buffer up to `max(ChunkBytes, MaxRecordBytes)` (64 MiB / 16 MiB by default), beyond which it is force-split and both chunks are flagged for the parser. Decompression (gzip, zstd, xz, bzip2) and UTF-16 transcoding wrap the input stream, so `file_offset` is always an offset into the decoded UTF-8 bytes. Chunk buffers and `EventBatch`es come from pools the pipeline owns (`PipelineBuffers`, sized by `PipelineOptions`: `InFlightChunks × ChunkBytes + (Parallelism + InFlightBatches) × BatchBytes`, about 1.4 GB at the defaults on 8 cores, about 190 MB with `PipelineOptions.SmallBox`); `ArrayPool<byte>.Shared` is not used because it trims under memory pressure. A `Stateful` source runs its chunks in order on one parser thread; everything else runs on `Parallelism` threads, unordered. The reader hands a chunk to the queue with `TryWrite` and waits with `WaitToWriteAsync` when it is full, so a chunk has one owner at every moment (a cancelled `WriteAsync` can throw after its item was queued, `tools/repro-channel-cancel`). A failed run reports the first failure in time: each task records its failure before it cancels the others, and a later failure is logged at debug level with its chunk context, not thrown. `EventBatch` is a struct of arrays with string columns as one byte buffer plus cumulative offsets: the ClickHouse Native block layout, which the Native writer serialises directly without row objects.
+
+**nginx source** (`src/Sources/Nginx`, `src/Sources/Common`). The nginx/Apache source parses the combined and common formats by delimiter scanning (`IndexOf` for unquoted fields, a fixed-width timestamp check, one `SearchValues` of `"` and `\` for the quoted fields) at 1,273 MB/s on one core of the dev box with 0 B/row. `message` is the `"request" status bytes` slice of the line, not the whole line, so the text index does not carry the user agent and referrer twice; those live in `extras` (`user_agent.original`, `http.request.referrer`) and in `raw`. `event_code` carries the HTTP status next to `http_status` so 4xx and 5xx are integer filters; `event_outcome` is `success` below 400 and `failure` from 400. The extras key list and the catalog aliases are in `src/Query/field-catalog.yaml`. The `EventBatch` extras columns grow their offsets past `BatchRows`, since a source may write several pairs per event. `IpText` (IPv4/IPv6 text to bytes) and `Iso8601` are shared by the sources. **Layouts.** The nginx source is driven by a layout compiled from an nginx `log_format` string (`NginxLayout`): built-ins `combined`, `common` and `ingress-nginx` are detected per chunk, a custom format comes per file through `ParseContext.Options` (`nginx.log_format`, a format string or a built-in name; set at intake, later from the upload UI) and is then the only layout used. `NginxSource.Detect` reports the layout name with the confidence, or "nginx, layout unknown" at 0.6 when the lines have the shape but no built-in fits. Variables map to ECS keys where one exists (`request_time` → `event.duration` in nanoseconds, `upstream_*` → `upstream.*`), unknown variables keep their name in `extras`. The table-driven walk costs about 25 % over straight-line code, so the `combined` layout has an unrolled success-only scan that yields the same field positions (tests assert the agreement); every failure and every other layout runs the walk. `ParseContext.Options` is a generic per-file option bag for any source.
+
+**Syslog source** (`src/Sources/Syslog`). The syslog source reads RFC 3164 (`Mmm dd HH:MM:SS host tag[pid]: msg`), the same shape with an ISO 8601 timestamp (rsyslog `RSYSLOG_FileFormat`), and RFC 5424 (`1 ts host app procid msgid sd [msg]`), each with an optional `<PRI>`, plus a Cisco-style `seq: ` prefix and clock marker; one `Tokenise` locates the header fields per line and serves `Sniff` and `Parse` alike (`Sniff` counts a line that starts with an ISO timestamp and has no PRI only in rsyslog's shape, a host-shaped token and then a tag, because most application logs start with an ISO timestamp too), at 1,390 MB/s and 10.1 M rows/s on one core of the dev box with 0 B/row. `host` is per event (the token after the timestamp unless it ends with a colon, the 5424 HOSTNAME field; otherwise the intake default), `program` is the tag (`postfix/<daemon>` becomes `program = postfix` plus `extras['postfix.daemon']`, the Postfix hook without Postfix field parsing), `severity` is the PRI's severity as rsyslog names it (`emerg` … `debug`), the facility name goes to `extras['log.syslog.facility.name']`, `[pid]` to `extras['process.pid']`, 5424 structured data to `extras['log.syslog.structured_data.<sd-id>.<param>']` with values as logged, and `message` is the text after the tag (a 5424 MSG BOM is dropped). 3164 timestamps are naive and take `TimeZoneHint` and `YearHint`; the ISO and 5424 timestamps carry their own offset. **The source is `Stateful`:** the year of naive timestamps is tracked across the whole file (Dec → Jan adds one, a late December line after January takes one back), which no per-chunk rule can get right for a multi-chunk file that crosses New Year, so core feeds a syslog file to one parser thread in order; at 1,390 MB/s that thread is not the ceiling (the insert path at 1 M rows/s is, on 120 B lines). Rejects: `empty line`, `bad timestamp` (nothing recognisable after the optional PRI), `truncated header` (5424 with fewer than six header fields), `bad structured data`; everything else is a row. Extras keys and aliases are in `src/Query/field-catalog.yaml`.
+
+**Insert path** (`src/Core/Ingest`, `migrations/clickhouse`, ADR 0004). The insert data plane is our own native-protocol client: the driver exposes no raw connection and its column API needs one object per String, IP and Map row (a 248 B/row floor; the conversion measured 630 B/row and 340-1,470 ms per block), so `NativeBlockSerializer` writes an `EventBatch` straight into LZ4 frames (1 MiB payload each, CityHash128 checksums) over a socket speaking protocol revision 54449, with no per-row allocation. `NativeInserter` is the pipeline's `IBatchSink`: `Writers` (default 4) dedicated threads with one connection each, fed by a bounded queue (the backpressure); each writer keeps one INSERT open and streams batches into it until `MaxRowsPerInsert` (default 500k) or one second of silence, because the server squashes the packets of one INSERT into one part, so the pipeline's 100k batches still make 500k-row parts; a batch returns to its pool as soon as it is serialised, since a failed insert fails the job and the job's recovery is the delete of the attempt's rows plus a full re-parse. Measured on the dev box (ClickHouse in Docker Desktop, 8 cores shared): the `InsertNative` bench does 1.0-1.08 M rows/s with the text index on at 4 writers (flat to 6 writers and across 100k to 500k batches), 0.2 B/row, about one client core; the index costs 5-10 % of insert throughput (14 % of the server's CPU per insert); the dev box's burst ceiling at ~1.2 M rows/s is its Docker loopback (uncompressed blocks move at 0.3 M rows/s). Sustained over five minutes (330 M rows) the same path averages 0.7 M rows/s because ClickHouse spends 6 of its 8 cores on inserts plus the merges they cause; merges stay bounded (≤ 13 concurrent, ≤ 90 parts, drained in two minutes). Client-side sorting of unsorted (syslog) blocks was measured at −1 % to +4.5 % for twice the client CPU and is off (`SortBlocks`). The driver's TCP client stays for the control plane: `ClickHouseMigrator` applies `migrations/clickhouse/NNNN_*.sql` (embedded in the Core assembly) and records each file's SHA-256 in `schema_migrations`, refusing an edited file; `EventStoreAdmin` runs the lightweight deletes, the `file_generation` commit and partition drops. `events_v` filters `has(<parsed SQL_allowed_cases>, case_id)` through `getSettingOrDefault`, so no setting means no rows, and the committed generation of each file through a set built per query from `file_generation` (migration 0006: no row, nothing visible), read with the definer's rights, so no further account or grant is involved. `EXPLAIN indexes = 1` on a case+time query through the view prunes to the case's month partition and uses the primary key (integration test).
+
+**Schema details and the query slice** (`src/Query`, `src/Cli`). The codecs of the schema above come from the per-column measurement (Scale section). The writer refuses a row that sets both `message_text` and a slice of `raw`, or a slice outside its raw. For the Map's LowCardinality keys the Native serialiser writes the key column with a per-block dictionary, its prefix before the array sizes, and nothing at all for an empty nested column, as the server does. The eight promoted columns that were extras keys: `http_method`, `http_version`, `http_response_body_bytes`, `http_referrer`, `user_agent`, `url_query` from nginx, `syslog_facility`, `process_pid` from syslog. `IBatchWriter.AppendMessage(offset, length)` is how a source sets the message. The query slice: `src/Query/field-catalog.yaml` (canonical names, types, the nginx and syslog vendor aliases, the known extras keys), a lexer and recursive-descent parser for the filter grammar plus `stats count [as x] [by f, …]`, `sort`, `head`, a transpiler to parameterised SQL over `events_v` with the case and time predicates first, every value a `{name:Type}` parameter, errors with positions and warnings (`unindexed`, `assumed_timezone`, `unknown_field`); 121 shared vectors in `src/Query/tests/vectors/` (61 of them error paths; any other verb is "not supported in v1: <verb>"). The query path runs over the driver's HTTP client as the read-only user with `SQL_allowed_cases` as a per-request setting and the parameters as `param_*` (ADR 0003); a case the setting does not list reads zero rows through the view. The CLI: `urlog ingest` (SHA-256 first, detection by every source's `Sniff`, the pipeline into the inserter, the `file_generation` commit, a generation above 1 deleting the file's rows first), `urlog query` (table, row count, elapsed, `--sql`, `--explain`), `urlog bench query` (p50/p95 over N runs, warm or with the server caches dropped).
+
+**Discovery.** `[LogSource("dovecot", Aliases = ["dovecot-imap", "dovecot-lmtp"])]` on the class; a source-generated registry (AOT-safe, no runtime reflection scanning). Third-party plugins load from a `plugins/` directory with the same attribute.
+
+**Testing contract.** Every registered source runs against `Fixtures/<source>/{sample.log, expected.jsonl}` for correctness and against a ≥50 MB benchmark fixture for throughput. A source below 50 MB/s/core fails CI unless marked `[Tier(Slow)]`, which excludes it from the SLO but still ships.
+
+**Versioning.** `Schema` is versioned; a change bumps the plugin version and core migrates the ClickHouse table by adding a nullable column. Existing columns never change meaning.
+
+**v1 sources.** syslog RFC 3164/5424, Postfix (sub-parser), journald export, Windows EVTX (Security, System, Sysmon; multi-Computer fan-out), nginx and Apache access + error, IIS W3C, JSON lines, CSV with header, `generic` (alias `raw`). Regex is permitted only in the `generic` fallback, which is outside the SLO.
+
+## Throughput SLO and benchmark harness
+
+**Target: ≥ 100 MB/s end-to-end** (file read → ClickHouse ack) on 8 cores, measured in uncompressed bytes, so 120 GB ingests in 20 minutes. Floor 50 MB/s (40 min). Below 25 MB/s is a failure.
+
+| Stage | Budget |
+| --- | --- |
+| Tokenisers | ≥ 50 MB/s per core (≈ 250k nginx lines/s/core) |
+| Insert path | ≥ 1 M rows/s via Native protocol |
+| Writers | 4 parallel, \~250k rows each, \~1 insert/s per writer so merges keep up |
+| Block size | a harness parameter, not a constant |
+| Parallelism | chunked within a file (\~64 MB, newline-aligned), not per file: 2-4 systems × 1 week means a few huge files |
+| Compressed input | decompressed inside the same chunk pipeline, counted against the budget |
+| **Sustained, per format (dev box)** | burst 1.04-1.08 M rows/s in the gated `InsertNative` bench (SLO met, text index on); **sustained 0.7 M rows/s** over 5 minutes with ClickHouse at 6.2 of 8 cores on inserts plus merges → **~155 MB/s nginx (223 B/line), ~95 MB/s syslog (137 B/line)** |
+| **Levers measured** | text index 23 %, merges 55 % of server CPU; the server config stays at its defaults (below) |
+
+**Levers measured** (syslog, 120 M rows, dev box). Baseline 839k rows/s (114 MB/s). **1 M rows per INSERT: no effect** (`min_insert_block_size_bytes` splits a 381 B/row block at ~700k rows anyway). **The text index costs 23 % of sustained throughput** (a third of it at merge time: 39 % of part-write time, 31 % of merge CPU); accepted, the index stays synchronous. **Merges are 55 % of the server's CPU during ingest**; a 4-slot merge pool (`background_pool_size` 2, plus the three `number_of_free_entries_in_pool_*` thresholds below pool × ratio or the server refuses to start) gives 1,011k rows/s = 138 MB/s but 130 parts per 120 M rows and a 58 s drain, which reaches `parts_to_delay_insert` near a 120 GB case. **Recorded as the lever; the server config stays at its defaults.** The pool is never saturated (5-6 merges in 32 slots), so the knob is merges per insert, not threads.
+
+The tokeniser budget applies to **text formats**. EVTX is binary XML with templates and substitutions, and the mature C# library (Eric Zimmerman's, MIT) is allocation-heavy; it is `[Tier(Slow)]`, outside the SLO, so the EVTX source ships without a change to the gate. EVTX volumes are a fraction of a bundle's bytes, which is why this is acceptable.
+
+Row rate is driven by syslog (\~120 B/line → \~830k rows/s at 100 MB/s), which is why the insert budget is 1 M rows/s rather than the byte rate. Schema choices that keep per-row overhead low: `LowCardinality` on host/program/severity, `DateTime64(3)` with Delta codec, ZSTD(1) everywhere a String is (level 3 bought 2-4 % of disk for 3-7 % more CPU and was not taken), `message` as an alias so the record crosses the wire once, `async_insert` off.
+
+**Harness.** BenchmarkDotNet micro-benchmarks per parser on fixed-seed 1 GB nginx and 1 GB syslog fixtures; one end-to-end benchmark against ClickHouse in Docker; raw disk read rate reported separately so a miss is attributable to hardware vs. code; insert path benchmarked alone. The gate is local-first: `bench/check-regression.ps1` compares against `bench/baseline.json` with a 10 % ceiling that cannot be raised, the pre-commit hook runs the touched source's `Tokenise*` benches (short job), and `tools/pre-merge.ps1` runs every `Tokenise*` and `Insert*` bench with the full job before a branch merges. The baseline changes only with `URLOG_BASELINE_UPDATE=1`. No parser merges without a bench entry. Speed never costs determinism: the same input produces the same rows.
+
+Generic shippers (Vector \~66 MiB/s, Fluent Bit \~40, Logstash \~28) sit below this target, which is why the pipeline is not built on them.
+
+## Query language
+
+An SPL-flavoured pipeline, parsed to an AST and transpiled to parameterised ClickHouse SQL. ClickHouse does the optimising; the one optimisation the transpiler owns is pushing `case_id` and the time range to the partition and sort keys. Ambiguity returns a precise inline error, never a guess.
+
+```
+index=case-31 src_ip=10.0.0.5 EventID=4625 | stats count by user | sort -count | head 20
+```
+
+**Filter grammar**
+
+| Form | Semantics |
+| --- | --- |
+| `field=value` | case-folded exact match on string fields; numeric compare on typed fields |
+| `field=val*` | `LIKE 'val%'`, indexed |
+| `field=*val*` | `ILIKE`, flagged unindexed in the UI |
+| `!= < > <= >=`, `field IN (a, b)` | direct |
+| `src_ip=10.0.0.0/8` | `isIPAddressInRange` on native IP types |
+| bare term | token search on `message` through the `text` index, case-insensitive (ASCII lowering, as the index); `raw` is not searched for bare terms, because an OR with an unindexed column would defeat the index, and everything in `raw` but not in `message` is a typed column; a term of several tokens is each token through the index plus the exact text confirmed by `position` |
+| `"quoted phrase"` | exact substring |
+| `a b` / `OR` / `NOT` / `( )` | implicit AND, explicit OR and NOT, grouping |
+
+**Time.** Relative (`-24h`, `-7d@d`, `now`), absolute ISO 8601, and inline `earliest=` / `latest=` overriding the picker. `@` snapping is computed in the display timezone. Default range is the whole case span (per-file min/max in the metadata DB), never "last 24 h". Always queried in UTC.
+
+**Verbs: eight, no more in v1**
+
+| Verb | Contract |
+| --- | --- |
+| bare search | the filter grammar above |
+| `where <expr>` | same expression grammar, post-aggregation allowed |
+| `stats` | `count`, `dc(f)`, `sum`, `avg`, `min`, `max`, `values(f)` capped at 100, `earliest`, `latest`, `as alias`, `by f1,f2` → ClickHouse aggregates |
+| `sort [-]f` | `ORDER BY` |
+| `head N` | `LIMIT` |
+| `table f1 f2` | projection |
+| `rex field=raw "(?<user>\w+) from (?<ip>\S+)"` | RE2 syntax, validated client-side with precise errors; `extractGroups`; named groups are query-scoped columns, never persisted |
+| `timechart span=5m count by f` | `toStartOfInterval`; top-N series first, then pivot |
+
+No `eval`, `join`, `transaction`. Anything else returns "not supported in v1". A raw-SQL advanced tab exists as an escape hatch under the controls in the Security section.
+
+**Field catalog.** A YAML file of canonical ECS-subset fields: name, type, description, aliases (Splunk, ELK and vendor-native such as `Computer`, `IpAddress`, `remote_addr`). The query parser resolves aliases before transpiling; parsers write only canonical names. Contributors add aliases without code changes. Sigma rules already map to ECS, which is the v1.1 head start.
+
+**Unknown fields.** A field name the catalog does not know transpiles to `extras['name']` (string compare, unindexed, flagged in the UI), so a JSON-lines key or vendor field nobody mapped is still reachable from SPL. Autocomplete offers `extras` keys seen in the per-case field statistics alongside catalog fields.
+
+**Autocomplete** draws from three sources: the field catalog (fields, aliases, descriptions); per-case field statistics computed at ingest (which fields exist in this case and their top-N values with counts, e.g. `EventID=` offers `4624 (12,041)`); and the verb list after `|`. Stats live in a small ClickHouse table refreshed after each ingest. All search state lives in the URL.
+
+## Security
+
+Per-case sharing is only real if the raw-SQL tab cannot read other cases. Every control below applies to transpiled and raw queries alike.
+
+**Query path**
+
+1. The backend queries ClickHouse as a dedicated read-only user `urlog_query`: `readonly=2` (settings may be sent, data and DDL may not), `allow_ddl=0`, and exactly two grants, `SELECT` on `events_v` and `field_stats` (ADR 0001). A users.xml user with a `<grants>` block has nothing else: no `SELECT` on `events` or `file_generation`, no `dictGet`, no table-function sources (`url`, `file`, `s3`, `remote`, … are refused for want of `READ ON URL`/`FILE`/…), no `CREATE TEMPORARY TABLE`, `system.*` only what every user reads (`system.one`, `system.settings`; `system.tables` lists the two relations). `tests/Security/GrantTests.cs` pins the list.
+2. Every query, transpiled or raw, runs against a plain view `events_v` whose definition filters `case_id IN getSetting('SQL_allowed_cases')` and the current `parse_generation`; the backend sends the allowed-case list as a per-query custom setting (`custom_settings_prefixes = SQL_`), never by rewriting the analyst's SQL. A parameterised view was rejected: `FROM events_v` in the raw tab must work unchanged. **Measured on 26.8.36.3 (ADR 0001):** the mechanism holds (`[1]` sees case 1 only, `[1,2]` both, `[]` and an absent setting nothing; a case outside the list is invisible however it is named, through SPL and raw `FROM events_v`), partition pruning on `case_id` survives the view (the `has(..., case_id)` folds to a constant set in the plan). A view without a `SQL SECURITY` clause runs as the invoker on 26.8 and would need the query user to hold `SELECT` on `events`, so `events_v` is created `SQL SECURITY DEFINER DEFINER = CURRENT_USER` (migration 0005); the migrator's admin account is its definer and must stay. The row-policy fallback was measured and not taken: it loses to an inline `SETTINGS` clause exactly as the view does, and a `READONLY` constraint on the setting refuses the per-request parameter too (452), which would force one ClickHouse user per analyst. **Transport (ADR 0003):** the query path uses `ClickHouse.Driver`'s HTTP client, with `SQL_allowed_cases` as a per-request setting parameter; the insert path uses the TCP client. The TCP client drops out-of-band custom settings (ADR 0002), and a session-scoped `SET` is rejected as the isolation mechanism because a pooled connection would leak the setting between users. The SQL text is never rewritten. The isolation tests proved both halves: the gate rejects a user `SETTINGS` clause on both paths, and with the gate bypassed in a harness an inline `SETTINGS SQL_allowed_cases = '[1,2,3]'` on a request that carried `[1]` returns every case (600 of 600 seeded rows). With `readonly=2` the server does not stop it, so the gate is mandatory, not defence in depth.
+3. Every query text, transpiled or raw, is parsed with ClickHouse's own parser (`EXPLAIN AST`, run as the same read-only user, so nothing executes) and rejected by `src/Query/RawSqlGate.cs` unless the tree is a plain SELECT (with CTEs, subqueries, unions) whose root carries no `FORMAT`, `INTO OUTFILE` or `SETTINGS`; any `SETTINGS` clause anywhere, any table function, any qualified name (`system.tables`, `default.events_v`), any relation the migrations create other than `events_v` and `field_stats` (in `FROM`, `JOIN`, a subquery or the right side of `IN`), more than 8 nested SELECTs, an empty text or one over 16 KB are refused; a text the server cannot parse (comment-split keywords, multi-statements) is refused too. The dump does not name CTEs, so an unknown unqualified name is let through to the server's `UNKNOWN_TABLE`; the grants cover the rest, and a test asserts the gate's relation list against `system.tables`. One extra round trip per query, a few milliseconds.
+4. Per-query limits: `max_execution_time` 60 s, `max_memory_usage` 4 GB, `max_result_rows` 1 M, as `readonly` constraints of the profile: measured unraisable (and unlowerable) by request parameter and by inline `SETTINGS` alike (452); `readonly` and `allow_ddl` cannot be switched off (164, 392). **`max_concurrent_queries_for_user` 4** on the same profile with the same `readonly` constraint (1-3 analysts, a search is at most three server queries in flight; the API answers 429 above it rather than queueing on the server; measured: unraisable by request parameter and inline `SETTINGS` (452), and with four queries in flight the fifth is refused with 202 `TOO_MANY_SIMULTANEOUS_QUERIES`).
+5. Test: every scenario in the validation suite also runs as an unauthorised user and must return zero events, through both the transpiled path and the raw-SQL tab (`tests/Security/UnauthorisedUserTests.cs`; the whole of `tests/Security` runs from `tools/pre-merge.ps1` against the pinned image with the deployed users.d/config.d files).
+
+**Write path.** The backend process holds no admin credential at runtime. Inserts, the re-parse protocol, case deletion and the per-case field statistics run as a dedicated `urlog_ingest` user with exactly: `INSERT` on `events`; `INSERT` and `SELECT` on `file_generation`; `ALTER DELETE` on `events` (the lightweight delete of a file's rows, and the partition drop of case delete and purge); `SELECT` on `events` **only** for the field-statistics task that lives in `Core/Ingest` and always carries its own case predicate (the one place outside `events_v` the table is read); `SELECT` on the `system` tables the inserter and the job runner watch (`parts`, `merges`, `mutations`, and `disks` for the ingest watermark: disk names with free and total bytes, nothing else); `INSERT` and `ALTER DELETE` on `field_stats` (a case's statistics are removed when the case is deleted or purged and when they are recomputed; the account cannot read the table). No DDL, nothing on `events_v`, no table functions; a profile without the read-only constraints but with `max_memory_usage` bounded (4 GB).
+
+*One grant is wider than intended because the server (26.8.36.3) has nothing narrower.* There is no `ALTER DROP PARTITION` privilege (`GRANT ALTER DROP PARTITION` is a syntax error): `ALTER TABLE ... DROP PARTITION` is checked against `ALTER DELETE`, so one grant covers the lightweight delete and the partition drop, and the same grant covers `DETACH PARTITION` (with `INSERT`, `ATTACH PARTITION` too). **`ALTER DELETE` lets the ingest account delete any rows of `events`** (and of `field_stats`, which is derived from `events` and recomputed by the statistics task): every file's, every case's, by lightweight delete, by a heavy `ALTER ... DELETE` mutation or by dropping or detaching partitions. A grant cannot say "one file" or "one case", so the account that inserts can also erase. What it cannot do is touch the schema (`CREATE`, `DROP`, `TRUNCATE`, `RENAME`, `ALTER` of columns, TTL or `UPDATE`, `OPTIMIZE` are refused, 497), delete from `file_generation` or `schema_migrations`, read `events_v`, `schema_migrations`, `field_stats` or `system.query_log`/`processes`/`users`/`grants`, `dictGet`, manage users or grants, or reach outside the server through a table function. **The recovery from a lost or wrongly deleted case is the evidence, not ClickHouse:** the original files under intake are never modified and their SHA-256 is in SQLite, so the rows are rebuilt by re-parsing them (a new generation per file); ClickHouse holds nothing that cannot be derived again. The `allow_ddl` setting stays on for this profile, because `ALTER ... DROP PARTITION` counts as DDL to it: "no DDL" is the absence of grants, not the setting. The read of `events` is composed in one place, `Core/Ingest/CaseScopedEventsQuery`, whose every text carries `case_id = <n>` as its first predicate; a test scans `src/` for any other `SELECT` on the table.
+
+*Credentials.* `urlog` and the API take one credential per role: ingest (`--user`/`--password`, `URLOG_CH_USER`/`URLOG_CH_PASSWORD`, `urlog_ingest`), query (`--query-user`/`--query-password`, `URLOG_CH_QUERY_USER`/`URLOG_CH_QUERY_PASSWORD`, `urlog_query`) and admin (`--admin-user`/`--admin-password`, `URLOG_CH_ADMIN_USER`/`URLOG_CH_ADMIN_PASSWORD`), the last used by `urlog migrate` and `urlog bench query --cold` only and absent from the backend's configuration by default. Every CLI command prints the account it connected as (the name, never the password). `urlog ingest` does not migrate and cannot: a missing schema is an error that names `urlog migrate`. The users.d file in the repository is the development stack's: its `::/0` networks and its passwords equal to the account names are stubs; production restricts both backend accounts to the backend's network and takes the passwords from secrets. Migrations stay on the admin account (`urlog migrate`, a one-shot service in Compose), which is also the definer of `events_v` and must never be dropped or renamed (ADR 0001). `tests/Security/GrantTests` pins both accounts.
+
+**Users and roles (`src/Api`, `src/Core/Auth`, `src/Core/Metadata`).** Local accounts only: the first admin is created on the box by `urlog user create --admin`, every later account by an admin through `POST /api/v1/users` or the CLI. Roles: `admin` (manage users, the admin case routes, purge) and `analyst`. A case is owned by its creator and shared with named users as `owner`, `rw` or `ro` (`case_members`; a case always keeps one owner). No SSO, LDAP or OIDC in v1.
+
+*Passwords.* Argon2id (Konscious.Security.Cryptography.Argon2, managed, no native artifact) at **64 MiB, t = 3, p = 1**, 16-byte salt, 32-byte tag, stored as the PHC string the reference `argon2` tool writes (`$argon2id$v=19$m=65536,t=3,p=1$...`); the parameters are constants pinned by a test, and a stored hash below them is re-hashed at the next successful login; 12 to 256 characters, no composition rules (NIST SP 800-63B); never logged, never in a response. A name that does not exist is verified against a dummy hash so the response time does not say whether the account exists (asserted within 50 %).
+
+*Sessions.* A `sessions` row keyed by the SHA-256 of the cookie token (the file never yields a usable session); cookie `urlog_session` `HttpOnly`, `Secure`, `SameSite=Strict`, no `Max-Age`; idle 8 h and absolute 24 h (configurable); the role and the lock state are read from `users` on every request, so a role change or a lockout applies at once; lockout, role change and password reset end the user's sessions; logout deletes the row. Every request whose method is not GET/HEAD/OPTIONS repeats the session's CSRF token in `X-CSRF-Token` (a middleware, so no endpoint can opt out; 403 `csrf`), with `SameSite=Strict` as the first lock.
+
+*Login.* A per-address throttle first (5 attempts per minute by default; the 6th is 429 with `Retry-After` before the user row is read or any hash computed; **process memory, reset on every restart**, which is harmless because the durable control, the lockout counter, is in SQLite; the first refusal of a window writes one `login_throttled` row, later refusals none). The client address is the socket's; `X-Forwarded-For` is believed only from a proxy listed in `Urlog:Http:TrustedProxies` (the Compose deployment lists the proxy container). Then the Argon2 verify outside any transaction, then one `BEGIN IMMEDIATE` transaction with the outcome's rows: `login` with the session row, or `login_failed` (`reason` unknown_user | wrong_password | locked). **Ten consecutive failures lock the account for 15 minutes** (both configurable; `user_lockout`); an admin ends it earlier with `POST /api/v1/users/{id}/unlock` or `urlog user unlock` (`user_unlock`, the break-glass for a locked sole admin); the expiry writes no row and the next attempt counts from zero. One generic 401 for unknown, wrong and locked.
+
+*Case ACL.* Enforced by a middleware that runs before parameter binding and validation on every endpoint carrying `RequireCaseRole(owner | rw | ro)`: no membership, or a case in a hidden state (`soft_deleted`, `purging`, `purged`), is **404 with the same body as an unknown id**; a membership below the required role is **403**. A startup assertion refuses to start the host if any route under `/api/v1/cases/{id}` lacks the requirement, any route under `/api/v1` other than login allows anonymous callers, or any `/api/v1/users` or `/api/v1/admin` route lacks the admin policy; the route theory in `tests/Api.Tests` enumerates the live route table, so every later endpoint is covered the day it is mapped. Admin has no implicit case access: `/api/v1/cases/{id}/...` answers 404 to an admin without membership; the admin's explicit, audited path is `GET /api/v1/admin/cases` (metadata and the member list of every case, never events or field statistics) and `/api/v1/admin/cases/{id}/members`, whose rows (`case_share`, `case_role_change`, `case_unshare`, `by_admin: true`) target the case and so appear in its own trail where the owner sees them. These routes carry a case id with the admin policy in place of a membership requirement (the startup assertion demands the policy and refuses a membership requirement there), and a non-admin is answered 404 on every `/api/v1/admin/` route as if it did not exist; `/api/v1/users` stays a visible admin function and answers 403. `SQL_allowed_cases` for the query path is `CaseAcl.AllowedCaseIdsAsync` inside the request (memberships in `active` or `closed`), never cached across users.
+
+**Audit log.** An append-only, hash-chained table in the metadata store, with a genesis row and `schema_version` (`src/Core/Audit`).
+
+| Field | Content |
+| --- | --- |
+| `seq` | assigned by the writer, never by the database: the last seq + 1, so no gap on rollback |
+| `ts_utc` | UTC, truncated to whole microseconds |
+| `actor`, `actor_id` | user name, OS user or `system`; the user id when there is one |
+| `action` | lowercase snake_case verb from the list below |
+| `target_type`, `target_id` | `case`, `file`, `user`, `query` or `backup`, and the row id at the time (a plain number: the trail outlives its target) |
+| `details_json` | canonical JSON; names the target (`case_name`; a file's `sha256`, `original_name`, `size`; `user_name`) because a SQLite id can be reused |
+| `prev_hash`, `hash` | `hash = SHA-256(prev_hash ‖ canonical JSON of the row without hash)`, 64 lowercase hex; the genesis row's `prev_hash` is 64 zeros |
+| `schema_version` | the audit format (1), on the genesis row only |
+
+**Canonical JSON** (`CanonicalJson`, pinned by vectors and three known-answer rows computed with Python's `json` and `hashlib`, so a runtime upgrade cannot move a hash): object keys in ordinal UTF-16 order (RFC 8785's), every key present with `null` written out, no whitespace, UTF-8; strings escape only the double quote, the backslash and the controls below U+0020 (the short forms for backspace, tab, newline, form feed and carriage return, otherwise `\u00xx` in lowercase hex), everything else raw; integers only (no floats: durations are milliseconds, sizes bytes); timestamps `yyyy-MM-ddTHH:mm:ss.ffffffZ`. The hash input is the previous hash as ASCII hex followed by the row object of ten keys, with `details_json` embedded as the stored string, never re-parsed: a verifier needs no JSON parser and any changed byte breaks the link.
+
+**Append-only in the store.** Three SQLite triggers (migration `AuditTriggers`): `UPDATE` and `DELETE` abort; an `INSERT` whose `seq` is not the last seq + 1 or whose `prev_hash` is not the last row's hash aborts, so a fork is an immediate error. The EF entity has no setters. The triggers stop application bugs; against someone holding the file, the chain and the backups are the control.
+
+**Same transaction.** Every audited change runs as: `AuditChain.BeginTransactionAsync` (`BEGIN IMMEDIATE` on SQLite, serializable on Postgres), the change saved, `IAuditWriter.AppendAsync`, commit. The writer refuses to run outside a transaction. A failure before the commit, the audit append included, leaves neither the change nor the row. `CaseOperations` and `FileOperations` are the model.
+
+Actions: `genesis`; `login`, `logout`, `login_failed`; `case_create`, `case_share`, `case_unshare`, `case_close`, `case_reopen`, `case_archive`, `case_reimport`, `case_soft_delete`, `case_restore`, `case_purge`, `case_purge_complete`; `file_intake`, `file_duplicate`, `file_override`, `file_reparse`, `integrity_ok`, `integrity_mismatch`; `user_create`, `user_role_change`, `user_lockout`, `user_unlock`, `user_password_reset`; `login_throttled` (the first refusal of a throttle window); `case_role_change` (a member's role; `case_share` and `case_unshare` are add and remove); `query` (query text and its SHA-256, case, user, duration, whether the gate accepted it; never results); `backup`; `ingest_paused` and `ingest_resumed` (the disk watermark stopped or released the queue: the volume, its free and total bytes, the mark, the number of queued jobs; actor `system`, no target). Written by the job runner: `integrity_mismatch` (the expected and the actual SHA-256 and size, `check: pre_parse`), `file_reparse` at the commit of a generation over an earlier one (`from_generation`, `to_generation`), the nightly `backup`. Other job transitions write no row: the `jobs` table is their record.
+
+**Verification.** `urlog verify-audit --db <file>` walks the chain read-only and reports the first broken link with a reason (`gap`, `genesis`, `no_genesis`, `prev_hash`, `hash`, `malformed`): a deleted row 5,000 is reported at 5,001, a changed byte in row 7 at 7. It then prints the head on one line, `audit head seq N hash H`. **The chain cannot show that rows were cut off its end**; only a head recorded outside the machine can. Analysts copy the head line into the case notebook or ticket and pass it back as `--expect N:H`; `--backup <file>` checks a backup's head the same way. Each case's trail is exported as JSONL (one canonical line per row, hash included, from the latest `case_create` of that id) for the archive manifest.
+
+## Consistency across SQLite and ClickHouse
+
+No transaction spans the two stores, so every cross-store operation is either restartable from scratch or idempotent step by step. The ingest queue lives in SQLite (single process, workers as threads), never in ClickHouse.
+
+| Operation | Rule |
+| --- | --- |
+| Parse | job states are under Job runner below; a crash mid-file restarts the whole file: the attempt's rows are deleted and the file is parsed again under a new generation. Chunk-level resume is deliberately not built |
+| Re-parse | insert the new generation first; set `current` in the files table only after the insert completes and the hash agrees, then write `file_generation`. A crash leaves the old generation visible, never a mix |
+| Purge | (a) mark `purging` in metadata, (b) drop partitions, (c) delete files, (d) delete metadata. Every step idempotent; a startup reconciler resumes any case still `purging` |
+| Watcher | reconciles the intake directory against the files table on startup |
+| Integrity sweep | periodic re-hash of all evidence files, result written to the audit log |
+
+The UI shows a real per-file progress bar from chunk counters, which are advisory only and not used for resume.
+
+**Job runner** (`src/Core/Jobs`, `JobOperations` in `src/Core/Metadata`). One runner per metadata file: it holds `<db>.runner.lock` open without sharing, and the operating system releases it however the process ends. A starting runner tries for the lock for 5 s before it reports another runner: under load the handle of a killed runner was seen still held when its exit was reported. The backend hosts the runner (`Urlog:Ingest`); `urlog worker` is the same runner for a command-line deployment, and whichever starts second is refused. *Claim:* one `BEGIN IMMEDIATE` transaction takes the oldest `queued` job whose case is `active` and has no job in `parsing`, so a case never has two jobs running and jobs of different cases may. `MaxConcurrentJobs` defaults to 1. Measured on the dev box with two 1 GiB nginx files in two cases, three alternating passes: one after the other 13.2 to 14.4 s in total at 2.0 GB peak working set; together 11.8 and 12.3 s at 3.7 GB, and in the third pass one of the two jobs failed with ClickHouse's `MEMORY_LIMIT_EXCEEDED` (241) at the server's 6.5 GiB cap. Together is about 12 % faster when it fits and does not always fit, so the default is 1 and the setting is there for a box with the memory. *Job states:* `queued → parsing → done | failed`, `parsing → queued` on a stop (a graceful stop keeps the attempt number, an unclean one raises it and the third fails the job, so a file that takes the process down cannot loop), `queued → cancelled`. A terminal job never changes; a retry or a re-parse is a new row. *One job:* the evidence file is opened read-only and read once; SHA-256 runs over the raw bytes on the reader thread, the rows go to ClickHouse under the attempt's own generation, and after the last acknowledgement the digest and the size are compared with the intake record. Equal: SQLite first (job `done`, `files.parse_generation`), then `file_generation` in ClickHouse, then the delete of the generations below. The attempt's generation is one above every generation the file's jobs have used and above the value `file_generation` holds for the id, which covers a file id SQLite has reused after a purge and a metadata file restored from a backup older than the event store (the purge itself clearing its files' generation rows is the case lifecycle's). A refusal of the event store for memory (ClickHouse 241) is treated as passing: the attempt's rows are deleted, the job is queued again as the next attempt, and no slot claims anything for 30 s (`MemoryLimitBackoff`); the attempt cap ends it. A final write that finds SQLite locked is retried for `CommitBusyTimeout` (60 s; the store's own busy timeout is 5 s), and past that the runner stops with the job in `parsing`. Every failure path deletes the attempt's rows in ClickHouse first and writes SQLite last. The failure reason on the job row is the pipeline's reported exception with its chunk context, verbatim. *Startup, in order:* the lock; the metadata migrations; the event store answering the ingest account (until it does nothing is claimed); every job found in `parsing` cleaned and requeued; `file_generation` written from SQLite wherever the two differ (for the files SQLite has a committed generation for); cases in `purging` (the purge's own steps come with the case lifecycle; until then such a case is logged); the watermark; then claiming. *Watermark:* ingest pauses while any watched volume (the metadata directory, the evidence root, the event store's disks from `system.disks`) has less free space than the larger of 20 GB and 10 % of the volume; every queued job's message says which volume and by how much, and `ingest_paused` / `ingest_resumed` are in the chain. *Progress:* chunks read and parsed, acknowledged rows and bytes go to the job row every 2 s; the acknowledged-chunk figure is the acknowledged share of the parsed chunks, since the store acknowledges INSERTs. *Measured (dev box, 1 GiB nginx, same day, alternating, three each):* `urlog ingest` 177.2 / 199.4 / 194.9 MB/s, median 194.9; through the runner 175.5 / 176.1 / 177.9, median 176.1, which is 90.4 % of direct. The difference is the hash. **The hash costs more inside the read than alone:** 2.50 to 2.65 s per GiB against the 2.2 to 2.3 s measured for it alone, because the reader thread shares the cores with eight parsers, four writers and ClickHouse, where the separate pass had them to itself (2.25 s the same day). In wall time it costs the job about 0.6 s per GiB. Accepted as measured; the lever not built is a hash thread of its own behind a bounded hand-off. `EndToEnd.PipelineNginx1G` with the progress counters: 414.3 ms against 410.6 ms before, 0.00 B/row.
+
+**SQLite backup.** The metadata file holds the evidence hashes and the audit chain, so it is backed up with `VACUUM INTO` nightly and immediately before every purge, to a configurable directory, with the backup's own SHA-256 written to the audit log (a `backup` row with path, size and reason) and to a `sha256sum`-format sidecar beside the file (`metadata-<utc>.sqlite.sha256`). A backup is never overwritten, and one whose audit row cannot be written is removed. The backup ends one row before the row that records it; `verify-audit --backup` checks that the live chain still extends it. `urlog backup` is the same path by hand; the nightly schedule is the job runner's, the pre-purge call the lifecycle's. Losing ClickHouse loses time; losing SQLite loses the proof.
+
+## v1 user interface
+
+Splunk's Search & Reporting core, which is where analysts spend most of their time, plus three DFIR-specific additions that cost little and separate an incident tool from a Splunk clone.
+
+| Element | Behaviour |
+| --- | --- |
+| Search bar | CodeMirror 6, single line auto-grow, SPL highlighting, autocomplete, inline error marks |
+| Time picker | absolute, relative, presets; bounded to the case span |
+| Histogram | uPlot, severity-stacked, brush-to-zoom |
+| Field sidebar | top-10 values per field with counts; click = AND filter, alt-click = NOT |
+| Event table | virtualised, fixed row height, expand for raw and parsed fields, column picker, cursor-paginated |
+| Saved searches | per case |
+| Export | CSV/JSON of the current result set, streamed, capped at 1 M rows |
+| Case dashboard | hosts, files with SHA-256 and detection result, ingest progress and reject counts, disk use |
+| Bookmarks and tags | mark an event, add a note; appears on the histogram and in a timeline view: the artifact handed to the report writer |
+| Pivot on value | right-click any field value → search it across all hosts in the case |
+| Timezone toggle | UTC / source / local, shown explicitly in the header; "assumed" badge when the source TZ was defaulted |
+
+Results stream over SSE in the order histogram → first page → counts, so the page fills progressively. Dark theme first.
+
+## Validation
+
+Parser fixtures prove parsing; scenario tests prove the tool finds things. Both run in CI against ClickHouse in Docker.
+
+**Scenario test** = a public dataset + a list of SPL queries + the expected answers, e.g. "which account brute-forced web-01 and when did it first succeed". Each scenario also runs as an unauthorised user and must return zero rows.
+
+**Datasets** are fetched by script and never vendored into the repository:
+
+| Dataset | Covers |
+| --- | --- |
+| [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES) | Windows Security/Sysmon attack traces |
+| [Security Datasets](https://securitydatasets.com/) (formerly Mordor) | Windows and Linux adversary emulation |
+| Boss of the SOC | multi-source incident data, where licensing allows |
+| [SecRepo](https://www.secrepo.com/) | nginx, syslog and other samples |
+
+Scenario results ("finds X in dataset Y in Z seconds") double as demo material and release notes.
+
+## Milestone 0 and cut list
+
+**Milestone 0 (four weeks)** proves throughput before any UI exists. No auth, web UI or watcher.
+
+- [x] BenchmarkDotNet harness with fixed-seed 1 GB nginx and 1 GB syslog fixtures, disk read rate reported separately (`DiskRead`: 214 to 505 ms for the 1 GiB fixture on the dev box, depending on the page cache; reported, not gated)
+- [x] C# nginx and syslog tokenisers at ≥ 50 MB/s per core (nginx 1,273 MB/s; syslog 1,390 MB/s, both 0 B/row on the dev box)
+- [x] ClickHouse schema and Native insert path at ≥ 1 M rows/s in Docker, block size parameterised (1.0-1.08 M rows/s in the bench with the index on at 4 writers, 0.7 M rows/s sustained over five minutes on the dev box, where ClickHouse is CPU-bound on inserts plus merges)
+- [x] CLI ingests a 1 GB nginx file (\~5 M events) end to end (`urlog ingest`: 4,809,713 rows at a median 194.9 MB/s on the dev box)
+- [x] `src_ip=X | stats count by url.path` transpiled and answered at p95 < 500 ms warm, < 2 s cold, on the reference box (measured on the dev box, 25 M rows, 20 runs: p95 201 ms warm, 186 ms with the server caches dropped; the OS page cache stays, so a cold start in the full sense is not measured)
+
+The alternative considered for the tokeniser budget was parsers and ingest in Rust with the API in C#. Measured on the dev box (i9-9900KF, .NET 10.0.14, one core, 0 B/row): nginx 1,273 MB/s (5.7 M rows/s), syslog 1,390 MB/s (10.1 M rows/s), 25× and 28× the 50 MB/s floor. **The Rust alternative is not taken.** C# with `Span<byte>`, `SearchValues<byte>` and `Utf8Parser` is the parser language.
+
+**Cut order under schedule pressure**, first to go first:
+
+1. `timechart` and charts beyond the histogram
+2. Saved searches
+3. Postfix and journald parsers (syslog, nginx, EVTX stay)
+4. Archive state (close and delete stay)
+5. SFTP watcher (web upload only)
+6. Bookmarks and tags
+
+**Never cut:** benchmark harness, hashing and audit, query security, tokeniser SLO, scenario tests, format-override UI.
+
+## Open items and non-goals
+
+**Open items** (not design decisions, things not yet done):
+
+- [x] Project name: urlog
+- [x] Driver confirmed: `ClickHouse.Client` is HTTP-only and archived; `ClickHouse.Driver` 1.5.0 `ClickHouseTcpClient` connects over native TCP to 26.8.36.3, inserts columnar LZ4 blocks, but drops out-of-band custom-prefixed settings (ADR 0002). Image pinned to 26.8.36.3.
+- [ ] Full ECS field subset written into the field catalog YAML
+- [ ] Choice of bundled reverse proxy (Caddy vs nginx)
+- [ ] Boss of the SOC licensing check before adding it to the dataset script
+
+**Public API.** the UI and external clients use the same `/api/v1/...` endpoints; no internal-only routes; version prefix from day one. **Deferred:** API tokens, rate limits, NDJSON streaming, `dry_run`, OpenAPI generation, CLI client, webhooks. To be designed before the API is opened to external clients.
+
+**Case isolation, confirmed on 26.8.36.3.** See Security, Query path, item 2, and `docs/adr/0001-case-isolation.md`.
+
+**Explicit non-goals for v1.** Agents or collectors, real-time ingestion, alerting, detection rules (v1.1), dashboard builder, scheduled reports, roles beyond per-case sharing, SSO/LDAP/OIDC, ClickHouse replication or sharding, PCAP, cross-case host search, native Windows server install, FTP.
+
+**Sources consulted.** [ClickHouse full-text search GA announcement](https://clickhouse.com/blog/full-text-search-ga-release) (text index GA from 26.2, March 2026).

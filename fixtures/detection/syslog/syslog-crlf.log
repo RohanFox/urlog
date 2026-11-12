@@ -1,0 +1,24 @@
+Mar  1 00:00:03 app-02 kernel: [79051.444027] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:07 db-01 postfix/smtpd[12167]: connect from unknown[192.0.2.23]
+Mar  1 00:00:11 app-02 systemd: Started Session 94 of user alice.
+Mar  1 00:00:13 fw-01 systemd: Started Session 449 of user admin.
+Mar  1 00:00:16 app-02 kernel: [57819.959806] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:00:16 app-02 postfix/smtpd[44024]: connect from unknown[198.51.100.48]
+Mar  1 00:00:17 db-01 CRON[1170]: (alice) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:21 mail-01 dovecot[14971]: imap-login: Login: user=<root>, method=PLAIN, rip=203.0.113.36, lip=10.0.0.5, TLS
+Mar  1 00:00:24 db-01 CRON[18231]: (deploy) CMD (/usr/local/bin/backup.sh)
+Mar  1 00:00:25 app-02 systemd: Started Session 704 of user bob.
+Mar  1 00:00:26 db-01 systemd: Started Session 305 of user oracle.
+Mar  1 00:00:31 fw-01 dovecot[63290]: imap-login: Login: user=<admin>, method=PLAIN, rip=198.51.100.14, lip=10.0.0.5, TLS
+Mar  1 00:00:35 web-01 sshd[2456]: Connection closed by 192.0.2.41 port 63121 [preauth]
+Mar  1 00:00:37 app-02 postfix/smtpd[34190]: connect from unknown[192.0.2.11]
+Mar  1 00:00:38 web-01 sudo[40994]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:43 mail-01 sudo[38242]: root : TTY=pts/0 ; PWD=/home/root ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Mar  1 00:00:48 mail-01 dovecot[10188]: imap-login: Login: user=<bob>, method=PLAIN, rip=203.0.113.53, lip=10.0.0.5, TLS
+Mar  1 00:00:53 fw-01 dovecot[41810]: imap-login: Login: user=<oracle>, method=PLAIN, rip=203.0.113.37, lip=10.0.0.5, TLS
+Mar  1 00:00:56 app-02 postfix/smtpd[9298]: connect from unknown[198.51.100.37]
+Mar  1 00:00:57 fw-01 postfix/smtpd[35269]: connect from unknown[203.0.113.32]
+Mar  1 00:00:58 fw-01 dovecot[29827]: imap-login: Login: user=<deploy>, method=PLAIN, rip=192.0.2.6, lip=10.0.0.5, TLS
+Mar  1 00:01:03 db-01 systemd: Started Session 646 of user root.
+Mar  1 00:01:06 mail-01 kernel: [25447.386916] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+Mar  1 00:01:08 fw-01 kernel: [85576.458488] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.

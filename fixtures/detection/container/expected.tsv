@@ -1,0 +1,7 @@
+file	kind	source	band	layout	encoding	containers	format	flags
+logs.zip	container	-	none	-	utf8	zip	-	-
+empty.zip	container	-	none	-	utf8	zip	-	-
+logs.tar	container	-	none	-	utf8	tar	-	-
+logs.tar.gz	container	-	none	-	utf8	gzip>tar	-	-
+logs.tgz	container	-	none	-	utf8	gzip>tar	-	-
+logs.zip.gz	container	-	none	-	utf8	gzip>zip	-	-
