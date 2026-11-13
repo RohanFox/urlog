@@ -42,7 +42,8 @@ public static class ApiHost
             && o.Ingest.MaxConcurrentJobs > 0 && o.Ingest.Writers > 0 && o.Ingest.Parallelism >= 0 && o.Ingest.ProgressInterval > TimeSpan.Zero
             && o.Ingest.Watermark.MinFreeBytes >= 0 && o.Ingest.Watermark.MinFreePercent is >= 0 and <= 100
             && o.ClickHouse.RetryInterval > TimeSpan.Zero
-            && !string.IsNullOrWhiteSpace(o.Ingest.EvidenceRoot) && o.Upload.MaxFileBytes > 0 && o.Upload.Expiry > TimeSpan.Zero && o.Upload.SweepInterval > TimeSpan.Zero,
+            && !string.IsNullOrWhiteSpace(o.Ingest.EvidenceRoot) && o.Upload.MaxFileBytes > 0 && o.Upload.Expiry > TimeSpan.Zero && o.Upload.SweepInterval > TimeSpan.Zero
+            && o.Upload.HandOverBusyTimeout > TimeSpan.Zero && o.Upload.HandOverRetry > TimeSpan.Zero,
             "Urlog: metadata path, lockout, throttle, session timeouts, the evidence root and the ingest and upload settings must be set and in range").ValidateOnStart();
 
         services.AddSingleton(TimeProvider.System);
@@ -76,7 +77,9 @@ public static class ApiHost
         {
             var catalog = new SourceCatalog();
             catalog.Add(Urlog.Sources.LogSourceRegistry.Registrations);
-            return new IntakePipeline(sp.GetRequiredService<MetadataStore>(), catalog, sp.GetRequiredService<UploadFolders>().Root);
+            // The record of an upload waits for a locked metadata file as the job runner's commit does.
+            var retry = new BusyRetry { Timeout = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.Upload.HandOverBusyTimeout };
+            return new IntakePipeline(sp.GetRequiredService<MetadataStore>(), catalog, sp.GetRequiredService<UploadFolders>().Root, recordRetry: retry);
         });
         services.AddSingleton<IDiskProbe, DriveDiskProbe>();
         services.AddSingleton(sp =>
@@ -84,7 +87,10 @@ public static class ApiHost
             var mark = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.Ingest.Watermark;
             return new IntakeGate(sp.GetRequiredService<IDiskProbe>(), new WatermarkOptions { MinFreeBytes = mark.MinFreeBytes, MinFreePercent = mark.MinFreePercent });
         });
+        services.AddSingleton<PendingHandOvers>();
         services.AddSingleton<UploadFinaliser>();
+        services.AddSingleton<UploadHandOverRetryService>();
+        services.AddHostedService(sp => sp.GetRequiredService<UploadHandOverRetryService>());
         services.AddSingleton<UploadSweeper>();
         services.AddHostedService<UploadSweepService>();
 

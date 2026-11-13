@@ -17,11 +17,18 @@ public sealed class MetadataStore : IDbContextFactory<MetadataDb>
     /// <summary>How long a writer waits for the lock before SQLITE_BUSY surfaces (design record, "Consistency", Job runner).</summary>
     public const int BusyTimeoutSeconds = 5;
 
-    public MetadataStore(string path, TimeProvider? clock = null)
+    /// <param name="busyTimeoutSeconds">
+    /// For a test that stages a locked file and cannot wait five seconds for it. Whole seconds, at least one (the
+    /// provider counts in seconds and reads zero as no limit). No setting reaches it: every host and command
+    /// runs on <see cref="BusyTimeoutSeconds"/>.
+    /// </param>
+    public MetadataStore(string path, TimeProvider? clock = null, int busyTimeoutSeconds = BusyTimeoutSeconds)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentOutOfRangeException.ThrowIfLessThan(busyTimeoutSeconds, 1);
         Path = System.IO.Path.GetFullPath(path);
-        Options = BuildOptions(Path);
+        BusyTimeout = TimeSpan.FromSeconds(busyTimeoutSeconds);
+        Options = BuildOptions(Path, busyTimeoutSeconds);
         Clock = clock ?? TimeProvider.System;
         Audit = new AuditChain(Clock);
     }
@@ -37,24 +44,28 @@ public sealed class MetadataStore : IDbContextFactory<MetadataDb>
 
     public DbContextOptions<MetadataDb> Options { get; }
 
+    /// <summary>How long a writer of this store waits for the lock: <see cref="BusyTimeoutSeconds"/> outside tests.</summary>
+    public TimeSpan BusyTimeout { get; }
+
     /// <summary>The connection string for <paramref name="path"/>: read-write-create, foreign keys on, the busy timeout.</summary>
-    public static string ConnectionString(string path) => new SqliteConnectionStringBuilder
+    public static string ConnectionString(string path, int busyTimeoutSeconds = BusyTimeoutSeconds) => new SqliteConnectionStringBuilder
     {
         DataSource = path,
         Mode = SqliteOpenMode.ReadWriteCreate,
         ForeignKeys = true,
-        DefaultTimeout = BusyTimeoutSeconds,
+        DefaultTimeout = busyTimeoutSeconds,
         Pooling = true,
     }.ToString();
 
-    public static DbContextOptions<MetadataDb> BuildOptions(string path) => Configure(new DbContextOptionsBuilder<MetadataDb>(), path).Options;
+    public static DbContextOptions<MetadataDb> BuildOptions(string path, int busyTimeoutSeconds = BusyTimeoutSeconds) =>
+        Configure(new DbContextOptionsBuilder<MetadataDb>(), path, busyTimeoutSeconds).Options;
 
     /// <summary>SQLite provider, the snake_case history table, and the pragmas applied on every open.</summary>
-    public static DbContextOptionsBuilder<MetadataDb> Configure(DbContextOptionsBuilder<MetadataDb> builder, string path)
+    public static DbContextOptionsBuilder<MetadataDb> Configure(DbContextOptionsBuilder<MetadataDb> builder, string path, int busyTimeoutSeconds = BusyTimeoutSeconds)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder
-            .UseSqlite(ConnectionString(path), o => o.MigrationsHistoryTable(MetadataDb.MigrationsHistoryTable))
+            .UseSqlite(ConnectionString(path, busyTimeoutSeconds), o => o.MigrationsHistoryTable(MetadataDb.MigrationsHistoryTable))
             .AddInterceptors(SqlitePragmas.Instance)
             // No Sqlite:Autoincrement (-> AUTOINCREMENT + sqlite_sequence) in any migration: see PlainRelationalAnnotationProvider.
             .ReplaceService<IRelationalAnnotationProvider, PlainRelationalAnnotationProvider>();

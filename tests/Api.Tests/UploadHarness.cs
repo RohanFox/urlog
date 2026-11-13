@@ -32,9 +32,9 @@ internal sealed class UploadHarness : IAsyncDisposable
 
     public UploadSweeper Sweeper => Factory.Services.GetRequiredService<UploadSweeper>();
 
-    public static async Task<UploadHarness> StartAsync(IDictionary<string, string?>? settings = null)
+    public static async Task<UploadHarness> StartAsync(IDictionary<string, string?>? settings = null, int busyTimeoutSeconds = MetadataStore.BusyTimeoutSeconds)
     {
-        var harness = new UploadHarness(new ApiFactory(settings));
+        var harness = new UploadHarness(new ApiFactory(settings, busyTimeoutSeconds: busyTimeoutSeconds));
         foreach (var name in new[] { "alice", "bob", "carol", "dave" })
         {
             await harness.Factory.AddUserAsync(name, Password);
@@ -114,6 +114,16 @@ internal sealed class UploadHarness : IAsyncDisposable
         var request = new HttpRequestMessage(HttpMethod.Delete, url);
         request.Headers.Add("Tus-Resumable", "1.0.0");
         return client.SendAsync(request);
+    }
+
+    /// <summary>The <c>Urlog-Upload-State</c> header of a HEAD, and the offset and the length beside it.</summary>
+    public static async Task<(string State, long Offset, long Length)> HeadStateAsync(ApiClient client, string url)
+    {
+        var head = await HeadAsync(client, url);
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
+        return (head.Headers.GetValues(UploadEndpoints.StateHeader).Single(),
+            long.Parse(head.Headers.GetValues("Upload-Offset").Single(), CultureInfo.InvariantCulture),
+            long.Parse(head.Headers.GetValues("Upload-Length").Single(), CultureInfo.InvariantCulture));
     }
 
     public static async Task<long> OffsetAsync(ApiClient client, string url)

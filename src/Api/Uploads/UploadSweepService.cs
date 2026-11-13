@@ -41,6 +41,10 @@ public sealed class UploadSweeper(UploadFolders folders, UploadFinaliser finalis
                         await finaliser.FinaliseAsync(caseId, id).ConfigureAwait(false);
                         finished++;
                     }
+                    catch (UploadPendingException)
+                    {
+                        // The metadata file is locked: the hand-over retry has the upload, in seconds.
+                    }
                     catch (Exception e) when (e is not OperationCanceledException)
                     {
                         // The next pass tries again; one upload that cannot be finished does not stop the others.

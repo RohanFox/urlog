@@ -149,18 +149,7 @@ public sealed class JobRunner
     }
 
     /// <summary>True when the failure is SQLite reporting the database busy or locked, at any depth.</summary>
-    internal static bool IsBusy(Exception? e)
-    {
-        for (; e is not null; e = e.InnerException)
-        {
-            if (e is SqliteException { SqliteErrorCode: 5 or 6 })
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    internal static bool IsBusy(Exception? e) => BusyRetry.IsBusy(e);
 
     /// <summary>True when the event store refused for memory (ClickHouse 241, MEMORY_LIMIT_EXCEEDED), at any depth.</summary>
     internal static bool IsMemoryLimit(Exception? e)
@@ -553,31 +542,20 @@ public sealed class JobRunner
     /// </summary>
     private async Task TerminalAsync(long jobId, Func<MetadataDb, Task> write)
     {
-        var waited = Stopwatch.StartNew();
-        var announced = false;
-        while (true)
+        try
         {
-            try
-            {
-                await using var db = _store.CreateDbContext();
-                await write(db).ConfigureAwait(false);
-                return;
-            }
-            catch (Exception e) when (IsBusy(e))
-            {
-                if (waited.Elapsed >= _options.CommitBusyTimeout)
+            await new BusyRetry { Timeout = _options.CommitBusyTimeout }.RunAsync(
+                async () =>
                 {
-                    throw new JobCommitException($"job {jobId}: the metadata store stayed locked for {waited.Elapsed.TotalSeconds:F0} s; the job is left in parsing for the next start", e);
-                }
-
-                if (!announced)
-                {
-                    announced = true;
-                    JobLog.CommitWaiting(_logger, jobId);
-                }
-
-                await Task.Delay(100).ConfigureAwait(false);
-            }
+                    await using var db = _store.CreateDbContext();
+                    await write(db).ConfigureAwait(false);
+                    return true;
+                },
+                () => JobLog.CommitWaiting(_logger, jobId)).ConfigureAwait(false);
+        }
+        catch (MetadataBusyException e)
+        {
+            throw new JobCommitException($"job {jobId}: the metadata store stayed locked for {e.Waited.TotalSeconds:F0} s; the job is left in parsing for the next start", e.InnerException ?? e);
         }
     }
 

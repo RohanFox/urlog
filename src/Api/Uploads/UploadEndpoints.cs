@@ -29,6 +29,12 @@ public static class UploadEndpoints
 {
     public const string OverrideHeader = "X-HTTP-Method-Override";
 
+    /// <summary>
+    /// On every HEAD of an upload: where it stands, in the words of the status route. <c>finalising</c> beside an
+    /// offset equal to the length says the bytes are complete and the record is pending.
+    /// </summary>
+    public const string StateHeader = "Urlog-Upload-State";
+
     private static readonly string[] Methods = ["POST", "HEAD", "PATCH", "DELETE", "OPTIONS"];
 
     public static void Map(RouteGroupBuilder oneCase)
@@ -40,7 +46,7 @@ public static class UploadEndpoints
         oneCase.MapGet("/uploads/{uploadId}", StatusAsync).RequireCaseRole(MemberRole.Rw).WithName("GetUpload");
     }
 
-    private static Task<DefaultTusConfiguration> ConfigureAsync(HttpContext http)
+    private static async Task<DefaultTusConfiguration> ConfigureAsync(HttpContext http)
     {
         var services = http.RequestServices;
         var options = services.GetRequiredService<IOptions<UrlogOptions>>().Value.Upload;
@@ -56,7 +62,17 @@ public static class UploadEndpoints
         }
 
         var store = new UploadStore(folders, @case.Id, session.User.Id, session.User.Name, clock, options.Expiry);
-        return Task.FromResult(new DefaultTusConfiguration
+        if (HttpMethods.IsHead(http.Request.Method))
+        {
+            // The protocol's HEAD has no word for "all bytes here, not recorded yet". Only the caller's own upload is found.
+            var path = http.Request.Path.Value ?? "";
+            if (await store.FindAsync(path[(path.LastIndexOf('/') + 1)..], http.RequestAborted).ConfigureAwait(false) is { } info)
+            {
+                http.Response.Headers[StateHeader] = StateName(info.State);
+            }
+        }
+
+        return new DefaultTusConfiguration
         {
             Store = store,
             MaxAllowedUploadSizeInBytesLong = options.MaxFileBytes,
@@ -71,8 +87,11 @@ public static class UploadEndpoints
                 OnBeforeDeleteAsync = context => BeforeDeleteAsync(context, store),
                 OnFileCompleteAsync = context => services.GetRequiredService<UploadFinaliser>().FinaliseAsync(@case.Id, context.FileId),
             },
-        });
+        };
     }
+
+    /// <summary>The state as the status route's JSON spells it.</summary>
+    public static string StateName(UploadState state) => System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName(state.ToString());
 
     private static Task AuthorizeAsync(AuthorizeContext context, CaseRecord @case)
     {

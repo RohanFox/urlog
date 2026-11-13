@@ -35,6 +35,15 @@ public sealed class UploadOptions
 
     /// <summary>How often expired uploads are removed and interrupted hand-overs to intake are finished.</summary>
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// How long the record of a complete upload keeps trying while another writer holds the metadata file, before
+    /// the request is answered 503. The job runner's commit waits as long by default (<see cref="BusyRetry"/>).
+    /// </summary>
+    public TimeSpan HandOverBusyTimeout { get; set; } = BusyRetry.DefaultTimeout;
+
+    /// <summary>How often an upload whose record gave up on a locked metadata file is handed to intake again; also the 503's <c>Retry-After</c>.</summary>
+    public TimeSpan HandOverRetry { get; set; } = TimeSpan.FromSeconds(5);
 }
 
 /// <summary>

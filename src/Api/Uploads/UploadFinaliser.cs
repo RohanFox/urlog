@@ -3,6 +3,7 @@ using Urlog.Core.Intake;
 using Urlog.Core.Metadata;
 using Urlog.Sources.Nginx;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Urlog.Api.Uploads;
 
@@ -17,11 +18,19 @@ namespace Urlog.Api.Uploads;
 /// sidecar keeps the outcome until the upload expires.
 /// </para>
 /// <para>
-/// One upload is finalised once at a time in this process, and a stop at any point is finished by the next call:
-/// a file that is already recorded is found by its stored path and not handed to intake again.
+/// One upload has one hand-over in flight in this process, whoever asks: the request that brought the last byte,
+/// the sweep and the retry all come through <see cref="FinaliseAsync"/>, and a caller that arrives while a
+/// hand-over runs waits for that one and gets its answer. A stop at any point is finished by the next call: a file
+/// that is already recorded is found by its stored path and not handed to intake again.
+/// </para>
+/// <para>
+/// The record waits for a metadata file another writer holds, as long as the job runner's commit does. Past that
+/// the upload stays <c>finalising</c> with its bytes under their final name, the call ends in
+/// <see cref="UploadPendingException"/>, and the upload is listed in <see cref="PendingHandOvers"/> to be handed
+/// over again in seconds.
 /// </para>
 /// </summary>
-public sealed class UploadFinaliser(UploadFolders folders, IntakePipeline intake, MetadataStore store, ILogger<UploadFinaliser> logger)
+public sealed class UploadFinaliser(UploadFolders folders, IntakePipeline intake, MetadataStore store, PendingHandOvers pending, IOptions<UrlogOptions> options, ILogger<UploadFinaliser> logger)
 {
     private readonly ConcurrentDictionary<string, Lazy<Task<UploadInfo?>>> _running = new(StringComparer.Ordinal);
 
@@ -29,13 +38,27 @@ public sealed class UploadFinaliser(UploadFolders folders, IntakePipeline intake
     public bool IsRunning(long caseId, string id) => _running.ContainsKey(Key(caseId, id));
 
     /// <summary>The upload after intake has answered, or as it is when its bytes are not complete; null when there is no such upload.</summary>
+    /// <exception cref="UploadPendingException">The metadata file stayed locked; the upload is listed for another hand-over.</exception>
     public async Task<UploadInfo?> FinaliseAsync(long caseId, string id)
     {
         var key = Key(caseId, id);
+        // The first caller starts the hand-over; every caller that finds it in the table shares its task.
         var run = _running.GetOrAdd(key, _ => new Lazy<Task<UploadInfo?>>(() => RunAsync(caseId, id)));
         try
         {
-            return await run.Value.ConfigureAwait(false);
+            var info = await run.Value.ConfigureAwait(false);
+            pending.Remove(caseId, id);
+            return info;
+        }
+        catch (UploadPendingException)
+        {
+            pending.Add(caseId, id);
+            throw;
+        }
+        catch
+        {
+            pending.Remove(caseId, id);
+            throw;
         }
         finally
         {
@@ -102,7 +125,15 @@ public sealed class UploadFinaliser(UploadFolders folders, IntakePipeline intake
                 Timezone = info.Fields.Timezone,
                 Year = info.Fields.Year,
                 Options = info.Fields.LogFormat is { } format ? new Dictionary<string, string>(StringComparer.Ordinal) { [NginxSource.LogFormatOption] = format } : null,
+                RecordWaiting = () => Log.UploadRecordWaiting(logger, id, caseId),
             }, none).ConfigureAwait(false);
+        }
+        catch (MetadataBusyException e)
+        {
+            // Nothing was written and nothing is undone: the file keeps its final name and the upload stays finalising.
+            var retry = options.Value.Upload.HandOverRetry;
+            Log.UploadPending(logger, id, caseId, (int)e.Waited.TotalSeconds, retry.TotalSeconds);
+            throw new UploadPendingException($"upload {id}: the metadata store is busy; the record is pending", Math.Max(1, (int)Math.Ceiling(retry.TotalSeconds)), e);
         }
         catch (Exception e) when (e is IntakeRefusedException or MetadataException)
         {

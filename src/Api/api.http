@@ -113,11 +113,13 @@ Upload-Length: 11
 Upload-Metadata: filename YWNjZXNzLmxvZw==,host d2ViLTAx
 X-CSRF-Token: {{csrf}}
 
-### Upload: how far it is (the id is the last segment of the Location the create answered)
+### Upload: how far it is (the id is the last segment of the Location the create answered).
+### Urlog-Upload-State is the state; "finalising" with Upload-Offset = Upload-Length means all bytes are stored and the record is pending
 HEAD {{baseUrl}}/cases/1/uploads/{{upload}}
 Tus-Resumable: 1.0.0
 
-### Upload: a chunk at the current offset; the last one answers after intake has recorded the file
+### Upload: a chunk at the current offset; the last one answers after intake has recorded the file.
+### 503 with Retry-After: the bytes are stored and the metadata store is busy; the record follows, ask HEAD and send nothing again
 PATCH {{baseUrl}}/cases/1/uploads/{{upload}}
 Tus-Resumable: 1.0.0
 Upload-Offset: 0

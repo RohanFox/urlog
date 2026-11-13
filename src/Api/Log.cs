@@ -59,6 +59,12 @@ internal static partial class Log
     [LoggerMessage(EventId = 36, Level = LogLevel.Error, Message = "upload sweep failed; it runs again at its interval")]
     public static partial void UploadSweepFailed(ILogger logger, Exception exception);
 
+    [LoggerMessage(EventId = 37, Level = LogLevel.Information, Message = "upload {Upload} of case {Case}: the metadata file is locked by another writer; the record waits for it")]
+    public static partial void UploadRecordWaiting(ILogger logger, string upload, long @case);
+
+    [LoggerMessage(EventId = 38, Level = LogLevel.Warning, Message = "upload {Upload} of case {Case}: the metadata file stayed locked for {Waited} s; the bytes are stored, the record is tried again every {Retry} s")]
+    public static partial void UploadPending(ILogger logger, string upload, long @case, int waited, double retry);
+
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "logout '{Name}'")]
     public static partial void Logout(ILogger logger, string name);
 }

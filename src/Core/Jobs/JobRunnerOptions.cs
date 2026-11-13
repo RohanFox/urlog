@@ -34,8 +34,9 @@ public sealed record JobRunnerOptions
     /// <summary>
     /// How long a terminal write (commit, failure, quarantine) keeps retrying while another writer holds the SQLite
     /// lock. The store's own busy timeout is 5 s; a parse that took twenty minutes must not fail on that.
+    /// The policy is <see cref="BusyRetry"/>, shared with the intake record of a web upload.
     /// </summary>
-    public TimeSpan CommitBusyTimeout { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan CommitBusyTimeout { get; init; } = BusyRetry.DefaultTimeout;
 
     /// <summary>
     /// After the event store refuses an insert for memory (code 241) the job goes back to the queue and no slot

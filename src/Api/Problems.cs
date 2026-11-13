@@ -42,5 +42,8 @@ internal static class Problems
 
     public static ProblemDetails BadRequest(string title) => Make(StatusCodes.Status400BadRequest, title, "https://urlog/problems/bad-request");
 
+    public static ProblemDetails UploadPending(int retryAfter) => Make(StatusCodes.Status503ServiceUnavailable, "the upload is complete and its record is pending", "https://urlog/problems/upload-pending",
+        $"the metadata store is busy; the file is recorded without another request. Ask HEAD or the status route after {retryAfter} s and send nothing again");
+
     public static ProblemDetails Throttled(int retryAfter) => Make(StatusCodes.Status429TooManyRequests, "too many login attempts", "https://urlog/problems/throttled", $"retry after {retryAfter} s");
 }

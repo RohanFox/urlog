@@ -42,6 +42,9 @@ public sealed record IntakeRequest
 
     /// <summary>Per-file source options (<c>nginx.log_format</c>, ...).</summary>
     public IReadOnlyDictionary<string, string>? Options { get; init; }
+
+    /// <summary>Called once when the record finds the metadata file locked and the pipeline goes on trying; a caller logs it.</summary>
+    public Action? RecordWaiting { get; init; }
 }
 
 /// <summary>What became of one <see cref="IntakeRequest"/>.</summary>
@@ -80,6 +83,12 @@ public sealed class IntakeRefusedException : Exception
 /// expansion for a container), or for bytes the case already holds a <c>file_duplicate</c> row and nothing else.</item>
 /// </list>
 /// Everything that decodes is the job's work, not intake's. The file is only ever opened for reading.
+/// <para>
+/// With a <see cref="BusyRetry"/> the last step is tried again while another writer holds the metadata file. Each
+/// attempt opens its own context and its own transaction, so the active-case check, the duplicate check and the
+/// audit chain head are read again every time; the hash is taken once. Without one a locked file ends the call
+/// at the store's busy timeout.
+/// </para>
 /// </summary>
 public sealed class IntakePipeline
 {
@@ -89,8 +98,10 @@ public sealed class IntakePipeline
     private readonly string? _evidenceRoot;
     private readonly HostInference _hosts;
     private readonly ArchiveLimits _limits;
+    private readonly BusyRetry? _recordRetry;
+    private long _hashPasses;
 
-    public IntakePipeline(MetadataStore store, SourceCatalog catalog, string? evidenceRoot = null, HostInference? hosts = null, ArchiveLimits? limits = null)
+    public IntakePipeline(MetadataStore store, SourceCatalog catalog, string? evidenceRoot = null, HostInference? hosts = null, ArchiveLimits? limits = null, BusyRetry? recordRetry = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -100,11 +111,16 @@ public sealed class IntakePipeline
         _evidenceRoot = string.IsNullOrEmpty(evidenceRoot) ? null : Path.GetFullPath(evidenceRoot);
         _hosts = hosts ?? HostInference.Default;
         _limits = limits ?? ArchiveLimits.Default;
+        _recordRetry = recordRetry;
     }
+
+    /// <summary>How many files this pipeline has read from end to end for their hash: one per accepted call, however often the record was tried.</summary>
+    public long HashPasses => Interlocked.Read(ref _hashPasses);
 
     /// <exception cref="IntakeRefusedException">The request names an unknown zone or source, or no file.</exception>
     /// <exception cref="CaseNotFoundException">No such case.</exception>
     /// <exception cref="CaseNotActiveException">The case is not <c>active</c>.</exception>
+    /// <exception cref="MetadataBusyException">The metadata file stayed locked for the whole of the record's retry; nothing was written.</exception>
     public async Task<IntakeOutcome> AcceptAsync(IntakeRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -125,6 +141,7 @@ public sealed class IntakePipeline
         }
 
         // 1. The hash, before anything else reads the bytes.
+        Interlocked.Increment(ref _hashPasses);
         var (sha256, size) = await HashAsync(path, cancellationToken).ConfigureAwait(false);
 
         // 2. Read-only from here on, where the file is ours to keep.
@@ -139,7 +156,6 @@ public sealed class IntakePipeline
         var detection = DetectionSample.DetectFile(path, name, _sources, request.Options, out var content);
         var now = _store.Clock.GetUtcNow().UtcDateTime;
         var actor = new AuditActor(request.Uploader, request.UploaderUserId);
-        await using var db = _store.CreateDbContext();
         if (detection.Kind == FileKind.Rejected && request.OverrideSource is null)
         {
             var refusal = new Dictionary<string, object?>
@@ -151,7 +167,14 @@ public sealed class IntakePipeline
                 ["source"] = Names.Of(request.Source),
                 ["message"] = detection.Message,
             };
-            await FileOperations.RejectAsync(db, _store.Audit, actor, request.CaseId, refusal, cancellationToken).ConfigureAwait(false);
+            await RecordAsync(
+                async db =>
+                {
+                    await FileOperations.RejectAsync(db, _store.Audit, actor, request.CaseId, refusal, cancellationToken).ConfigureAwait(false);
+                    return true;
+                },
+                request.RecordWaiting,
+                cancellationToken).ConfigureAwait(false);
             return new IntakeOutcome(null, null, Duplicate: false, Rejected: true, detection, sha256, size, null, HostInferred: false);
         }
 
@@ -173,7 +196,9 @@ public sealed class IntakePipeline
         // A container that cannot be opened here is kept like any other file that is not a log.
         var parsed = request.OverrideSource is not null || detection.Kind == FileKind.Log;
         var expanded = !parsed && detection.Kind == FileKind.Container && _limits.MaxDepth > 0;
-        var file = new EvidenceFile
+
+        // A new entity for every attempt at the record: a failed one leaves nothing behind for the next.
+        EvidenceFile NewFile() => new()
         {
             CaseId = request.CaseId,
             Sha256 = sha256,
@@ -204,13 +229,32 @@ public sealed class IntakePipeline
         };
 
         // 5. The record, its audit row and its job, together.
-        if (hostName is not null)
+        var result = await RecordAsync(
+            async db =>
+            {
+                var file = NewFile();
+                if (hostName is not null)
+                {
+                    file.HostId = (await HostOperations.GetOrCreateAsync(db, request.CaseId, hostName, now, cancellationToken).ConfigureAwait(false)).Id;
+                }
+
+                return await FileOperations.AddAsync(db, _store.Audit, actor, file, queue: true, hostName, cancellationToken).ConfigureAwait(false);
+            },
+            request.RecordWaiting,
+            cancellationToken).ConfigureAwait(false);
+        return new IntakeOutcome(result.File, result.Job, result.Duplicate, Rejected: false, detection, sha256, size, hostName, inferred);
+    }
+
+    /// <summary>One attempt is one context, so one connection and one transaction of its own.</summary>
+    private Task<T> RecordAsync<T>(Func<MetadataDb, Task<T>> write, Action? waiting, CancellationToken cancellationToken)
+    {
+        async Task<T> AttemptAsync()
         {
-            file.HostId = (await HostOperations.GetOrCreateAsync(db, request.CaseId, hostName, now, cancellationToken).ConfigureAwait(false)).Id;
+            await using var db = _store.CreateDbContext();
+            return await write(db).ConfigureAwait(false);
         }
 
-        var result = await FileOperations.AddAsync(db, _store.Audit, actor, file, queue: true, hostName, cancellationToken).ConfigureAwait(false);
-        return new IntakeOutcome(result.File, result.Job, result.Duplicate, Rejected: false, detection, sha256, size, hostName, inferred);
+        return _recordRetry is null ? AttemptAsync() : _recordRetry.RunAsync(AttemptAsync, waiting, cancellationToken);
     }
 
     /// <summary>SHA-256 of the bytes as they are on disk, streamed (evidence rule 1): 64 lowercase hex characters, and the byte count of the same read.</summary>

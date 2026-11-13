@@ -25,7 +25,11 @@ namespace Urlog.Api.Tests;
 /// True: the metadata file exists and carries the identity the fake event store answers with, as after
 /// <c>urlog migrate --db</c>. False: no metadata file, so the host finds no identity on its side.
 /// </param>
-internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, bool paired = true) : WebApplicationFactory<Program>
+/// <param name="busyTimeoutSeconds">
+/// How long the host's metadata store waits for a lock. The host has no setting for it, so a test that stages a
+/// locked file gives the host a store built with a shorter wait.
+/// </param>
+internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, bool paired = true, int busyTimeoutSeconds = MetadataStore.BusyTimeoutSeconds) : WebApplicationFactory<Program>
 {
     public const string ClientAddressHeader = "X-Test-Client-Address";
 
@@ -94,6 +98,10 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);
+            if (busyTimeoutSeconds != MetadataStore.BusyTimeoutSeconds)
+            {
+                services.AddSingleton(_ => new MetadataStore(MetadataPath, Clock, busyTimeoutSeconds));
+            }
             services.AddSingleton<ILoggerProvider>(Logs);
             services.AddSingleton<Urlog.Core.Jobs.IStoreIdentitySource>(EventStore);
             services.AddSingleton<Urlog.Core.Jobs.IDiskProbe>(Disk);

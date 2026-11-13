@@ -5,7 +5,7 @@ namespace Urlog.Api.Middleware;
 
 /// <summary>
 /// Domain exceptions to status codes, as RFC 7807 bodies: not found (404), a rule refused the change (409), a bad name or
-/// value (400), a body the framework could not read (400 in every environment: the Development host throws
+/// value (400), a complete upload whose record waits for a locked metadata file (503 with <c>Retry-After</c>), a body the framework could not read (400 in every environment: the Development host throws
 /// <see cref="BadHttpRequestException"/> instead of answering by itself). The messages of the metadata exceptions are
 /// written for users and carry no secret. Anything else falls through to the default handler: 500 with no detail.
 /// </summary>
@@ -15,8 +15,14 @@ internal sealed class ApiExceptionHandler : IExceptionHandler
     {
         ArgumentNullException.ThrowIfNull(httpContext);
         ArgumentNullException.ThrowIfNull(exception);
+        if (exception is Uploads.UploadPendingException pending)
+        {
+            httpContext.Response.Headers.RetryAfter = pending.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         var problem = exception switch
         {
+            Uploads.UploadPendingException p => Problems.UploadPending(p.RetryAfterSeconds),
             BadHttpRequestException bad => Problems.Make(bad.StatusCode, "malformed request", "https://urlog/problems/bad-request"),
             CaseNotFoundException => Problems.CaseNotFound(),
             UserNotFoundException or NotAMemberException => Problems.NotFound(exception.Message),
@@ -30,12 +36,12 @@ internal sealed class ApiExceptionHandler : IExceptionHandler
             return ValueTask.FromResult(false);
         }
 
-        return Write(httpContext, problem.Status!.Value, problem.Title!, problem.Type);
+        return Write(httpContext, problem.Status!.Value, problem.Title!, problem.Type, problem.Detail);
     }
 
-    private static async ValueTask<bool> Write(HttpContext httpContext, int status, string title, string? type)
+    private static async ValueTask<bool> Write(HttpContext httpContext, int status, string title, string? type, string? detail)
     {
-        await Problems.WriteAsync(httpContext, status, title, type).ConfigureAwait(false);
+        await Problems.WriteAsync(httpContext, status, title, type, detail).ConfigureAwait(false);
         return true;
     }
 }
