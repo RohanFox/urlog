@@ -44,6 +44,12 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
 
     public string MetadataPath => Path.Combine(_directory.FullName, "metadata.db");
 
+    /// <summary>Where this host keeps evidence: a folder of its own, removed with the factory.</summary>
+    public string EvidenceRoot => Path.Combine(_directory.FullName, "intake");
+
+    /// <summary>The intake volume as the upload gate sees it; roomy unless a test says otherwise.</summary>
+    public FakeDiskProbe Disk { get; } = new();
+
     /// <summary>Every row of the metadata file as it was when the host was built, for tests that assert the host wrote nothing.</summary>
     public string MetadataAtStart { get; private set; } = string.Empty;
 
@@ -59,6 +65,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
         builder.UseSetting("Urlog:Metadata:Path", MetadataPath);
         builder.UseSetting("Urlog:Ingest:Enabled", "false"); // no event store behind these tests; the runner has its own
         builder.UseSetting("Urlog:ClickHouse:RetryInterval", "00:00:00.050");
+        builder.UseSetting("Urlog:Ingest:EvidenceRoot", EvidenceRoot);
         if (paired && !File.Exists(MetadataPath))
         {
             var id = StoreId;
@@ -89,6 +96,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<ILoggerProvider>(Logs);
             services.AddSingleton<Urlog.Core.Jobs.IStoreIdentitySource>(EventStore);
+            services.AddSingleton<Urlog.Core.Jobs.IDiskProbe>(Disk);
             services.AddTransient<IStartupFilter, TestClientAddressFilter>();
         });
     }
@@ -116,6 +124,12 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             SqliteConnection.ClearAllPools();
             try
             {
+                // Evidence is read-only on disk, which on Windows also stops a delete.
+                foreach (var file in _directory.EnumerateFiles("*", SearchOption.AllDirectories))
+                {
+                    file.Attributes = FileAttributes.Normal;
+                }
+
                 _directory.Delete(recursive: true);
             }
             catch (IOException)
@@ -141,6 +155,16 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             next(app);
         };
     }
+}
+
+/// <summary>Free and total bytes of every volume, as a test sets them.</summary>
+internal sealed class FakeDiskProbe : Urlog.Core.Jobs.IDiskProbe
+{
+    public long FreeBytes { get; set; } = 500L << 30;
+
+    public long TotalBytes { get; set; } = 1000L << 30;
+
+    public Urlog.Core.Ingest.DiskSpace Measure(string path) => new(path, FreeBytes, TotalBytes);
 }
 
 /// <summary>The event store as the host's store identity check sees it: an identity, none, or no answer.</summary>
@@ -260,6 +284,23 @@ internal sealed class ApiClient(HttpClient http, string address) : IDisposable
         if (body is not null)
         {
             request.Content = JsonContent.Create(body, options: ApiFactory.Json);
+        }
+
+        return await Http.SendAsync(request);
+    }
+
+    /// <summary>A request built by the test (tus headers, a binary body), with the session's cookie, CSRF token and address added.</summary>
+    public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, bool csrf = true)
+    {
+        request.Headers.Add(ApiFactory.ClientAddressHeader, Address);
+        if (Cookie is not null)
+        {
+            request.Headers.Add("Cookie", Cookie);
+        }
+
+        if (csrf && Csrf is not null)
+        {
+            request.Headers.Add(CsrfMiddleware.HeaderName, Csrf);
         }
 
         return await Http.SendAsync(request);

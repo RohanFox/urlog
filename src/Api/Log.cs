@@ -38,6 +38,27 @@ internal static partial class Log
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "forwarded headers trusted from {Proxies}")]
     public static partial void TrustedProxies(ILogger logger, string proxies);
 
+    [LoggerMessage(EventId = 30, Level = LogLevel.Information, Message = "upload {Upload} of case {Case} recorded as file {File}, {Bytes} bytes")]
+    public static partial void UploadRecorded(ILogger logger, string upload, long @case, long file, long bytes);
+
+    [LoggerMessage(EventId = 31, Level = LogLevel.Warning, Message = "upload {Upload} of case {Case} was not taken by intake: {Reason}")]
+    public static partial void UploadFailed(ILogger logger, string upload, long @case, string reason);
+
+    [LoggerMessage(EventId = 32, Level = LogLevel.Error, Message = "upload {Upload} of case {Case} could not be handed to intake; the next sweep tries again")]
+    public static partial void UploadFinishFailed(ILogger logger, string upload, long @case, Exception exception);
+
+    [LoggerMessage(EventId = 33, Level = LogLevel.Information, Message = "upload {Upload} of case {Case} expired in state {State} and was removed")]
+    public static partial void UploadExpired(ILogger logger, string upload, long @case, Uploads.UploadState state);
+
+    [LoggerMessage(EventId = 34, Level = LogLevel.Warning, Message = "uploads folder of case {Case}: '{Name}' is not an upload of this server and is left alone")]
+    public static partial void UploadStranger(ILogger logger, long @case, string name);
+
+    [LoggerMessage(EventId = 35, Level = LogLevel.Information, Message = "upload sweep: {Finished} handed to intake, {Expired} expired, {Orphans} leftover file(s) removed")]
+    public static partial void UploadSweep(ILogger logger, int finished, int expired, int orphans);
+
+    [LoggerMessage(EventId = 36, Level = LogLevel.Error, Message = "upload sweep failed; it runs again at its interval")]
+    public static partial void UploadSweepFailed(ILogger logger, Exception exception);
+
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "logout '{Name}'")]
     public static partial void Logout(ILogger logger, string name);
 }

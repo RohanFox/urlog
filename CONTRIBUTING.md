@@ -30,6 +30,12 @@ file of its own gets an event store of its own:
     powershell -File tools/scratch-store.ps1 -MetadataFile <new file>     (a second ClickHouse on ports 19000/18123, no volume)
     powershell -File tools/scratch-store.ps1 -Down
 
+The upload measurement runs on such a pair: the backend as its own process with the job runner off, one large
+resumable upload cut and resumed, the backend's working set sampled once a second
+(docs/design-record.md, "Intake", Web upload):
+
+    powershell -File tools/upload-measure.ps1 -MetadataFile <the scratch file> -EvidenceRoot <a folder with room>
+
 ## Upgrades
 
 The decoders for compressed input are wrapped by checks that rely on how the .NET runtime's `DeflateStream` and

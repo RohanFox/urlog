@@ -20,6 +20,21 @@ public sealed class UrlogOptions
     public ClickHouseOptions ClickHouse { get; set; } = new();
 
     public IngestOptions Ingest { get; set; } = new();
+
+    public UploadOptions Upload { get; set; } = new();
+}
+
+/// <summary>Web upload (<c>/api/v1/cases/{caseId}/uploads</c>). The files land under <see cref="IngestOptions.EvidenceRoot"/>.</summary>
+public sealed class UploadOptions
+{
+    /// <summary>The largest file one upload may declare, in bytes. Default 20 GB.</summary>
+    public long MaxFileBytes { get; set; } = 20L << 30;
+
+    /// <summary>An unfinished upload is removed this long after its last byte arrived.</summary>
+    public TimeSpan Expiry { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>How often expired uploads are removed and interrupted hand-overs to intake are finished.</summary>
+    public TimeSpan SweepInterval { get; set; } = TimeSpan.FromMinutes(15);
 }
 
 /// <summary>
@@ -61,8 +76,11 @@ public sealed class IngestOptions
     /// <summary>The sizing for an 8 GB machine (about 180 MB of pooled buffers per job) instead of the one above.</summary>
     public bool SmallBox { get; set; }
 
-    /// <summary>Relative <c>stored_path</c> values resolve under <c>&lt;root&gt;/&lt;case id&gt;/</c>; its volume is watched by the watermark.</summary>
-    public string EvidenceRoot { get; set; } = "";
+    /// <summary>
+    /// Where evidence files are kept: relative <c>stored_path</c> values resolve under <c>&lt;root&gt;/&lt;case id&gt;/</c>,
+    /// uploads land there, and its volume is watched by the watermark. Never inside the web root.
+    /// </summary>
+    public string EvidenceRoot { get; set; } = "data/intake";
 
     public TimeSpan ProgressInterval { get; set; } = TimeSpan.FromSeconds(2);
 

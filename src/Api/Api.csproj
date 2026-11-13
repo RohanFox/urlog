@@ -10,6 +10,9 @@
     <InternalsVisibleTo Include="Urlog.Api.Tests" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="tusdotnet" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Core/Core.csproj" />
     <!-- The job runner the backend hosts parses with every registered source. -->
     <ProjectReference Include="../Sources/Sources.csproj" />

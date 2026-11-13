@@ -27,6 +27,7 @@ public static class CaseEndpoints
         one.MapPost("/members", AddMemberAsync).RequireCaseRole(MemberRole.Owner).WithName("AddCaseMember");
         one.MapPut("/members/{userId:long}", ChangeMemberRoleAsync).RequireCaseRole(MemberRole.Owner).WithName("ChangeCaseMemberRole");
         one.MapDelete("/members/{userId:long}", RemoveMemberAsync).RequireCaseRole(MemberRole.Owner).WithName("RemoveCaseMember");
+        Uploads.UploadEndpoints.Map(one);
     }
 
     private static async Task<Ok<List<CaseSummaryResponse>>> ListAsync(CurrentUser me, MetadataDb db, CancellationToken cancellationToken)

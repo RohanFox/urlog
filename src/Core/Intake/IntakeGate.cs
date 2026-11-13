@@ -6,8 +6,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Urlog.Core.Intake;
 
+/// <summary>Which of the gate's rules refused the bytes, for a caller that answers each differently.</summary>
+public enum IntakeGateRefusal
+{
+    None,
+
+    /// <summary>The case does not exist or is not active.</summary>
+    Case,
+
+    /// <summary>The ingest queue is held by the disk watermark.</summary>
+    Paused,
+
+    /// <summary>The intake volume would fall under its mark.</summary>
+    Volume,
+}
+
 /// <summary>The gate's answer: bytes may come, or they may not and why.</summary>
-public sealed record IntakeGateAnswer(bool Accepted, string? Reason)
+public sealed record IntakeGateAnswer(bool Accepted, string? Reason, IntakeGateRefusal Refusal = IntakeGateRefusal.None)
 {
     public static IntakeGateAnswer Yes { get; } = new(true, null);
 }
@@ -31,12 +46,12 @@ public sealed class IntakeGate(IDiskProbe disk, WatermarkOptions watermark)
         var state = await db.Cases.AsNoTracking().Where(c => c.Id == caseId).Select(c => (CaseState?)c.State).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (state is null)
         {
-            return new IntakeGateAnswer(false, $"case {caseId} does not exist");
+            return new IntakeGateAnswer(false, $"case {caseId} does not exist", IntakeGateRefusal.Case);
         }
 
         if (state != CaseState.Active)
         {
-            return new IntakeGateAnswer(false, $"case {caseId} is {Names.Of(state.Value)}; only an active case takes files");
+            return new IntakeGateAnswer(false, $"case {caseId} is {Names.Of(state.Value)}; only an active case takes files", IntakeGateRefusal.Case);
         }
 
         var newest = await db.Audit.AsNoTracking()
@@ -44,7 +59,7 @@ public sealed class IntakeGate(IDiskProbe disk, WatermarkOptions watermark)
             .OrderByDescending(a => a.Seq).Select(a => a.Action).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (newest == AuditActions.IngestPaused)
         {
-            return new IntakeGateAnswer(false, "ingest is paused by the disk watermark; new files are taken again when space is freed");
+            return new IntakeGateAnswer(false, "ingest is paused by the disk watermark; new files are taken again when space is freed", IntakeGateRefusal.Paused);
         }
 
         var volume = disk.Measure(intakeDirectory);
@@ -52,7 +67,7 @@ public sealed class IntakeGate(IDiskProbe disk, WatermarkOptions watermark)
         var after = volume.FreeBytes - Math.Max(0, incomingBytes);
         return after < mark
             ? new IntakeGateAnswer(false, string.Create(CultureInfo.InvariantCulture,
-                $"{volume.Name} has {volume.FreeBytes:N0} bytes free; with the {incomingBytes:N0} that would come it is under the mark of {mark:N0}"))
+                $"{volume.Name} has {volume.FreeBytes:N0} bytes free; with the {incomingBytes:N0} that would come it is under the mark of {mark:N0}"), IntakeGateRefusal.Volume)
             : IntakeGateAnswer.Yes;
     }
 }

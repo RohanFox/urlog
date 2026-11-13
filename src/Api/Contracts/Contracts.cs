@@ -4,6 +4,11 @@ using Urlog.Core.Metadata;
 
 namespace Urlog.Api.Contracts;
 
+/// <summary>What became of an upload: how far it is, and once intake has answered, the file it became or why it did not.</summary>
+/// <param name="Offset">Bytes received; equal to <paramref name="Length"/> once the file is with intake.</param>
+/// <param name="FileId">The file record: the new one for <c>done</c>, the one that already held the bytes for <c>duplicate</c>.</param>
+public sealed record UploadStatusResponse(string Id, Urlog.Api.Uploads.UploadState State, long Offset, long Length, string Name, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, long? FileId, string? Sha256, long? JobId, string? Message);
+
 // Request and response records of /api/v1. JSON is snake_case with enums as their stored text (ApiHost). No response
 // carries password_hash, a session id or another session's CSRF token: the records have no such members.
 

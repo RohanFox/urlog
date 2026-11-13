@@ -10,8 +10,8 @@ namespace Urlog.Api.Tests;
 
 /// <summary>
 /// The route theory: every registered route under a case answers 404 to a non-member and to an admin without membership,
-/// 403 to a read-only member on every mutation, and the 404 body equals the one for an id that does not exist. Plus the
-/// startup assertion that refuses to start a host with an unguarded route.
+/// 403 to a read-only member wherever the route asks for more than reading, and the 404 body equals the one for an id that
+/// does not exist. Plus the startup assertion that refuses to start a host with an unguarded route.
 /// </summary>
 public sealed class CaseAccessTests
 {
@@ -20,7 +20,7 @@ public sealed class CaseAccessTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>Every (method, route) with a case id in the live route table, from the factory's EndpointDataSource.</summary>
-    public static IEnumerable<TheoryDataRow<string, string>> CaseRoutes()
+    public static IEnumerable<TheoryDataRow<string, string, string>> CaseRoutes()
     {
         using var factory = new ApiFactory();
         foreach (var endpoint in factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>())
@@ -34,7 +34,9 @@ public sealed class CaseAccessTests
 
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["GET"])
             {
-                yield return new TheoryDataRow<string, string>(method, text);
+                // The role the route itself asks for; the startup assertion guarantees there is one.
+                var needs = Names.Of(endpoint.Metadata.GetMetadata<CaseAccessRequirement>()!.Minimum);
+                yield return new TheoryDataRow<string, string, string>(method, text, needs);
             }
         }
     }
@@ -43,20 +45,26 @@ public sealed class CaseAccessTests
     public void TheRouteTableHasTheCaseRoutes()
     {
         var routes = CaseRoutes().Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
-        Assert.True(routes.Count == 5, string.Join(" | ", routes));
+        Assert.True(routes.Count == 11, string.Join(" | ", routes));
         Assert.Equal(
         [
             "DELETE /api/v1/cases/{caseId:long}/members/{userId:long}",
+            "DELETE /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "GET /api/v1/cases/{caseId:long}",
             "GET /api/v1/cases/{caseId:long}/members",
+            "GET /api/v1/cases/{caseId:long}/uploads/{uploadId}",
+            "HEAD /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
+            "OPTIONS /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
+            "PATCH /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "POST /api/v1/cases/{caseId:long}/members",
+            "POST /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "PUT /api/v1/cases/{caseId:long}/members/{userId:long}",
         ], routes);
     }
 
     [Theory]
     [MemberData(nameof(CaseRoutes))]
-    public async Task EveryCaseRouteRefusesANonMember(string method, string route)
+    public async Task EveryCaseRouteRefusesANonMember(string method, string route, string needs)
     {
         await using var factory = new ApiFactory();
         var alice = await factory.AddUserAsync("alice", Password);
@@ -71,7 +79,9 @@ public sealed class CaseAccessTests
         Assert.Equal(HttpStatusCode.Created, share.StatusCode);
 
         var http = new HttpMethod(method);
-        var path = route.Replace("{caseId:long}", "1", StringComparison.Ordinal).Replace("{userId:long}", alice.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        const string upload = "0123456789abcdef0123456789abcdef";
+        var path = route.Replace("{caseId:long}", "1", StringComparison.Ordinal).Replace("{userId:long}", alice.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal);
         var body = http == HttpMethod.Post || http == HttpMethod.Put ? new { } : null;
 
         // B is not a member: 404, with the same body as an id that does not exist.
@@ -79,7 +89,8 @@ public sealed class CaseAccessTests
         await b.LoginAsync("bob", Password);
         var asNonMember = await b.SendAsync(http, path, body);
         Assert.Equal(HttpStatusCode.NotFound, asNonMember.StatusCode);
-        var unknownPath = route.Replace("{caseId:long}", "4242", StringComparison.Ordinal).Replace("{userId:long}", "1", StringComparison.Ordinal);
+        var unknownPath = route.Replace("{caseId:long}", "4242", StringComparison.Ordinal).Replace("{userId:long}", "1", StringComparison.Ordinal)
+            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal);
         var asUnknown = await a.SendAsync(http, unknownPath, body);
         Assert.Equal(HttpStatusCode.NotFound, asUnknown.StatusCode);
         Assert.Equal(await asUnknown.Content.ReadAsStringAsync(Ct), await asNonMember.Content.ReadAsStringAsync(Ct));
@@ -89,18 +100,23 @@ public sealed class CaseAccessTests
         await root.LoginAsync("root", Password);
         Assert.Equal(HttpStatusCode.NotFound, (await root.SendAsync(http, path, body)).StatusCode);
 
-        // A read-only member: every mutation is 403 (the case is visible), every GET is not refused by the ACL.
+        // A read-only member: a route that asks for reading answers, every other one is 403 (the case is visible) and
+        // says which role it needs, whatever its method.
         using var c = factory.Client();
         await c.LoginAsync("carol", Password);
         var asReader = await c.SendAsync(http, path, body);
-        if (http == HttpMethod.Get)
+        if (needs == "ro")
         {
+            Assert.Equal(HttpMethod.Get, http);
             Assert.Equal(HttpStatusCode.OK, asReader.StatusCode);
         }
         else
         {
             Assert.Equal(HttpStatusCode.Forbidden, asReader.StatusCode);
-            Assert.Contains("needs owner", await asReader.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+            if (http != HttpMethod.Head)
+            {
+                Assert.Contains("needs " + needs, await asReader.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+            }
         }
 
         Assert.NotEqual(bob.Id, carol.Id);

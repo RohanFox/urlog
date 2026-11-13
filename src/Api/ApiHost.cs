@@ -4,6 +4,9 @@ using System.Text.Json.Serialization;
 using Urlog.Api.Auth;
 using Urlog.Api.Endpoints;
 using Urlog.Api.Middleware;
+using Urlog.Api.Uploads;
+using Urlog.Core.Intake;
+using Urlog.Core.Sources;
 using Urlog.Core.Jobs;
 using Urlog.Core.Metadata;
 using Microsoft.AspNetCore.Authentication;
@@ -38,8 +41,9 @@ public static class ApiHost
             && o.Auth.IdleTimeout > TimeSpan.Zero && o.Auth.AbsoluteTimeout > TimeSpan.Zero && o.Auth.LockoutDuration > TimeSpan.Zero
             && o.Ingest.MaxConcurrentJobs > 0 && o.Ingest.Writers > 0 && o.Ingest.Parallelism >= 0 && o.Ingest.ProgressInterval > TimeSpan.Zero
             && o.Ingest.Watermark.MinFreeBytes >= 0 && o.Ingest.Watermark.MinFreePercent is >= 0 and <= 100
-            && o.ClickHouse.RetryInterval > TimeSpan.Zero,
-            "Urlog: metadata path, lockout, throttle, session timeouts and the ingest settings must be set and in range").ValidateOnStart();
+            && o.ClickHouse.RetryInterval > TimeSpan.Zero
+            && !string.IsNullOrWhiteSpace(o.Ingest.EvidenceRoot) && o.Upload.MaxFileBytes > 0 && o.Upload.Expiry > TimeSpan.Zero && o.Upload.SweepInterval > TimeSpan.Zero,
+            "Urlog: metadata path, lockout, throttle, session timeouts, the evidence root and the ingest and upload settings must be set and in range").ValidateOnStart();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(sp =>
@@ -65,6 +69,24 @@ public static class ApiHost
             services.AddHostedService<IngestService>();
         }
         services.AddSingleton<LoginThrottle>();
+
+        // Web upload: the bytes land under the evidence root and reach the records through the intake pipeline alone.
+        services.AddSingleton(sp => new UploadFolders(EvidenceRoot(sp.GetRequiredService<IOptions<UrlogOptions>>().Value, builder.Environment)));
+        services.AddSingleton(sp =>
+        {
+            var catalog = new SourceCatalog();
+            catalog.Add(Urlog.Sources.LogSourceRegistry.Registrations);
+            return new IntakePipeline(sp.GetRequiredService<MetadataStore>(), catalog, sp.GetRequiredService<UploadFolders>().Root);
+        });
+        services.AddSingleton<IDiskProbe, DriveDiskProbe>();
+        services.AddSingleton(sp =>
+        {
+            var mark = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.Ingest.Watermark;
+            return new IntakeGate(sp.GetRequiredService<IDiskProbe>(), new WatermarkOptions { MinFreeBytes = mark.MinFreeBytes, MinFreePercent = mark.MinFreePercent });
+        });
+        services.AddSingleton<UploadFinaliser>();
+        services.AddSingleton<UploadSweeper>();
+        services.AddHostedService<UploadSweepService>();
 
         services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, null);
@@ -117,6 +139,13 @@ public static class ApiHost
             Log.TrustedProxies(app.Logger, listed);
         }
 
+        // Evidence is reached through the API and its case ACL, never as a file of the site.
+        var evidence = app.Services.GetRequiredService<UploadFolders>().Root;
+        if (app.Environment.WebRootPath is { Length: > 0 } web && IsUnder(evidence, web))
+        {
+            throw new InvalidOperationException($"Urlog:Ingest:EvidenceRoot ({evidence}) lies inside the web root ({Path.GetFullPath(web)}), whose files are served to anyone; the host refuses to start");
+        }
+
         app.UseExceptionHandler();
         app.UseStatusCodePages();
         // Before anything that reads the metadata file: until the store identity check has passed, only the health route answers.
@@ -149,6 +178,22 @@ public static class ApiHost
         {
             app.MapFallbackToFile("index.html").AllowAnonymous();
         }
+    }
+
+    /// <summary>The evidence root as a full path; a relative setting is under the content root.</summary>
+    public static string EvidenceRoot(UrlogOptions options, IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(environment);
+        var root = options.Ingest.EvidenceRoot;
+        return Path.GetFullPath(Path.IsPathRooted(root) ? root : Path.Combine(environment.ContentRootPath, root));
+    }
+
+    private static bool IsUnder(string path, string directory)
+    {
+        var parent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)) + Path.DirectorySeparatorChar;
+        var child = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
+        return child.StartsWith(parent, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
 
     /// <summary>
