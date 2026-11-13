@@ -50,7 +50,7 @@ internal static class FileDetection
             case FileKind.Rejected:
                 throw new CliException($"{record.Format}: {record.Message}");
             case FileKind.Container:
-                throw new CliException($"{string.Join(" > ", record.Containers)}: an archive is expanded by intake, not by this command; extract it and pass its members");
+                throw new CliException($"{string.Join(" > ", record.Containers)}: an archive is expanded by intake, not by this command; use 'urlog enqueue', which records each member");
             case FileKind.Log when wanted is null:
                 var layout = record.Layout is null ? (record.LayoutKnown ? string.Empty : ", layout unknown") : $", layout {record.Layout}";
                 Console.WriteLine($"source    {record.SourceId} ({Names.Of(record.Band)}{layout}, {wrapping})");

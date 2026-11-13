@@ -34,7 +34,11 @@ public enum FileSource
     Cli,
 }
 
-/// <summary>Where an evidence file stands. <c>Artifact</c> is a non-log member recorded and never parsed.</summary>
+/// <summary>
+/// Where an evidence file stands. <c>Artifact</c> is a file that is recorded and never parsed; <c>Expanded</c> is a
+/// container whose members all have their own records; <c>Unreadable</c> is an archive member whose content the
+/// archive lists and cannot deliver (encrypted, an unsupported method, a wrong CRC), recorded and never parsed.
+/// </summary>
 public enum FileState
 {
     Received,
@@ -43,12 +47,16 @@ public enum FileState
     Quarantined,
     Artifact,
     Archived,
+    Expanded,
+    Unreadable,
 }
 
+/// <summary><c>Expand</c> lists a container and records its members; it writes no events.</summary>
 public enum JobKind
 {
     Parse,
     Reparse,
+    Expand,
 }
 
 /// <summary>Design record, "Consistency": <c>queued -> parsing -> done | failed</c>; <c>cancelled</c> is the cancel of a queued job.</summary>

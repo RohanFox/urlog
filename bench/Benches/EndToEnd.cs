@@ -82,6 +82,20 @@ public class EndToEnd : IDisposable
         return result.Rows;
     }
 
+    /// <summary>
+    /// <see cref="PipelineNginx1G"/> with the job runner's <c>TimeRangeSink</c> in front of the counting sink: the
+    /// difference between the two is what the scan of each batch's timestamp column for the file's least and
+    /// greatest event time costs.
+    /// </summary>
+    [Benchmark]
+    public async Task<long> PipelineNginx1GTimeRange()
+    {
+        var sink = new Urlog.Core.Jobs.TimeRangeSink(new CountingBatchSink());
+        using var file = OpenFixture();
+        var result = await _pipeline.RunAsync(file, _source, _file, sink);
+        return sink.Max is null ? -1 : result.Rows;
+    }
+
     [Benchmark]
     public async Task<long> StubPipelineNginx1G()
     {

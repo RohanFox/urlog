@@ -231,6 +231,24 @@ internal sealed class HookedSource(Action<ParseContext> beforeChunk, bool statef
     }
 }
 
+/// <summary>The numbered-line source declared as a format with naive timestamps, for the tests of the DST flag.</summary>
+internal sealed class NaiveLineSource : ILogSource
+{
+    public const string Id = "naive-lines";
+
+    private readonly NumberedLineSource _inner = new();
+
+    public SourceInfo Info { get; } = new(Id, [], "numbered lines read with the zone hint", 1, NaiveTimestamps: true);
+
+    public Framing Framing => _inner.Framing;
+
+    public FieldSchema Schema => _inner.Schema;
+
+    public float Sniff(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, SniffContext ctx) => 0f;
+
+    public void Parse(ReadOnlySequence<byte> framedChunk, ParseContext ctx, IBatchWriter batch) => _inner.Parse(framedChunk, ctx, batch);
+}
+
 /// <summary>A migrated metadata file, a directory for evidence files, a fake event store, and the calls a runner test makes.</summary>
 internal sealed class RunnerHarness : IAsyncDisposable
 {
@@ -282,14 +300,39 @@ internal sealed class RunnerHarness : IAsyncDisposable
         WorkerName = "test",
     };
 
+    /// <summary>Where the harness keeps its files: evidence that "arrived" is written here.</summary>
+    public string Root => _directory.FullName;
+
+    /// <summary>The cache directory the harness's runners use for seekable copies of containers.</summary>
+    public string CacheRoot => Path.Combine(_directory.FullName, "archive-cache");
+
+    /// <summary>The intake pipeline over the harness's metadata file and the sources its runners know.</summary>
+    public Urlog.Core.Intake.IntakePipeline Intake(string? evidenceRoot = null, Urlog.Core.Intake.Archives.ArchiveLimits? limits = null) => new(Store, Catalog(), evidenceRoot, limits: limits);
+
+    /// <summary>Writes <paramref name="content"/> under the harness directory and returns its path.</summary>
+    public async Task<string> WriteAsync(string name, byte[] content)
+    {
+        var path = Path.Combine(_directory.FullName, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, content, Ct);
+        return path;
+    }
+
     public JobRunner Runner(JobRunnerOptions? options = null)
+    {
+        options ??= Options();
+        return new JobRunner(Store, Events, Catalog(), options.CacheRoot is null ? options with { CacheRoot = CacheRoot } : options, Disk);
+    }
+
+    private SourceCatalog Catalog()
     {
         var catalog = new SourceCatalog();
         catalog.Add(LogSourceRegistry.Registrations);
         catalog.Add([new SourceRegistration(HookedSource.Id, [], () => new HookedSource(ctx => BeforeChunk(ctx)))]);
+        catalog.Add([new SourceRegistration(NaiveLineSource.Id, [], () => new NaiveLineSource())]);
         // The fallback id the runner resolves a file without a source to; the numbered-line source stands in for it.
         catalog.Add([new SourceRegistration(Urlog.Core.Detection.FormatDetector.GenericSourceId, [], () => new NumberedLineSource())]);
-        return new JobRunner(Store, Events, catalog, options ?? Options(), Disk);
+        return catalog;
     }
 
     public MetadataDb Open() => Store.CreateDbContext();
@@ -301,7 +344,7 @@ internal sealed class RunnerHarness : IAsyncDisposable
     }
 
     /// <summary>Writes <paramref name="content"/> to a file, records it as intake would (hash first) and queues its parse.</summary>
-    public async Task<(EvidenceFile File, Job Job, string Path)> AddFileAsync(long caseId, byte[] content, string name, string? source = "test-lines")
+    public async Task<(EvidenceFile File, Job Job, string Path)> AddFileAsync(long caseId, byte[] content, string name, string? source = "test-lines", string? compression = null, string? timezone = null, DateTime? fileTime = null)
     {
         var path = Path.Combine(_directory.FullName, $"{caseId}-{name}");
         await File.WriteAllBytesAsync(path, content, Ct);
@@ -319,6 +362,9 @@ internal sealed class RunnerHarness : IAsyncDisposable
             Uploader = "alice",
             ReceivedAt = DateTime.UtcNow,
             Encoding = "utf8",
+            Compression = compression,
+            Timezone = timezone,
+            FileTime = fileTime,
             DetectedSource = source,
         };
         var added = (await FileOperations.AddAsync(db, Store.Audit, new AuditActor("alice"), file, Ct)).File;
@@ -360,9 +406,15 @@ internal sealed class RunnerHarness : IAsyncDisposable
         SqliteConnection.ClearAllPools();
         try
         {
+            // Cache copies and evidence under a root are read-only on disk, which a recursive delete does not get past.
+            foreach (var file in _directory.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
             _directory.Delete(recursive: true);
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // A straggling handle on Windows: the temp directory is cleaned by the OS eventually.
         }

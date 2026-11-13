@@ -27,7 +27,7 @@ public sealed class GenericSource : ILogSource
 
     internal const int PieceBytes = 64 << 10;
 
-    public SourceInfo Info { get; } = new("generic", ["raw"], "generic text (one event per line, best-effort timestamp)", 1, Stateful: true);
+    public SourceInfo Info { get; } = new("generic", ["raw"], "generic text (one event per line, best-effort timestamp)", 1, Stateful: true, NaiveTimestamps: true);
 
     public Framing Framing => Framing.Line;
 

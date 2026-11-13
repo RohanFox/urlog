@@ -14,15 +14,52 @@ public sealed class EvidenceFile
     /// <summary>Null = unassigned (flagged in the UI, never blocked).</summary>
     public long? HostId { get; set; }
 
+    /// <summary>The nearest container this file is a member of; null for a file that arrived on its own.</summary>
     public long? ParentFileId { get; init; }
 
-    /// <summary>Path inside the parent archive, e.g. <c>web-01/nginx/access.log.3</c>.</summary>
+    /// <summary>The file that arrived, for a member at any depth: the caps of an archive are counted over its whole tree.</summary>
+    public long? RootFileId { get; init; }
+
+    /// <summary>Containers above this file: 0 for a file that arrived on its own.</summary>
+    public int ArchiveDepth { get; init; }
+
+    /// <summary>
+    /// The whole chain from the file that arrived, <c>!</c> after each container:
+    /// <c>bundle.zip!logs/inner.tar.gz!web-01/nginx/access.log.3</c>. Host inference reads it.
+    /// </summary>
     public string? ArchivePath { get; init; }
+
+    /// <summary>Entry number in the parent container, in the order the container lists them, from 0.</summary>
+    public int? MemberOrdinal { get; init; }
+
+    /// <summary>For a tar member, where its data starts in the tar, so a parse seeks instead of walking the headers.</summary>
+    public long? MemberOffset { get; init; }
+
+    /// <summary>
+    /// For a container that cannot be seeked to a member as stored (a compressed tar, a container inside another):
+    /// its seekable copy, relative to the cache root. Derived, never evidence: rebuilt when missing.
+    /// </summary>
+    public string? CachePath { get; set; }
+
+    /// <summary>Members of this container whose records are written: where an interrupted expansion goes on.</summary>
+    public int ExpandedMembers { get; set; }
 
     /// <summary>64 lowercase hex characters, taken over the raw bytes before anything else (rule 1).</summary>
     public required string Sha256 { get; init; }
 
     public long Size { get; init; }
+
+    /// <summary>
+    /// True when <see cref="Sha256"/> and <see cref="Size"/> are over the entry's bytes as the archive stores them
+    /// (compressed or encrypted), because its content could not be read. Only for <c>unreadable</c> members.
+    /// </summary>
+    public bool HashOfStoredBytes { get; init; }
+
+    /// <summary>For an unreadable member: the content size its archive states.</summary>
+    public long? StatedSize { get; init; }
+
+    /// <summary>For an unreadable member: why its content could not be read.</summary>
+    public string? UnreadableReason { get; init; }
 
     public required string OriginalName { get; init; }
 
@@ -42,6 +79,27 @@ public sealed class EvidenceFile
     public string? Timezone { get; set; }
 
     public int? YearHint { get; set; }
+
+    /// <summary>
+    /// True when a person gave <see cref="YearHint"/>; false when it was derived from the file's own time or the
+    /// arrival date. A given year holds for every member of an archive, like the zone; a derived one does not.
+    /// </summary>
+    public bool YearGiven { get; init; }
+
+    /// <summary>True when nothing but the arrival date supports <see cref="YearHint"/>.</summary>
+    public bool YearAssumed { get; set; }
+
+    /// <summary>True when <see cref="HostId"/> came from a path pattern and no person has confirmed it.</summary>
+    public bool HostInferred { get; set; }
+
+    /// <summary>The pattern that proposed the host, kept so a wrong rule can be found.</summary>
+    public string? HostRule { get; set; }
+
+    /// <summary>
+    /// Every other place the same bytes arrived at in this case: a JSON array of <c>{path, host, at}</c>, one entry
+    /// per <c>file_duplicate</c> row. Null when the bytes were seen once.
+    /// </summary>
+    public string? SeenPaths { get; set; }
 
     public required string Encoding { get; init; }
 
@@ -81,4 +139,37 @@ public sealed class EvidenceFile
     public long RowCount { get; set; }
 
     public long RejectCount { get; set; }
+
+    /// <summary>
+    /// The compressed input ended before its format says it should: the rows are what could be read. Set by the
+    /// commit that made them visible, with the two offsets below.
+    /// </summary>
+    public bool InputTruncated { get; set; }
+
+    /// <summary>
+    /// For an archive member: its container ends inside this member's data, so the member's bytes are the part
+    /// that is there. Set when the member is recorded and never cleared: no parse can make the missing bytes appear.
+    /// </summary>
+    public bool ContainerCut { get; init; }
+
+    /// <summary>Bytes of decoded content that were read before the input ended.</summary>
+    public long? TruncatedDecodedOffset { get; set; }
+
+    /// <summary>Bytes of the stored (compressed) input the decoder had when it ended.</summary>
+    public long? TruncatedStoredOffset { get; set; }
+
+    /// <summary>
+    /// Stored bytes behind the end of the compressed data that are no further member, frame or stream (padding,
+    /// anything else). The content is whole; the count is kept so the record says the file holds more than its logs.
+    /// </summary>
+    public long TrailingBytes { get; set; }
+
+    /// <summary>True when <see cref="TrailingBytes"/> is a lower bound and not a proved count.</summary>
+    public bool TrailingBytesInexact { get; set; }
+
+    /// <summary>
+    /// The file has naive timestamps, was read with one offset of a zone, and its events lie on both sides of a
+    /// change of that zone's offset: times may be one hour off on one side.
+    /// </summary>
+    public bool SpansDst { get; set; }
 }

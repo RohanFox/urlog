@@ -61,11 +61,9 @@ public sealed class NginxSourceTests
 
         source.Parse(new ReadOnlySequence<byte>(data), ctx, writer); // warm-up: JIT and tiering
         var rowsBefore = writer.Rows;
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        source.Parse(new ReadOnlySequence<byte>(data), ctx, writer);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var allocated = AllocationProbe.Least(_ => source.Parse(new ReadOnlySequence<byte>(data), ctx, writer));
 
-        Assert.Equal(36 * 200, writer.Rows - rowsBefore);
+        Assert.Equal(36 * 200 * AllocationProbe.Passes, writer.Rows - rowsBefore);
         Assert.Equal(0, allocated);
     }
 

@@ -37,7 +37,7 @@ public sealed class AuditedOperationsTests
         Assert.Equal((AuditTargets.File, (long?)file.Id), (rows[2].TargetType, rows[2].TargetId));
         Assert.Equal($$"""{"archive_path":null,"case_name":"incident 1","original_name":"a.log","sha256":"{{file.Sha256}}","size":5,"source":"web"}""", rows[2].DetailsJson);
         Assert.Equal((long?)file.Id, rows[3].TargetId);
-        Assert.Equal($$"""{"arrival_name":"b.log","arrival_source":"web","case_name":"incident 1","original_name":"a.log","sha256":"{{file.Sha256}}","size":5}""", rows[3].DetailsJson);
+        Assert.Equal($$"""{"arrival_archive_path":null,"arrival_host":null,"arrival_name":"b.log","arrival_source":"web","case_name":"incident 1","original_name":"a.log","sha256":"{{file.Sha256}}","size":5}""", rows[3].DetailsJson);
         Assert.Equal("""{"case_name":"incident 1","from":"active","to":"closed"}""", rows[4].DetailsJson);
         Assert.Equal("""{"case_name":"incident 1","from":"closed","to":"active"}""", rows[5].DetailsJson);
 

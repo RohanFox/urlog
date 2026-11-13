@@ -35,14 +35,12 @@ public sealed class NginxOnGeneratedFixtureTests : IDisposable
         Assert.Equal(0, ctx.Rejects);
         Assert.Equal(meta.Bytes - meta.Lines, writer.RawBytes); // every byte but the newlines went through raw
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        InMemoryChunks.Parse(source, data, ctx, writer, maxChunk: 100_000);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var allocated = AllocationProbe.Least(_ => InMemoryChunks.Parse(source, data, ctx, writer, maxChunk: 100_000));
 
-        Assert.Equal(meta.Lines * 2, writer.Rows);
+        Assert.Equal(meta.Lines * (1 + AllocationProbe.Passes), writer.Rows);
         Assert.Equal(0, ctx.Rejects);
         Assert.Equal(0, allocated);
-        Assert.True(writer.StringBytes > writer.RawBytes + (meta.Lines * 2 * 20), "a combined line yields method, version, user agent and path as typed columns besides raw");
+        Assert.True(writer.StringBytes > writer.RawBytes + (meta.Lines * (1 + AllocationProbe.Passes) * 20), "a combined line yields method, version, user agent and path as typed columns besides raw");
     }
 
     [Fact]

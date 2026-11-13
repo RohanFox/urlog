@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Urlog.Cli;
 using Urlog.Core;
 
-// urlog migrate | ingest | enqueue | worker | query | bench | verify-audit | backup | user | case.
+// urlog migrate | ingest | enqueue | expand | worker | query | bench | verify-audit | backup | user | case.
 if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
 {
     Usage();
@@ -37,6 +37,7 @@ try
         "migrate" => await MigrateCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "ingest" => await IngestCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "enqueue" => await EnqueueCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
+        "expand" => await ExpandCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "worker" => await WorkerCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "query" => await QueryCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "bench" => await BenchCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
@@ -78,10 +79,11 @@ static void Usage()
         urlog migrate
         urlog ingest --case <id> --host <name> [--host-id n] [--file-id n] [--generation n] [--source id]
                      [--format <nginx log_format or layout>] [--tz zone] [--year yyyy] [--parallelism n] [--writers n] [--slo] <file>
-        urlog enqueue --db <metadata.db> --case <id> --host <name> [--source id] [--format <nginx log_format or layout>]
-                     [--tz zone] [--year yyyy] <file>
+        urlog enqueue --db <metadata.db> --case <id> [--host name] [--source id] [--format <nginx log_format or layout>]
+                     [--tz zone] [--year yyyy] [--evidence-root dir] <file>
+        urlog expand --db <metadata.db> --file <id> [--max-depth n] [--max-ratio n] [--max-total-gb n] [--max-members n]
         urlog worker --db <metadata.db> [--once] [--jobs n] [--parallelism n] [--writers n] [--small-box]
-                     [--evidence-root dir] [--progress-interval ms] [--commit-timeout s]
+                     [--evidence-root dir] [--cache-root dir] [--progress-interval ms] [--commit-timeout s]
                      [--min-free-gb 20] [--min-free-percent 10]
         urlog query  --case <id> [--from t --to t] [--tz zone] [--now t] [--sql] [--explain] '<spl>'
         urlog bench  query --case <id> [--runs 20] [--cold] '<spl>'
@@ -104,8 +106,14 @@ static void Usage()
         enqueue records a file in the metadata store (SHA-256 first, then detection; the file stays where it is) and
         queues its parse; the same bytes in the same case are a duplicate and are not queued again. Text no parser
         claims is queued for the generic source. A file that is not a log (a document, an image, a binary journal, an
-        empty file) is recorded as an artifact and not queued; --source parses it anyway. A packet capture and an
-        archive are refused. worker runs the
+        empty file) is recorded as an artifact and not queued; --source parses it anyway. A packet capture is refused
+        and leaves an audit row. An archive (zip, tar, a compressed tar, archives inside archives to a depth of 3)
+        is queued for expansion: every member gets its own record, hash and job. Without --host the file name and
+        each member's path propose a host; a file no pattern fits stays unassigned and is parsed all the same.
+        An archive that would expand more than 200:1, to more than 250 GB or to more than 100,000 members fails its
+        job and records none of its members; expand queues it again with limits given by hand, and that request is
+        in the audit chain with the limits. A compressed input that is cut short is parsed as far as it reads and
+        its record says "input truncated" with the position. worker runs the
         queue as the ingest account: one runner per metadata file, each file hashed again as it is read and compared
         with its intake record before anything is committed, a file visible only after its commit. --once leaves when
         the queue is empty; without it the worker runs until Ctrl-C, which puts the running jobs back in the queue.

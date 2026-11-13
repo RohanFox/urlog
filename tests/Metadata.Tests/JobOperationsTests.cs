@@ -14,6 +14,9 @@ public sealed class JobOperationsTests
 
     private static DateTime Now => DateTime.UtcNow;
 
+    /// <summary>The outcome of a parse whose input was read to a proper end.</summary>
+    private static JobOutcome Whole => new(Urlog.Core.Pipeline.InputEnd.Complete(100, 100));
+
     [Fact]
     public async Task EnqueueNeedsAnActiveCaseAParseableFileAndNoOtherOpenJob()
     {
@@ -64,7 +67,7 @@ public sealed class JobOperationsTests
         Assert.Equal(c.Id, next!.Job.Id); // b waits: its case has a job running
         Assert.Null(await JobOperations.ClaimAsync(db, "w:3", Now, Ct));
 
-        await JobOperations.CompleteAsync(db, temp.Store.Audit, a.Id, "w:1", new JobCounts(1, 1, 10, 0, 100), Now, Ct);
+        await JobOperations.CompleteAsync(db, temp.Store.Audit, a.Id, "w:1", new JobCounts(1, 1, 10, 0, 100), Whole, Now, Ct);
         var third = await JobOperations.ClaimAsync(db, "w:1", Now, Ct);
         Assert.Equal(b.Id, third!.Job.Id);
 
@@ -120,8 +123,8 @@ public sealed class JobOperationsTests
         var third = await JobOperations.ClaimAsync(db, "w:1", Now, Ct);
         Assert.Equal((3, 2), (third!.Job.Generation, third.Job.Attempt));
 
-        await Assert.ThrowsAsync<JobStateException>(() => JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "someone-else", new JobCounts(1, 1, 1, 0, 1), Now, Ct));
-        await JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "w:1", new JobCounts(5, 5, 900, 7, 4096), Now, Ct);
+        await Assert.ThrowsAsync<JobStateException>(() => JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "someone-else", new JobCounts(1, 1, 1, 0, 1), Whole, Now, Ct));
+        await JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "w:1", new JobCounts(5, 5, 900, 7, 4096), Whole, Now, Ct);
         var done = await db.Jobs.AsNoTracking().SingleAsync(j => j.Id == job.Id, Ct);
         var file = await db.Files.AsNoTracking().SingleAsync(f => f.Id == job.FileId, Ct);
         Assert.Equal((JobState.Done, 900L, 7L, 5L), (done.State, done.Rows, done.Rejects, done.ChunksAcked));
@@ -135,7 +138,7 @@ public sealed class JobOperationsTests
         Assert.Equal(JobKind.Reparse, reparse.Kind);
         var fourth = await JobOperations.ClaimAsync(db, "w:1", Now, Ct);
         Assert.Equal((4, 3), (fourth!.Job.Generation, fourth.CommittedGeneration));
-        await JobOperations.CompleteAsync(db, temp.Store.Audit, reparse.Id, "w:1", new JobCounts(5, 5, 901, 7, 4096), Now, Ct);
+        await JobOperations.CompleteAsync(db, temp.Store.Audit, reparse.Id, "w:1", new JobCounts(5, 5, 901, 7, 4096), Whole, Now, Ct);
         var row = await db.Audit.AsNoTracking().OrderBy(a => a.Seq).LastAsync(Ct);
         Assert.Equal((AuditActions.FileReparse, AuditActions.SystemActor, AuditTargets.File, (long?)job.FileId), (row.Action, row.Actor, row.TargetType, row.TargetId));
         Assert.Contains("\"from_generation\":3", row.DetailsJson, StringComparison.Ordinal);
@@ -173,7 +176,7 @@ public sealed class JobOperationsTests
         var @case = await TempDb.AddCaseAsync(db, await TempDb.AddUserAsync(db));
         var job = await QueueAsync(temp, db, @case.Id, "a", Now);
         await JobOperations.ClaimAsync(db, "w:1", Now, Ct);
-        await JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "w:1", new JobCounts(1, 1, 10, 0, 10), Now, Ct);
+        await JobOperations.CompleteAsync(db, temp.Store.Audit, job.Id, "w:1", new JobCounts(1, 1, 10, 0, 10), Whole, Now, Ct);
 
         var reparse = await JobOperations.EnqueueAsync(db, job.FileId, Now, Ct);
         await JobOperations.ClaimAsync(db, "w:1", Now, Ct);

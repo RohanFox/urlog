@@ -1,10 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using System.IO.Compression;
 using System.Text.Unicode;
-using SharpCompress.Compressors.BZip2;
-using SharpCompress.Compressors.Xz;
-using ZstdSharp;
 
 namespace Urlog.Core.Pipeline;
 
@@ -89,20 +85,19 @@ public static class InputDecoding
         return InputEncoding.Utf8;
     }
 
-    /// <summary>Wraps <paramref name="raw"/> in the matching decompressor; <see cref="CompressionKind.None"/> returns it unchanged.</summary>
+    /// <summary>
+    /// Wraps <paramref name="raw"/> in the matching decompressor; <see cref="CompressionKind.None"/> returns it
+    /// unchanged. A compressed input cut short reads as an ordinary end of stream: ask <see cref="OpenChecked"/>'s
+    /// stream how the input ended before treating the content as whole.
+    /// </summary>
     public static Stream Decompress(Stream raw, CompressionKind compression)
     {
         ArgumentNullException.ThrowIfNull(raw);
-        return compression switch
-        {
-            CompressionKind.None => raw,
-            CompressionKind.Gzip => new GZipStream(raw, CompressionMode.Decompress),
-            CompressionKind.Zstd => new DecompressionStream(raw),
-            CompressionKind.Xz => new XZStream(raw),
-            CompressionKind.Bzip2 => BZip2Stream.Create(raw, SharpCompress.Compressors.CompressionMode.Decompress, decompressConcatenated: true),
-            _ => throw new ArgumentOutOfRangeException(nameof(compression), compression, "unknown compression"),
-        };
+        return compression == CompressionKind.None ? raw : new CheckedDecodeStream(raw, compression);
     }
+
+    /// <summary>The decompressed content with a verdict on how the stored bytes ended, for every kind including <see cref="CompressionKind.None"/>.</summary>
+    public static CheckedDecodeStream OpenChecked(Stream raw, CompressionKind compression) => new(raw, compression);
 
     /// <summary>Transcodes a UTF-16 stream to UTF-8 (BOM skipped and, when present, trusted over <paramref name="encoding"/>).</summary>
     public static Stream Transcode(Stream decompressed, InputEncoding encoding)

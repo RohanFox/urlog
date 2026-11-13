@@ -10,6 +10,15 @@ public sealed record ClaimedJob(Job Job, EvidenceFile File, string CaseName, Hos
 /// <summary>The final counts of a finished parse, written with the commit.</summary>
 public sealed record JobCounts(long ChunksRead, long ChunksParsed, long Rows, long Rejects, long BytesRead);
 
+/// <summary>
+/// What a finished parse learned about the file besides its counts. <paramref name="End"/> has no usable default:
+/// <see cref="Urlog.Core.Pipeline.InputEndKind.Unknown"/> is refused by the commit, so a path that never asked how
+/// the input ended cannot mark a file parsed.
+/// </summary>
+/// <param name="TsMin">Least event time, UTC; null when no row carried a time.</param>
+/// <param name="SpansDst">The file was read with one zone offset and its events lie on both sides of a change of it.</param>
+public sealed record JobOutcome(Urlog.Core.Pipeline.InputEnd End, DateTime? TsMin = null, DateTime? TsMax = null, bool SpansDst = false);
+
 /// <summary>What the runner found when it compared the bytes it read with the intake record (evidence rule 4).</summary>
 public sealed record IntegrityMismatch(string ActualSha256, long ActualSize);
 
@@ -63,7 +72,7 @@ public static class JobOperations
                 throw new CaseNotActiveException(@case.Id, @case.State);
             }
 
-            if (file.State is FileState.Quarantined or FileState.Artifact or FileState.Archived)
+            if (file.State is FileState.Quarantined or FileState.Artifact or FileState.Archived or FileState.Expanded or FileState.Unreadable)
             {
                 throw new JobRefusedException($"file {fileId} is {Names.Of(file.State)} and is never parsed");
             }
@@ -74,7 +83,8 @@ public static class JobOperations
             }
 
             var committed = await CommittedGenerationAsync(db, fileId, cancellationToken).ConfigureAwait(false);
-            var job = new Job { CaseId = file.CaseId, FileId = fileId, Kind = committed == 0 ? JobKind.Parse : JobKind.Reparse, CreatedAt = nowUtc };
+            var kind = FileOperations.JobFor(file) == JobKind.Expand ? JobKind.Expand : committed == 0 ? JobKind.Parse : JobKind.Reparse;
+            var job = new Job { CaseId = file.CaseId, FileId = fileId, Kind = kind, CreatedAt = nowUtc };
             db.Jobs.Add(job);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -144,12 +154,22 @@ public static class JobOperations
     /// transaction. A commit over an earlier generation is audited as <c>file_reparse</c>. The caller writes
     /// <c>file_generation</c> in ClickHouse next; a stop between the two is what the startup sync repairs.
     /// </summary>
+    /// <para>
+    /// A truncated input is committed with its flag, its two offsets and an <c>input_truncated</c> audit row, all in
+    /// this transaction: the rows become visible only together with the statement that the input was cut short.
+    /// </para>
     /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
-    public static async Task CompleteAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, DateTime nowUtc, CancellationToken cancellationToken = default)
+    /// <exception cref="ArgumentException"><paramref name="outcome"/> does not say how the input ended.</exception>
+    public static async Task CompleteAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, JobOutcome outcome, DateTime nowUtc, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
         ArgumentNullException.ThrowIfNull(counts);
+        ArgumentNullException.ThrowIfNull(outcome);
+        if (outcome.End.Kind == Urlog.Core.Pipeline.InputEndKind.Unknown)
+        {
+            throw new ArgumentException($"job {jobId}: the end of the input is unknown, and a parse is committed only once it is known to be complete or truncated", nameof(outcome));
+        }
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
@@ -171,16 +191,164 @@ public static class JobOperations
             file.State = FileState.Parsed;
             file.RowCount = counts.Rows;
             file.RejectCount = counts.Rejects;
+            // Every one of these is this parse's finding: a re-parse of a file that was cut short and has since
+            // been replaced by nothing (the bytes never change) finds the same, and a new source may find new times.
+            var end = outcome.End;
+            if (end.IsTruncated || !file.ContainerCut)
+            {
+                file.InputTruncated = end.IsTruncated;
+                file.TruncatedDecodedOffset = end.IsTruncated ? end.DecodedOffset : null;
+                file.TruncatedStoredOffset = end.IsTruncated ? end.StoredOffset : null;
+            }
+
+            file.TrailingBytes = end.TrailingBytes;
+            file.TrailingBytesInexact = end.TrailingBytes > 0 && !end.TrailingBytesExact;
+            file.TsMin = outcome.TsMin;
+            file.TsMax = outcome.TsMax;
+            file.SpansDst = outcome.SpansDst;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            var caseName = await db.Cases.Where(c => c.Id == job.CaseId).Select(c => c.Name).FirstAsync(cancellationToken).ConfigureAwait(false);
+            if (end.IsTruncated)
+            {
+                var truncation = new Dictionary<string, object?>
+                {
+                    ["decoded_offset"] = end.DecodedOffset,
+                    ["stored_offset"] = end.StoredOffset,
+                    ["compression"] = file.Compression,
+                    ["archive_path"] = file.ArchivePath,
+                    ["job_id"] = job.Id,
+                    ["generation"] = job.Generation,
+                    ["rows"] = counts.Rows,
+                };
+                await audit.AppendAsync(db, AuditEntry.ForFile(AuditActions.SystemActor, null, AuditActions.InputTruncated, file, caseName, truncation), cancellationToken).ConfigureAwait(false);
+            }
 
             if (committed > 0)
             {
-                var caseName = await db.Cases.Where(c => c.Id == job.CaseId).Select(c => c.Name).FirstAsync(cancellationToken).ConfigureAwait(false);
                 var details = new Dictionary<string, object?> { ["from_generation"] = committed, ["to_generation"] = job.Generation, ["job_id"] = job.Id, ["rows"] = counts.Rows, ["rejects"] = counts.Rejects };
                 await audit.AppendAsync(db, AuditEntry.ForFile(AuditActions.SystemActor, null, AuditActions.FileReparse, file, caseName, details), cancellationToken).ConfigureAwait(false);
             }
 
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The end of an expansion: the job is <c>done</c> and the container is <c>expanded</c>. Its members were
+    /// written before, batch by batch, each batch with its own audit rows; this adds only the summary.
+    /// </summary>
+    /// <param name="members">Entries of the container that were looked at, for the job row.</param>
+    /// <param name="truncated">The container itself ends before its end structure; null when it is whole.</param>
+    /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
+    public static async Task CompleteExpandAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, long members, string summary, Urlog.Core.Pipeline.InputEnd? truncated, string? cachePath, DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
+            if (job.Kind != JobKind.Expand)
+            {
+                throw new JobStateException($"job {jobId} is a {Names.Of(job.Kind)}, not an expansion");
+            }
+
+            var file = await db.Files.FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
+            await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            job.State = JobState.Done;
+            job.FinishedAt = nowUtc;
+            job.Rows = members;
+            job.Message = Trim(summary);
+            file.State = FileState.Expanded;
+            file.CachePath = cachePath;
+            if (truncated is { } end)
+            {
+                file.InputTruncated = true;
+                file.TruncatedDecodedOffset = end.DecodedOffset;
+                file.TruncatedStoredOffset = end.StoredOffset;
+            }
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            if (truncated is { } cut)
+            {
+                var caseName = await db.Cases.Where(c => c.Id == job.CaseId).Select(c => c.Name).FirstAsync(cancellationToken).ConfigureAwait(false);
+                var details = new Dictionary<string, object?>
+                {
+                    ["decoded_offset"] = cut.DecodedOffset,
+                    ["stored_offset"] = cut.StoredOffset,
+                    ["compression"] = file.Compression,
+                    ["archive_path"] = file.ArchivePath,
+                    ["job_id"] = job.Id,
+                    ["members"] = members,
+                };
+                await audit.AppendAsync(db, AuditEntry.ForFile(AuditActions.SystemActor, null, AuditActions.InputTruncated, file, caseName, details), cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Queues the expansion of one archive again with limits of the caller's choosing, for an archive whose
+    /// expansion failed at a cap. The limits ride on the job and apply to it alone; the request and the limits
+    /// are in the chain as <c>file_expand_rerun</c>, in the same transaction as the job.
+    /// </summary>
+    /// <param name="limitsJson">The limits as <c>ArchiveLimits.ToJson</c> writes them.</param>
+    /// <exception cref="JobRefusedException">No such file, not a container, not failed, or a job is already waiting or running.</exception>
+    public static async Task<Job> RequestExpandRerunAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long fileId, string limitsJson, IReadOnlyDictionary<string, object?> limits, DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(limits);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var file = await db.Files.FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken).ConfigureAwait(false)
+                ?? throw new JobRefusedException($"file {fileId} does not exist");
+            await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            var @case = await db.Cases.AsNoTracking().FirstAsync(c => c.Id == file.CaseId, cancellationToken).ConfigureAwait(false);
+            if (@case.State != CaseState.Active)
+            {
+                throw new CaseNotActiveException(@case.Id, @case.State);
+            }
+
+            if (file.DetectedKind != Urlog.Core.Detection.FileKind.Container)
+            {
+                throw new JobRefusedException($"file {fileId} is not an archive");
+            }
+
+            if (file.State != FileState.Failed)
+            {
+                throw new JobRefusedException($"file {fileId} is {Names.Of(file.State)}; only an archive whose expansion failed is run again");
+            }
+
+            if (await db.Jobs.AnyAsync(j => j.FileId == fileId && (j.State == JobState.Queued || j.State == JobState.Parsing), cancellationToken).ConfigureAwait(false))
+            {
+                throw new JobRefusedException($"file {fileId} already has a job waiting or running");
+            }
+
+            var failed = await db.Jobs.AsNoTracking().Where(j => j.FileId == fileId && j.State == JobState.Failed).OrderByDescending(j => j.Id).Select(j => j.Message).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            file.State = FileState.Received;
+            var job = new Job { CaseId = file.CaseId, FileId = fileId, Kind = JobKind.Expand, CreatedAt = nowUtc, Options = limitsJson };
+            db.Jobs.Add(job);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            var details = new Dictionary<string, object?>(limits, StringComparer.Ordinal) { ["job_id"] = job.Id, ["after_failure"] = failed };
+            await audit.AppendAsync(db, AuditEntry.ForFile(actor.Name, actor.UserId, AuditActions.FileExpandRerun, file, @case.Name, details), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return job;
         }
         catch
         {

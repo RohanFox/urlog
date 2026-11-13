@@ -42,6 +42,12 @@ public sealed class Job
 
     public long BytesRead { get; set; }
 
+    /// <summary>
+    /// JSON settings of this one job, null for none: the archive limits an administrator set for a rerun of an
+    /// expansion. They apply to this job only and are in the audit row of the rerun.
+    /// </summary>
+    public string? Options { get; init; }
+
     /// <summary>The failure reason verbatim (pipeline exception with chunk context), or the watermark pause message.</summary>
     public string? Message { get; set; }
 }

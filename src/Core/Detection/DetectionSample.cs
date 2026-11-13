@@ -16,12 +16,27 @@ public static class DetectionSample
 
     public const int TailBytes = 4 << 10;
 
+    /// <summary>Bytes of content handed back for the hints: enough for one first line.</summary>
+    public const int ContentBytes = 256;
+
     /// <summary>Detects the file at <paramref name="path"/>; <paramref name="fileName"/> is the name to judge (the original name, or an archive path).</summary>
     public static DetectionResult DetectFile(string path, string fileName, IReadOnlyList<ILogSource> sources, IReadOnlyDictionary<string, string>? options = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         var length = new FileInfo(path).Length;
         return Detect(() => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.None), length, fileName, sources, options);
+    }
+
+    /// <summary>
+    /// As <see cref="DetectFile(string, string, IReadOnlyList{ILogSource}, IReadOnlyDictionary{string, string}?)"/>, and
+    /// hands back the first bytes of the content (decompressed when the file is one compressed stream) for the
+    /// hints intake derives from the first line.
+    /// </summary>
+    public static DetectionResult DetectFile(string path, string fileName, IReadOnlyList<ILogSource> sources, IReadOnlyDictionary<string, string>? options, out byte[] content)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var length = new FileInfo(path).Length;
+        return Detect(() => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.None), length, fileName, sources, options, out content);
     }
 
     /// <summary>Detects <paramref name="file"/> held in memory, with the same sampling as a stored file.</summary>
@@ -32,7 +47,12 @@ public static class DetectionSample
     }
 
     /// <param name="open">Opens the stored bytes for reading from the start; called once or twice, each stream is disposed.</param>
-    public static DetectionResult Detect(Func<Stream> open, long length, string fileName, IReadOnlyList<ILogSource> sources, IReadOnlyDictionary<string, string>? options = null)
+    public static DetectionResult Detect(Func<Stream> open, long length, string fileName, IReadOnlyList<ILogSource> sources, IReadOnlyDictionary<string, string>? options = null) =>
+        Detect(open, length, fileName, sources, options, out _);
+
+    /// <param name="open">Opens the stored bytes for reading from the start; called once or twice, each stream is disposed.</param>
+    /// <param name="content">The first bytes of the content the detector judged, at most <see cref="ContentBytes"/>.</param>
+    public static DetectionResult Detect(Func<Stream> open, long length, string fileName, IReadOnlyList<ILogSource> sources, IReadOnlyDictionary<string, string>? options, out byte[] content)
     {
         ArgumentNullException.ThrowIfNull(open);
         ArgumentNullException.ThrowIfNull(fileName);
@@ -55,6 +75,7 @@ public static class DetectionSample
         var compression = InputDecoding.DetectCompression(head.AsSpan(0, headLength));
         if (compression == CompressionKind.None)
         {
+            content = head.AsSpan(0, Math.Min(headLength, ContentBytes)).ToArray();
             return FormatDetector.Detect(head.AsSpan(0, headLength), tail, input, sources);
         }
 
@@ -87,6 +108,7 @@ public static class DetectionSample
             }
         }
 
+        content = decoded.AsSpan(0, Math.Min(decodedLength, ContentBytes)).ToArray();
         input = input with { Containers = [Names.Of(compression)], DecodeError = error };
         return FormatDetector.Detect(decoded.AsSpan(0, decodedLength), default, input, sources);
     }

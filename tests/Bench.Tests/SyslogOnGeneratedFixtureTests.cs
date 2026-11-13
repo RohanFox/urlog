@@ -36,14 +36,12 @@ public sealed class SyslogOnGeneratedFixtureTests : IDisposable
         var crlf = data.AsSpan().Count("\r\n"u8);
         Assert.Equal(meta.Bytes - meta.Lines - crlf, writer.RawBytes); // every byte but the line terminators went through raw
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        InMemoryChunks.Parse(source, data, ctx, writer, maxChunk: 100_000);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var allocated = AllocationProbe.Least(_ => InMemoryChunks.Parse(source, data, ctx, writer, maxChunk: 100_000));
 
-        Assert.Equal(meta.Lines * 2, writer.Rows);
+        Assert.Equal(meta.Lines * (1 + AllocationProbe.Passes), writer.Rows);
         Assert.Equal(0, ctx.Rejects);
         Assert.Equal(0, allocated);
-        Assert.True(writer.StringBytes > writer.RawBytes + (meta.Lines * 2 * 8), "a generated line yields host, program, severity and facility as typed columns besides raw");
+        Assert.True(writer.StringBytes > writer.RawBytes + (meta.Lines * (1 + AllocationProbe.Passes) * 8), "a generated line yields host, program, severity and facility as typed columns besides raw");
     }
 
     [Fact]

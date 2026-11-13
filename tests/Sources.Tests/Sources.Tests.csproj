@@ -11,6 +11,11 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Urlog.Tests.Shared" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The allocation measurement every zero-allocation test uses. -->
+    <Compile Include="../Shared/AllocationProbe.cs" Link="Shared/AllocationProbe.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />

@@ -130,12 +130,12 @@ public sealed class FileIntakeTests
         var sha = new string('0', 64);
 
         var error = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlAsync(
-            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count) VALUES ({@case.Id}, {sha}, 1, 'a', 'a', 'web', 'u', '2026-11-06 00:00:00', 'utf8', 1, 'bogus', 0, 0)", Ct));
+            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count, archive_depth, expanded_members, host_inferred, input_truncated, spans_dst, year_assumed, trailing_bytes, trailing_bytes_inexact, container_cut, year_given, hash_of_stored_bytes) VALUES ({@case.Id}, {sha}, 1, 'a', 'a', 'web', 'u', '2026-11-06 00:00:00', 'utf8', 1, 'bogus', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", Ct));
         Assert.Contains("ck_files_state", error.Message, StringComparison.Ordinal);
 
         var sha63 = new string('0', 63);
         error = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlAsync(
-            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count) VALUES ({@case.Id}, {sha63}, 1, 'a', 'a', 'web', 'u', '2026-11-06 00:00:00', 'utf8', 1, 'received', 0, 0)", Ct));
+            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count, archive_depth, expanded_members, host_inferred, input_truncated, spans_dst, year_assumed, trailing_bytes, trailing_bytes_inexact, container_cut, year_given, hash_of_stored_bytes) VALUES ({@case.Id}, {sha63}, 1, 'a', 'a', 'web', 'u', '2026-11-06 00:00:00', 'utf8', 1, 'received', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", Ct));
         Assert.Contains("ck_files_sha256", error.Message, StringComparison.Ordinal);
     }
 

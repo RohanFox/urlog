@@ -10,11 +10,15 @@
     <InternalsVisibleTo Include="Urlog.Core.Tests" />
     <InternalsVisibleTo Include="Urlog.Integration.Tests" />
     <InternalsVisibleTo Include="Urlog.Metadata.Tests" />
+    <!-- The end-to-end bench measures the job runner's own sink wrapper. -->
+    <InternalsVisibleTo Include="Bench" />
   </ItemGroup>
   <ItemGroup>
     <!-- Decompression inside the chunk pipeline. gzip comes from System.IO.Compression. -->
     <PackageReference Include="ZstdSharp.Port" />
     <PackageReference Include="SharpCompress" />
+    <!-- CRC-32 of zip members during expansion (Intake/Archives/ArchiveExpander.cs). -->
+    <PackageReference Include="System.IO.Hashing" />
     <!-- Control-plane client and the LZ4 block codec for the Native writer. -->
     <PackageReference Include="ClickHouse.Driver" />
     <!-- The metadata store: SQLite via EF Core, schema kept Postgres-portable (tests/Metadata.Tests). -->

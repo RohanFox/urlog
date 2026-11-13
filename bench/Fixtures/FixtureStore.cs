@@ -45,6 +45,33 @@ public static class FixtureStore
 
     public static FixtureMeta Generic1G() => Ensure("generic-1g.log", () => new GenericGen(GenericSeed), OneGiB);
 
+    /// <summary>
+    /// The 1 GiB nginx fixture as one gzip member at the level <c>gzip</c> and logrotate use by default. Derived from
+    /// the fixture, written once; the decoded bytes are the fixture's, the compressed ones depend on the runtime's
+    /// zlib, so only decoded figures are compared across machines.
+    /// </summary>
+    public static string Nginx1GGzip()
+    {
+        var plain = Nginx1G();
+        var path = plain.Path + ".gz";
+        if (File.Exists(path) && File.GetLastWriteTimeUtc(path) >= File.GetLastWriteTimeUtc(plain.Path))
+        {
+            return path;
+        }
+
+        Console.WriteLine($"fixture: compressing {plain.Name} to {System.IO.Path.GetFileName(path)} ...");
+        var temp = path + ".tmp";
+        using (var source = new FileStream(plain.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan))
+        using (var target = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+        using (var gzip = new System.IO.Compression.GZipStream(target, System.IO.Compression.CompressionLevel.Optimal))
+        {
+            source.CopyTo(gzip, 1 << 20);
+        }
+
+        File.Move(temp, path, overwrite: true);
+        return path;
+    }
+
     public static void EnsureAll()
     {
         Nginx1G();

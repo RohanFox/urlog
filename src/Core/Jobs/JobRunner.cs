@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using Urlog.Core.Audit;
 using Urlog.Core.Ingest;
+using Urlog.Core.Intake;
+using Urlog.Core.Intake.Archives;
 using Urlog.Core.Metadata;
 using Urlog.Core.Pipeline;
 using Urlog.Core.Detection;
@@ -41,6 +43,8 @@ public sealed class JobRunner
     private readonly DiskWatermark _watermark;
     private readonly ILogger _logger;
     private readonly ILoggerFactory _loggers;
+    private readonly MemberStore _members;
+    private readonly ArchiveExpander _expander;
     private int _running;
     private int _paused;
     private int _syncNeeded;
@@ -65,13 +69,26 @@ public sealed class JobRunner
             local.Add(root);
         }
 
-        _watermark = new DiskWatermark(options.Watermark, disk ?? new DriveDiskProbe(), local);
+        var probe = disk ?? new DriveDiskProbe();
+        _members = new MemberStore(options.EvidenceRoot, options.CacheRoot, probe, options.Watermark);
+        _expander = new ArchiveExpander(store, _members, FormatDetector.Instantiate(sources), options.HostPatterns is null ? null : new HostInference(options.HostPatterns));
+        if (_members.CacheRoot is { } cache)
+        {
+            // The cache volume is watched like the others; the directory is made so the volume can be measured.
+            Directory.CreateDirectory(cache);
+            local.Add(cache);
+        }
+
+        _watermark = new DiskWatermark(options.Watermark, probe, local);
     }
 
     /// <summary>True while the disk watermark holds the queue.</summary>
     public bool Paused => Volatile.Read(ref _paused) == 1;
 
     public int Running => Volatile.Read(ref _running);
+
+    /// <summary>The expansion of archives this runner does; tests hook into its batches.</summary>
+    public ArchiveExpander Expander => _expander;
 
     /// <summary>What the startup reconcilers did on the last <see cref="RunAsync"/>.</summary>
     public ReconcileReport? LastReconcile { get; private set; }
@@ -300,6 +317,12 @@ public sealed class JobRunner
         var total = Stopwatch.StartNew();
         try
         {
+            if (job.Kind == JobKind.Expand)
+            {
+                await ExpandAsync(claimed, worker, stopping).ConfigureAwait(false);
+                return;
+            }
+
             // The event store may already show a generation at or above the one SQLite allocated: the id belonged to
             // a purged file, or this metadata file is older than the store. The attempt goes above it, so its rows
             // are never the visible ones before its own commit.
@@ -314,11 +337,6 @@ public sealed class JobRunner
 
             JobLog.Started(_logger, job.Id, file.Id, job.CaseId, job.Generation, job.Attempt, worker);
             var source = ResolveSource(file);
-            var path = ResolvePath(file);
-            if (!File.Exists(path))
-            {
-                throw new JobFailedException($"the evidence file is not where the intake record says (stored_path '{file.StoredPath}')");
-            }
 
             if (generation > 1)
             {
@@ -326,27 +344,39 @@ public sealed class JobRunner
                 await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, stopping).ConfigureAwait(false);
             }
 
+            // One offset for the file, taken at the file's own time and never from the clock: the same bytes give
+            // the same rows whenever they are parsed.
+            var zone = file.Timezone ?? claimed.Host?.Timezone;
             var identity = new FileIdentity(caseId, (ulong)(file.HostId ?? 0), fileId, generation, claimed.Host?.Name ?? string.Empty,
-                ZoneOffset(file.Timezone ?? claimed.Host?.Timezone), file.YearHint ?? 1970, ParseOptions(file.OverrideOptions), file.FileTime);
+                ZoneOffset(zone, file.FileTime ?? file.ReceivedAt), file.YearHint ?? 1970, ParseOptions(file.OverrideOptions), file.FileTime);
             var compression = file.Compression is { Length: > 0 } c ? Names.Parse<CompressionKind>(c) : CompressionKind.None;
             var encoding = Names.Parse<InputEncoding>(file.Encoding);
 
             PipelineResult result;
+            InputEnd inputEnd;
+            DateTime? tsMin;
+            DateTime? tsMax;
             long acked;
             string sha256;
             long hashedBytes;
             TimeSpan hashTime;
+            TimeSpan readTime;
             var sink = _events.OpenSink(_options.Pipeline);
             await using (sink.ConfigureAwait(false))
             {
-                using var raw = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
+                // The file's own bytes, read-only: its stored file, or its place inside the container it came in.
+                using var raw = OpenRaw(file);
                 using var hashing = new HashingReadStream(raw);
-                using var decoded = InputDecoding.OpenDecoded(hashing, compression, encoding);
+                using var decompressed = InputDecoding.OpenChecked(hashing, compression);
+                // A compressed log is held to the same expansion ratio and size as an archive.
+                using var limited = compression == CompressionKind.None ? (Stream)decompressed : new LimitedDecodeStream(decompressed, _options.Archive, file.Size);
+                using var decoded = InputDecoding.Transcode(limited, encoding);
+                var ranged = new TimeRangeSink(sink);
                 using var progressStop = new CancellationTokenSource();
                 var progressWriter = Task.Run(() => ProgressLoopAsync(job.Id, progress, sink, progressStop.Token), CancellationToken.None);
                 try
                 {
-                    result = await new ParsePipeline(buffers, _loggers.CreateLogger<ParsePipeline>()).RunAsync(decoded, source, identity, sink, progress, stopping).ConfigureAwait(false);
+                    result = await new ParsePipeline(buffers, _loggers.CreateLogger<ParsePipeline>()).RunAsync(decoded, source, identity, ranged, progress, stopping).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -355,6 +385,11 @@ public sealed class JobRunner
                 }
 
                 acked = sink.AckedRows;
+                // The pipeline read to the end of the decoded stream, so the decoder has said how the stored bytes ended.
+                inputEnd = decompressed.End;
+                readTime = decompressed.ReadTime;
+                tsMin = ranged.Min;
+                tsMax = ranged.Max;
                 // A decoder may stop short of the end of the file; the digest is over every byte of it.
                 var scratch = new byte[1 << 20];
                 sha256 = hashing.DrainAndFinish(scratch);
@@ -377,7 +412,9 @@ public sealed class JobRunner
             }
 
             var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
-            await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, Now(), CancellationToken.None)).ConfigureAwait(false);
+            var spansDst = source.Info.NaiveTimestamps && tsMin is { } first && tsMax is { } last && IntakeHints.SpansTransition(zone, first, last);
+            var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst);
+            await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, outcome, Now(), CancellationToken.None)).ConfigureAwait(false);
             try
             {
                 await _events.CommitFileGenerationsAsync([new(fileId, generation)], CancellationToken.None).ConfigureAwait(false);
@@ -393,6 +430,10 @@ public sealed class JobRunner
                 JobLog.CommitNotMirrored(_logger, job.Id, file.Id, e.Message);
             }
 
+            // The decoder's reads include the stored-bytes read and the hash under it; what is left is the decoding.
+            var compressionName = Names.Of(compression);
+            var decodeSeconds = Math.Max(0, (readTime - hashTime).TotalSeconds);
+            JobLog.Input(_logger, job.Id, hashedBytes, compressionName, readTime.TotalSeconds, hashTime.TotalSeconds, decodeSeconds);
             var seconds = result.Elapsed.TotalSeconds;
             JobLog.Done(_logger, job.Id, file.Id, job.Generation, result.Rows, result.Rejects, result.Bytes, seconds,
                 seconds > 0 ? result.Bytes / 1e6 / seconds : 0, hashTime.TotalSeconds, total.Elapsed.TotalSeconds);
@@ -656,32 +697,64 @@ public sealed class JobRunner
         return _sources.Create(id);
     }
 
-    private string ResolvePath(EvidenceFile file)
+    private Stream OpenRaw(EvidenceFile file)
     {
-        if (Path.IsPathRooted(file.StoredPath))
-        {
-            return file.StoredPath;
-        }
-
-        var root = _options.EvidenceRoot ?? throw new JobFailedException($"stored_path '{file.StoredPath}' is relative and no evidence root is configured");
-        return Path.Combine(root, file.CaseId.ToString(CultureInfo.InvariantCulture), file.StoredPath);
-    }
-
-    private static TimeSpan ZoneOffset(string? zone)
-    {
-        if (string.IsNullOrWhiteSpace(zone) || zone.Equals("UTC", StringComparison.OrdinalIgnoreCase))
-        {
-            return TimeSpan.Zero;
-        }
-
-        if (zone[0] is '+' or '-' && TimeSpan.TryParse(zone.AsSpan(1), CultureInfo.InvariantCulture, out var offset))
-        {
-            return zone[0] == '-' ? -offset : offset;
-        }
-
         try
         {
-            return TimeZoneInfo.FindSystemTimeZoneById(zone).GetUtcOffset(DateTime.UtcNow);
+            return _members.OpenRaw(file, LoadFile);
+        }
+        catch (Exception e) when (e is FileNotFoundException or InvalidOperationException or InvalidDataException)
+        {
+            throw new JobFailedException(e.Message, e);
+        }
+    }
+
+    private EvidenceFile LoadFile(long id)
+    {
+        using var db = _store.CreateDbContext();
+        return db.Files.AsNoTracking().FirstOrDefault(f => f.Id == id) ?? throw new JobFailedException($"file {id}, the container of this member, has no record");
+    }
+
+    /// <summary>
+    /// One <c>expand</c> job: the container is verified against its record, its members are recorded with their
+    /// own jobs, and the container becomes <c>expanded</c>. It writes no events, so there is no generation to
+    /// commit and nothing in the event store to remove when it fails.
+    /// </summary>
+    private async Task ExpandAsync(ClaimedJob claimed, string worker, CancellationToken stopping)
+    {
+        var job = claimed.Job;
+        var file = claimed.File;
+        JobLog.Started(_logger, job.Id, file.Id, job.CaseId, job.Generation, job.Attempt, worker);
+        ExpandOutcome outcome;
+        try
+        {
+            // Limits an administrator set for this one run take the place of the configured ones.
+            var limits = ArchiveLimits.FromJson(job.Options, _options.Archive);
+            outcome = await _expander.RunAsync(file, limits, stopping).ConfigureAwait(false);
+        }
+        catch (CacheSpaceException e)
+        {
+            // Not the archive's fault: the job waits, the watermark holds the queue until there is room.
+            await TerminalAsync(job.Id, db => JobOperations.RequeueAsync(db, job.Id, e.Message, countAttempt: false, _options.MaxAttempts, Now(), CancellationToken.None)).ConfigureAwait(false);
+            await CheckWatermarkAsync(CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
+
+        if (outcome.Mismatch is { } mismatch)
+        {
+            await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, Now(), CancellationToken.None)).ConfigureAwait(false);
+            JobLog.Quarantined(_logger, job.Id, file.Id, file.Sha256, mismatch.ActualSha256);
+            return;
+        }
+
+        await TerminalAsync(job.Id, db => JobOperations.CompleteExpandAsync(db, _store.Audit, job.Id, worker, outcome.Entries, outcome.Summary, outcome.Truncated, outcome.CachePath, Now(), CancellationToken.None)).ConfigureAwait(false);
+    }
+
+    private static TimeSpan ZoneOffset(string? zone, DateTime atUtc)
+    {
+        try
+        {
+            return IntakeHints.OffsetAt(zone, atUtc);
         }
         catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
         {

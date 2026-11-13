@@ -32,6 +32,8 @@ internal static class WorkerCommand
             Pipeline = pipeline,
             ExitWhenIdle = once,
             EvidenceRoot = args.Option("evidence-root"),
+            // Seekable copies of compressed and nested archives; beside the metadata file when no root is given.
+            CacheRoot = args.Option("cache-root") ?? (args.Option("evidence-root") is null ? Path.Combine(Path.GetDirectoryName(store.Path)!, "archive-cache") : null),
             ProgressInterval = TimeSpan.FromMilliseconds(args.Int("progress-interval", 2000)),
             CommitBusyTimeout = TimeSpan.FromSeconds(args.Int("commit-timeout", 60)),
             IdlePoll = TimeSpan.FromMilliseconds(once ? 100 : 1000),

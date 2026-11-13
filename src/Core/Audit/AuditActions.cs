@@ -38,7 +38,21 @@ public static class AuditActions
     public const string FileIntake = "file_intake";
     public const string FileDuplicate = "file_duplicate";
     public const string FileOverride = "file_override";
+
+    /// <summary>
+    /// A file was refused and nothing of it is stored (a packet capture, alone or inside an archive): its name,
+    /// size, SHA-256 and what it was taken for. The target is the case, since no file record exists.
+    /// </summary>
+    public const string FileRejected = "file_rejected";
+
+    /// <summary>An administrator queued the expansion of one archive again with limits of their own; the limits are in the details.</summary>
+    public const string FileExpandRerun = "file_expand_rerun";
     public const string FileReparse = "file_reparse";
+    /// <summary>
+    /// A parse was committed from a compressed input that ends before its format says it should: both offsets of
+    /// the end in the details. Written in the commit's transaction, so no truncated file is visible without it.
+    /// </summary>
+    public const string InputTruncated = "input_truncated";
     public const string IntegrityOk = "integrity_ok";
     public const string IntegrityMismatch = "integrity_mismatch";
 

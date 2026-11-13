@@ -90,7 +90,7 @@ public sealed class DetectionRecordTests
         // The table was rebuilt for the new CHECK: its other constraints and its references must have come along.
         Assert.Null(await ScalarAsync(db, "SELECT count(*) FROM pragma_foreign_key_check HAVING count(*) > 0"));
         var duplicate = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlAsync(
-            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count) VALUES (1, {sha}, 42, 'again.log', 'again.log', 'cli', 'alice', '2026-11-01 00:00:00', 'utf8', 1, 'received', 0, 0)", Ct));
+            $"INSERT INTO files (case_id, sha256, size, original_name, stored_path, source, uploader, received_at, encoding, parse_generation, state, row_count, reject_count, archive_depth, expanded_members, host_inferred, input_truncated, spans_dst, year_assumed, trailing_bytes, trailing_bytes_inexact, container_cut, year_given, hash_of_stored_bytes) VALUES (1, {sha}, 42, 'again.log', 'again.log', 'cli', 'alice', '2026-11-01 00:00:00', 'utf8', 1, 'received', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", Ct));
         Assert.Contains("UNIQUE", duplicate.Message, StringComparison.Ordinal);
         var badState = await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync("UPDATE files SET state = 'nonsense'", Ct));
         Assert.Contains("ck_files_state", badState.Message, StringComparison.Ordinal);

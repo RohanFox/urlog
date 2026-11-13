@@ -8,12 +8,14 @@ namespace Urlog.Cli;
 
 /// <summary>
 /// <c>urlog ingest --case &lt;id&gt; --host &lt;name&gt; [--host-id n] [--file-id n] [--generation n] [--source id]
-/// [--format &lt;nginx layout&gt;] [--tz zone] [--year yyyy] [--parallelism n] [--writers n] [--slo] &lt;file&gt;</c>.
+/// [--format &lt;nginx layout&gt;] [--tz zone] [--year yyyy] [--parallelism n] [--writers n] [--slo] [--allow-truncated]
+/// &lt;file&gt;</c>.
 /// The real pipeline end to end: SHA-256 over the raw bytes before anything else (evidence rule 1), detection
 /// by every registered source's <c>Sniff</c> (or <c>--source</c>), <see cref="ParsePipeline"/> into
 /// <see cref="NativeInserter"/> on the <c>events</c> table, then the <c>file_generation</c> commit. A generation
 /// above 1 is a re-parse: the file's rows are deleted first (design record, "Consistency"). No metadata store yet:
-/// the ids are arguments. Everything runs as the ingest account (<c>urlog_ingest</c>), which
+/// the ids are arguments, and so there is no file record to carry a flag: a compressed input that is cut short is
+/// not committed here unless <c>--allow-truncated</c> says so (<c>urlog enqueue</c> records the flag). Everything runs as the ingest account (<c>urlog_ingest</c>), which
 /// cannot change the schema: a missing schema is an error that names <c>urlog migrate</c>.
 /// </summary>
 internal static class IngestCommand
@@ -45,7 +47,8 @@ internal static class IngestCommand
         var zoneHint = TimeSpan.Zero;
         if (args.Option("tz") is { } tz)
         {
-            zoneHint = TimeZones.Find(tz).GetUtcOffset(DateTime.UtcNow);
+            // The offset at the file's own time, as the job runner takes it: never the clock's.
+            zoneHint = TimeZones.Find(tz).GetUtcOffset(File.GetLastWriteTimeUtc(path));
         }
 
         var parallelism = args.Int("parallelism", Math.Min(Environment.ProcessorCount, 8));
@@ -111,19 +114,40 @@ internal static class IngestCommand
         Console.WriteLine($"pipeline  {parallelism} parsers, {writers} writers, chunks {pipelineOptions.ChunkBytes >> 20} MiB, batches {pipelineOptions.BatchRows:N0} rows; case {caseId}, host {host} (#{hostId}), file #{fileId}, generation {generation}");
 
         PipelineResult result;
+        InputEnd inputEnd;
         long inserts, wireBytes, payloadBytes;
         var parse = Stopwatch.StartNew();
         await using (var inserter = new NativeInserter(connection.Inserter(writers), pipelineOptions))
         {
             using var raw = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
-            using var decoded = InputDecoding.OpenDecoded(raw, compression, encoding);
+            using var decompressed = InputDecoding.OpenChecked(raw, compression);
+            using var decoded = InputDecoding.Transcode(decompressed, encoding);
             result = await pipeline.RunAsync(decoded, source, identity, inserter, ct).ConfigureAwait(false);
+            inputEnd = decompressed.End;
             inserts = inserter.Inserts;
             wireBytes = inserter.BytesSent;
             payloadBytes = inserter.PayloadBytes;
         }
 
         parse.Stop();
+
+        if (inputEnd.Kind != InputEndKind.Complete && !(inputEnd.IsTruncated && args.Flag("allow-truncated")))
+        {
+            // Nothing was committed, so nothing is visible; the rows of this attempt go as well.
+            await store.DeleteFileRowsAsync(fileId, ct).ConfigureAwait(false);
+            throw new CliException(inputEnd.IsTruncated
+                ? $"the {Urlog.Core.Metadata.Names.Of(compression)} input is truncated: it ends after {inputEnd.DecodedOffset:N0} bytes of content, at stored byte {inputEnd.StoredOffset:N0}. Nothing was committed. 'urlog enqueue' records the file with that flag; --allow-truncated commits what was read from here"
+                : "the end of the input was not determined; nothing was committed");
+        }
+
+        if (inputEnd.IsTruncated)
+        {
+            Console.WriteLine($"note      input truncated: content ends after {inputEnd.DecodedOffset:N0} decoded bytes, at stored byte {inputEnd.StoredOffset:N0}; committed with --allow-truncated");
+        }
+        else if (inputEnd.TrailingBytes > 0)
+        {
+            Console.WriteLine($"note      {(inputEnd.TrailingBytesExact ? string.Empty : "at least ")}{inputEnd.TrailingBytes:N0} trailing bytes behind the compressed data are not content");
+        }
 
         // 5. Commit: the generation becomes the visible one.
         await store.CommitFileGenerationAsync(fileId, generation, ct).ConfigureAwait(false);

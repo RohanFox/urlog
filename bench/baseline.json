@@ -13,7 +13,8 @@
                     "Urlog.Bench.Benches.Insert.*(BlockSize: 500000)",
                     "Urlog.Bench.Benches.InsertNative.*Writers: 6)",
                     "Urlog.Bench.Benches.TokeniseGeneric.*",
-                    "Urlog.Bench.Benches.DetectFormat.*"
+                    "Urlog.Bench.Benches.DetectFormat.*",
+                    "Urlog.Bench.Benches.DecodeGzip.*"
                 ],
     "useMin":  [
                    "Urlog.Bench.Benches.Insert.*",

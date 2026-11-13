@@ -192,10 +192,19 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
+                    b.Property<int>("ArchiveDepth")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("archive_depth");
+
                     b.Property<string>("ArchivePath")
                         .HasMaxLength(4096)
                         .HasColumnType("TEXT")
                         .HasColumnName("archive_path");
+
+                    b.Property<string>("CachePath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cache_path");
 
                     b.Property<long>("CaseId")
                         .HasColumnType("INTEGER")
@@ -205,6 +214,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("compression");
+
+                    b.Property<bool>("ContainerCut")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("container_cut");
 
                     b.Property<float?>("DetectedConfidence")
                         .HasColumnType("REAL")
@@ -235,13 +248,42 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("encoding");
 
+                    b.Property<int>("ExpandedMembers")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("expanded_members");
+
                     b.Property<DateTime?>("FileTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("file_time");
 
+                    b.Property<bool>("HashOfStoredBytes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hash_of_stored_bytes");
+
                     b.Property<long?>("HostId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("host_id");
+
+                    b.Property<bool>("HostInferred")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("host_inferred");
+
+                    b.Property<string>("HostRule")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("host_rule");
+
+                    b.Property<bool>("InputTruncated")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("input_truncated");
+
+                    b.Property<long?>("MemberOffset")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("member_offset");
+
+                    b.Property<int?>("MemberOrdinal")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("member_ordinal");
 
                     b.Property<string>("OriginalName")
                         .IsRequired()
@@ -274,9 +316,17 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("reject_count");
 
+                    b.Property<long?>("RootFileId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("root_file_id");
+
                     b.Property<long>("RowCount")
                         .HasColumnType("INTEGER")
                         .HasColumnName("row_count");
+
+                    b.Property<string>("SeenPaths")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("seen_paths");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -294,11 +344,19 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("source");
 
+                    b.Property<bool>("SpansDst")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("spans_dst");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("TEXT")
                         .HasColumnName("state");
+
+                    b.Property<long?>("StatedSize")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("stated_size");
 
                     b.Property<string>("StoredPath")
                         .IsRequired()
@@ -311,6 +369,22 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("timezone");
 
+                    b.Property<long>("TrailingBytes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("trailing_bytes");
+
+                    b.Property<bool>("TrailingBytesInexact")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("trailing_bytes_inexact");
+
+                    b.Property<long?>("TruncatedDecodedOffset")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("truncated_decoded_offset");
+
+                    b.Property<long?>("TruncatedStoredOffset")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("truncated_stored_offset");
+
                     b.Property<DateTime?>("TsMax")
                         .HasColumnType("TEXT")
                         .HasColumnName("ts_max");
@@ -318,6 +392,11 @@ namespace Urlog.Core.Metadata.Migrations
                     b.Property<DateTime?>("TsMin")
                         .HasColumnType("TEXT")
                         .HasColumnName("ts_min");
+
+                    b.Property<string>("UnreadableReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("unreadable_reason");
 
                     b.Property<string>("Uploader")
                         .IsRequired()
@@ -328,6 +407,14 @@ namespace Urlog.Core.Metadata.Migrations
                     b.Property<long?>("UploaderUserId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("uploader_user_id");
+
+                    b.Property<bool>("YearAssumed")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("year_assumed");
+
+                    b.Property<bool>("YearGiven")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("year_given");
 
                     b.Property<int?>("YearHint")
                         .HasColumnType("INTEGER")
@@ -341,6 +428,9 @@ namespace Urlog.Core.Metadata.Migrations
 
                     b.HasIndex("ParentFileId")
                         .HasDatabaseName("ix_files_parent_file_id");
+
+                    b.HasIndex("RootFileId")
+                        .HasDatabaseName("ix_files_root_file_id");
 
                     b.HasIndex("UploaderUserId")
                         .HasDatabaseName("ix_files_uploader_user_id");
@@ -360,7 +450,7 @@ namespace Urlog.Core.Metadata.Migrations
 
                             t.HasCheckConstraint("ck_files_source", "source IN ('web', 'sftp', 'cli')");
 
-                            t.HasCheckConstraint("ck_files_state", "state IN ('received', 'parsed', 'failed', 'quarantined', 'artifact', 'archived')");
+                            t.HasCheckConstraint("ck_files_state", "state IN ('received', 'parsed', 'failed', 'quarantined', 'artifact', 'archived', 'expanded', 'unreadable')");
                         });
                 });
 
@@ -462,6 +552,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("message");
 
+                    b.Property<string>("Options")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("options");
+
                     b.Property<long>("Rejects")
                         .HasColumnType("INTEGER")
                         .HasColumnName("rejects");
@@ -499,7 +593,7 @@ namespace Urlog.Core.Metadata.Migrations
 
                     b.ToTable("jobs", null, t =>
                         {
-                            t.HasCheckConstraint("ck_jobs_kind", "kind IN ('parse', 'reparse')");
+                            t.HasCheckConstraint("ck_jobs_kind", "kind IN ('parse', 'reparse', 'expand')");
 
                             t.HasCheckConstraint("ck_jobs_state", "state IN ('queued', 'parsing', 'done', 'failed', 'cancelled')");
                         });

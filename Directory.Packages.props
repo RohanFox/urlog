@@ -8,6 +8,8 @@
     <!-- Chunk pipeline: decompression inside the chunk pipeline (gzip is in the BCL). -->
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.8" />
     <PackageVersion Include="SharpCompress" Version="0.50.8" />
+    <!-- CRC-32 of zip members as they are expanded: the runtime's zip reader does not check it. -->
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.0" />
     <!-- Field catalog (src/Query/field-catalog.yaml). -->
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
     <!-- [LogSource] registry source generator (netstandard2.0 component, loaded by the SDK's Roslyn). -->

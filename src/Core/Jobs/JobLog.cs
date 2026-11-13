@@ -14,6 +14,9 @@ internal static partial class JobLog
     [LoggerMessage(EventId = 101, Level = LogLevel.Information, Message = "job {JobId} done: file {FileId}, generation {Generation}, {Rows} rows ({Rejects} rejected), {Bytes} decoded bytes in {Seconds:F2} s = {MegabytesPerSecond:F1} MB/s (file read to last ack); hash {HashSeconds:F2} s inside the read; {TotalSeconds:F2} s with the commit")]
     public static partial void Done(ILogger logger, long jobId, long fileId, int generation, long rows, long rejects, long bytes, double seconds, double megabytesPerSecond, double hashSeconds, double totalSeconds);
 
+    [LoggerMessage(EventId = 136, Level = LogLevel.Information, Message = "job {JobId} input: {StoredBytes} stored bytes ({Compression}) read and decoded in {ReadSeconds:F2} s, of which {HashSeconds:F2} s hash; the decoder alone {DecodeSeconds:F2} s")]
+    public static partial void Input(ILogger logger, long jobId, long storedBytes, string compression, double readSeconds, double hashSeconds, double decodeSeconds);
+
     [LoggerMessage(EventId = 102, Level = LogLevel.Warning, Message = "job {JobId} failed: file {FileId}: {Reason}")]
     public static partial void Failed(ILogger logger, long jobId, long fileId, string reason);
 

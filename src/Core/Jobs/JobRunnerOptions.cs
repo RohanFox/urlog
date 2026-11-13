@@ -1,3 +1,4 @@
+using Urlog.Core.Intake.Archives;
 using Urlog.Core.Metadata;
 using Urlog.Core.Pipeline;
 
@@ -57,6 +58,18 @@ public sealed record JobRunnerOptions
     /// <summary>Evidence paths in <c>files.stored_path</c> that are relative resolve against <c>&lt;root&gt;/&lt;case id&gt;/</c>.</summary>
     public string? EvidenceRoot { get; init; }
 
+    /// <summary>
+    /// Where the seekable copies of containers go (a compressed tar, an archive inside an archive). Derived data,
+    /// outside the evidence root; null puts it beside the root as <c>&lt;root&gt;-cache</c>.
+    /// </summary>
+    public string? CacheRoot { get; init; }
+
+    /// <summary>What an archive may expand to; also the ratio and size a single compressed log is held to.</summary>
+    public ArchiveLimits Archive { get; init; } = ArchiveLimits.Default;
+
+    /// <summary>Host patterns for archive members, in order of precedence; null uses the built-in list.</summary>
+    public IReadOnlyList<string>? HostPatterns { get; init; }
+
     /// <summary>Where the nightly <c>VACUUM INTO</c> backup goes; null uses the default next to the database.</summary>
     public string? BackupDirectory { get; init; }
 
@@ -69,6 +82,7 @@ public sealed record JobRunnerOptions
     public void Validate()
     {
         Pipeline.Validate();
+        Archive.Validate();
         if (MaxConcurrentJobs < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConcurrentJobs), MaxConcurrentJobs, "must be positive");

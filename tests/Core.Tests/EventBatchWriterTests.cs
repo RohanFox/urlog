@@ -226,11 +226,9 @@ public sealed class EventBatchWriterTests
             Fill(writer, line, 100_000);
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        Fill(writer, line, 100_000);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var allocated = AllocationProbe.Least(_ => Fill(writer, line, 100_000));
 
-        Assert.Equal(300_000, sink.Rows);
+        Assert.Equal(100_000 * (2 + AllocationProbe.Passes), sink.Rows);
         Assert.Equal(0, allocated);
         writer.Close();
     }

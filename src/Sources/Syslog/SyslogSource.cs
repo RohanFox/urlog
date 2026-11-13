@@ -47,7 +47,7 @@ public sealed class SyslogSource : ILogSource
 
     private static ReadOnlySpan<byte> PostfixPrefix => "postfix/"u8;
 
-    public SourceInfo Info { get; } = new("syslog", ["rfc3164", "rfc5424", "postfix"], "syslog (RFC 3164, RFC 5424, Postfix hook)", 1, Stateful: true);
+    public SourceInfo Info { get; } = new("syslog", ["rfc3164", "rfc5424", "postfix"], "syslog (RFC 3164, RFC 5424, Postfix hook)", 1, Stateful: true, NaiveTimestamps: true);
 
     public Framing Framing => Framing.Line;
 

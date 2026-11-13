@@ -27,8 +27,13 @@ public interface ILogSource
     void Parse(ReadOnlySequence<byte> framedChunk, ParseContext ctx, IBatchWriter batch);
 }
 
-/// <summary>Identity of a source. <paramref name="Stateful"/> sources get their chunks in file order on one thread.</summary>
-public sealed record SourceInfo(string Id, ImmutableArray<string> Aliases, string DisplayName, int Version, bool Stateful = false);
+/// <summary>
+/// Identity of a source. <paramref name="Stateful"/> sources get their chunks in file order on one thread.
+/// <paramref name="NaiveTimestamps"/> is true when the format can carry times without a zone, which the source
+/// reads with <see cref="ParseContext.TimeZoneHint"/>: one offset per file, so such a file is flagged when its
+/// events lie on both sides of a change of the zone's offset.
+/// </summary>
+public sealed record SourceInfo(string Id, ImmutableArray<string> Aliases, string DisplayName, int Version, bool Stateful = false, bool NaiveTimestamps = false);
 
 /// <summary>Columns a source writes, besides the ones core fills. <paramref name="Version"/> bumps when the set changes.</summary>
 public sealed record FieldSchema(int Version, ImmutableArray<EventColumn> Columns);

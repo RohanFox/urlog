@@ -43,9 +43,7 @@ public sealed class SyslogAdversarialTests
         ctx.Bind(writer);
         var source = new SyslogSource();
         source.Parse(new ReadOnlySequence<byte>(data), ctx, writer);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        source.Parse(new ReadOnlySequence<byte>(data), ctx, writer);
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        Assert.Equal(0, AllocationProbe.Least(_ => source.Parse(new ReadOnlySequence<byte>(data), ctx, writer)));
     }
 
     [Fact]

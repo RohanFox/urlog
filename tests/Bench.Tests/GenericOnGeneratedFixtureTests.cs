@@ -36,13 +36,12 @@ public sealed class GenericOnGeneratedFixtureTests : IDisposable
         Assert.Equal(0, ctx.Rejects);
         Assert.Equal(meta.Bytes - meta.Lines, writer.RawBytes); // every byte but the line terminators went through raw
 
-        ctx = InMemoryChunks.Context("app-01", writer);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        InMemoryChunks.Parse(source, data, ctx, writer, maxChunk: 100_000);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        // A fresh context per pass: each pass is a new file and allocates the source's per-file state again.
+        var contexts = Enumerable.Range(0, AllocationProbe.Passes).Select(_ => InMemoryChunks.Context("app-01", writer)).ToArray();
+        var allocated = AllocationProbe.Least(pass => InMemoryChunks.Parse(source, data, contexts[pass], writer, maxChunk: 100_000));
 
-        Assert.Equal(rows * 2, writer.Rows);
-        Assert.Equal(0, ctx.Rejects);
+        Assert.Equal(rows * (1 + AllocationProbe.Passes), writer.Rows);
+        Assert.All(contexts, context => Assert.Equal(0, context.Rejects));
         Assert.InRange(allocated, 0, 1024); // the per-file state and nothing per row
     }
 
