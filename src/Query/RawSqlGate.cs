@@ -50,7 +50,7 @@ public static class RawSqlGate
     /// not in this list). tests/Security asserts this list against <c>system.tables</c>, so a new migration that
     /// adds a relation must add it here too.
     /// </summary>
-    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations"], StringComparer.Ordinal);
+    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations", "store_identity"], StringComparer.Ordinal);
 
     private static readonly FrozenSet<string> InOperators = FrozenSet.ToFrozenSet(
         ["in", "notIn", "nullIn", "notNullIn", "globalIn", "globalNotIn", "globalNullIn", "globalNotNullIn"], StringComparer.Ordinal);

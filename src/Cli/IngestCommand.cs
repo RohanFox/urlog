@@ -84,14 +84,22 @@ internal static class IngestCommand
         //    the first generation.
         await using var control = connection.Ingest();
         var store = new EventStoreAdmin(control);
+        string? storeIdentity;
         try
         {
             await store.RequireSchemaAsync(ct).ConfigureAwait(false);
+            storeIdentity = await store.ReadStoreIdentityAsync(ct).ConfigureAwait(false);
         }
         catch (EventStoreSchemaException e)
         {
             throw new CliException($"{e.Message} (connected as '{connection.IngestUser}': --user/--password or URLOG_CH_USER/URLOG_CH_PASSWORD)");
         }
+        catch (Urlog.Core.Metadata.StoreIdentityException e)
+        {
+            throw new CliException(e.Message);
+        }
+
+        RequireStore(connection.Server, storeIdentity, args.Option("store-id"), caseId, fileId);
 
         if (generation > 1)
         {
@@ -163,5 +171,50 @@ internal static class IngestCommand
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// This command keeps no record, so nothing ties its ids to a metadata file. A store with no identity
+    /// belongs to nobody and takes any id. A store with one belongs to a metadata file: the caller has to name the
+    /// identity (<c>--store-id</c>), and the case id and the file id have to lie in the ranges the metadata file
+    /// never allocates.
+    /// </summary>
+    internal static void RequireStore(string server, string? storeIdentity, string? told, ulong caseId, ulong fileId)
+    {
+        const ulong floor = (ulong)Urlog.Core.Metadata.StoreIdentity.IngestFileIdFloor;
+        const ulong caseFloor = (ulong)Urlog.Core.Metadata.StoreIdentity.IngestCaseIdFloor;
+        var shown = Urlog.Core.Metadata.StoreIdentity.Show(storeIdentity);
+        if (storeIdentity is null)
+        {
+            if (told is not null)
+            {
+                throw new CliException($"--store-id {told} was given and the event store {server} has store identity none: they do not match and nothing was written");
+            }
+
+            return;
+        }
+
+        if (told is null)
+        {
+            throw new CliException(string.Create(CultureInfo.InvariantCulture,
+                $"the event store {server} has store identity {shown} and no --store-id was given (none): the store belongs to a metadata file, and 'urlog ingest' keeps no file record. Nothing was written. 'urlog enqueue' and 'urlog worker' are the recorded way in; to write into this store without a record, pass --store-id with its identity, a --case from {caseFloor} up and a --file-id from {floor} up"));
+        }
+
+        if (!string.Equals(told, storeIdentity, StringComparison.Ordinal))
+        {
+            throw new CliException($"--store-id is {told}, the event store {server} has store identity {shown}: this is not the store that was meant and nothing was written");
+        }
+
+        if (caseId < caseFloor)
+        {
+            throw new CliException(string.Create(CultureInfo.InvariantCulture,
+                $"--case {caseId} is below {caseFloor}: in a store that has an identity the case ids under that floor are the metadata file's, and rows written here under one of them would show in a recorded case and go with it when it is purged. Nothing was written. Pass a --case from {caseFloor} up"));
+        }
+
+        if (fileId < floor)
+        {
+            throw new CliException(string.Create(CultureInfo.InvariantCulture,
+                $"--file-id {fileId} is below {floor}: in a store that has an identity the ids under that floor are the metadata file's, and a row written here under one of them would be hidden or would hide a recorded file. Nothing was written. Pass a --file-id from {floor} up"));
+        }
     }
 }

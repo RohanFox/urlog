@@ -39,6 +39,7 @@ public sealed class RawSqlGateTests(ClickHouseFixture ch, ITestOutputHelper outp
         { "events behind a CTE name", "WITH events_v AS (SELECT 1) SELECT * FROM events", "events is not readable" },
         { "file_generation", "SELECT * FROM file_generation", "file_generation is not readable" },
         { "schema_migrations", "SELECT * FROM schema_migrations", "schema_migrations is not readable" },
+        { "store_identity", "SELECT * FROM store_identity", "store_identity is not readable" },
         { "qualified view", "SELECT * FROM default.events_v", "qualified" },
         { "INTO OUTFILE", "SELECT * FROM events_v INTO OUTFILE '/tmp/x'", "" },
         { "FORMAT", "SELECT * FROM events_v FORMAT JSON", "" },

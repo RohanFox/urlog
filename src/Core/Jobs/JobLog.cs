@@ -74,6 +74,9 @@ internal static partial class JobLog
     [LoggerMessage(EventId = 134, Level = LogLevel.Warning, Message = "runner maintenance failed: {Reason}")]
     public static partial void MaintenanceFailed(ILogger logger, string reason);
 
+    [LoggerMessage(EventId = 137, Level = LogLevel.Critical, Message = "{Reason}")]
+    public static partial void IdentityLost(ILogger logger, string reason);
+
     [LoggerMessage(EventId = 135, Level = LogLevel.Information, Message = "nightly backup {Path}, sha256 {Sha256}")]
     public static partial void BackupTaken(ILogger logger, string path, string sha256);
 }

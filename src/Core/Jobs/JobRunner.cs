@@ -22,8 +22,10 @@ namespace Urlog.Core.Jobs;
 /// <see cref="JobRunnerOptions.MaxConcurrentJobs"/> slots, each with its own pipeline buffers, each running one job
 /// at a time; a case never has two jobs running.
 /// <para>
-/// Startup, in order: the lock, the metadata migrations, the event store answering the ingest account, the
-/// reconcilers (<see cref="StartupReconciler"/>), the disk watermark, then claiming. A job is one read of the file:
+/// Startup, in order: the lock, the event store answering the ingest account, the store identity of the metadata
+/// file compared with the store's (<see cref="StoreIdentityGuard"/>; a mismatch ends the start with nothing
+/// written), the metadata migrations, the reconcilers (<see cref="StartupReconciler"/>), the disk watermark, then
+/// claiming. A job is one read of the file:
 /// the bytes are hashed as they are read and the digest is compared with the intake record before anything is
 /// committed, and a file shows no rows until its generation is committed.
 /// </para>
@@ -49,6 +51,8 @@ public sealed class JobRunner
     private int _paused;
     private int _syncNeeded;
     private long _claimNotBefore;
+    private string? _identity;
+    private StoreIdentityException? _identityLost;
 
     public JobRunner(MetadataStore store, IJobEventStore events, SourceCatalog sources, JobRunnerOptions options, IDiskProbe? disk = null, ILoggerFactory? loggers = null)
     {
@@ -98,23 +102,29 @@ public sealed class JobRunner
     /// cancellation stops the running jobs, removes their rows and puts them back in the queue.
     /// </summary>
     /// <exception cref="RunnerLockedException">Another runner holds the metadata file.</exception>
+    /// <exception cref="StoreIdentityException">The metadata file and the event store do not carry the same identity.</exception>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         using var runnerLock = await RunnerLock.AcquireAsync(_store.Path, _options.LockWait, cancellationToken).ConfigureAwait(false)
             ?? throw new RunnerLockedException($"another job runner holds {RunnerLock.PathFor(_store.Path)}; one runner per metadata file");
-        await _store.MigrateAsync(cancellationToken).ConfigureAwait(false);
-        if (!await WaitForStoreAsync(cancellationToken).ConfigureAwait(false))
+        // Before the metadata migrations, the reconcilers and any claim: a file that does not belong to this store is
+        // left as it was found, and so is the store.
+        var metadataId = await StoreIdentity.ReadAsync(_store.Path, cancellationToken).ConfigureAwait(false);
+        var (answered, storeId) = await WaitForStoreAsync(cancellationToken).ConfigureAwait(false);
+        if (!answered)
         {
             return;
         }
 
+        _identity = StoreIdentityGuard.Compare(_store.Path, metadataId, _events.Endpoint, storeId);
+        await _store.MigrateAsync(cancellationToken).ConfigureAwait(false);
         LastReconcile = await new StartupReconciler(_store, _events, _options, _logger).RunAsync(cancellationToken).ConfigureAwait(false);
         await CheckWatermarkAsync(cancellationToken).ConfigureAwait(false);
 
         // A slot that cannot go on (the metadata store refuses a commit) stops the others; cancellation from outside is a normal stop.
         using var fatal = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var maintenanceStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var maintenance = Task.Run(() => MaintenanceLoopAsync(maintenanceStop.Token), CancellationToken.None);
+        var maintenance = Task.Run(() => MaintenanceLoopAsync(fatal, maintenanceStop.Token), CancellationToken.None);
         var slots = new Task[_options.MaxConcurrentJobs];
         for (var i = 0; i < slots.Length; i++)
         {
@@ -130,6 +140,11 @@ public sealed class JobRunner
         {
             await maintenanceStop.CancelAsync().ConfigureAwait(false);
             await maintenance.ConfigureAwait(false);
+        }
+
+        if (Volatile.Read(ref _identityLost) is { } lost)
+        {
+            throw lost;
         }
     }
 
@@ -177,20 +192,21 @@ public sealed class JobRunner
         return text.ToString();
     }
 
-    private async Task<bool> WaitForStoreAsync(CancellationToken cancellationToken)
+    /// <summary>Waits until the event store answers the ingest account, then reads its identity (null for none).</summary>
+    private async Task<(bool Answered, string? StoreId)> WaitForStoreAsync(CancellationToken cancellationToken)
     {
         while (true)
         {
             try
             {
                 await _events.RequireSchemaAsync(cancellationToken).ConfigureAwait(false);
-                return true;
+                return (true, await _events.ReadStoreIdentityAsync(cancellationToken).ConfigureAwait(false));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                return false;
+                return (false, null);
             }
-            catch (Exception e) when (!_options.ExitWhenIdle)
+            catch (Exception e) when (!_options.ExitWhenIdle && e is not StoreIdentityException)
             {
                 // The backend keeps serving while the event store is away or not migrated yet; nothing is claimed until it answers.
                 JobLog.StoreNotReady(_logger, e.Message, _options.StoreRetryInterval.TotalSeconds);
@@ -202,8 +218,32 @@ public sealed class JobRunner
             }
             catch (OperationCanceledException)
             {
-                return false;
+                return (false, null);
             }
+        }
+    }
+
+    /// <summary>
+    /// The store at this address may be replaced while the runner lives (a container recreated on another volume).
+    /// Compared again on every maintenance tick: a different identity stops the claims, and a job that is running
+    /// stops before its commit, in <c>parsing</c>, with no further write to the store.
+    /// </summary>
+    private async Task RecheckIdentityAsync(CancellationTokenSource fatal, CancellationToken cancellationToken)
+    {
+        var storeId = await _events.ReadStoreIdentityAsync(cancellationToken).ConfigureAwait(false);
+        if (string.Equals(storeId, _identity, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var lost = new StoreIdentityException(
+            $"the event store {_events.Endpoint} now has store identity {StoreIdentity.Show(storeId)}, and this runner started against {_identity} for metadata file {_store.Path}: the store was replaced while the runner was up. The runner stops; nothing more is written.",
+            _identity,
+            storeId);
+        if (Interlocked.CompareExchange(ref _identityLost, lost, null) is null)
+        {
+            JobLog.IdentityLost(_logger, lost.Message);
+            await fatal.CancelAsync().ConfigureAwait(false);
         }
     }
 
@@ -411,6 +451,12 @@ public sealed class JobRunner
                 throw new JobFailedException($"the event store acknowledged {acked} of the {result.Rows} rows the parsers produced");
             }
 
+            if (Volatile.Read(ref _identityLost) is { } lost)
+            {
+                // Not committed and not cleaned: the store these rows went to is not this file's.
+                throw lost;
+            }
+
             var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
             var spansDst = source.Info.NaiveTimestamps && tsMin is { } first && tsMax is { } last && IntakeHints.SpansTransition(zone, first, last);
             var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst);
@@ -455,6 +501,11 @@ public sealed class JobRunner
         }
         catch (JobCommitException)
         {
+            throw;
+        }
+        catch (StoreIdentityException)
+        {
+            // The job stays in parsing; the next start is refused until the pair is right, and recovers it then.
             throw;
         }
         catch (Exception e) when (IsMemoryLimit(e))
@@ -563,7 +614,7 @@ public sealed class JobRunner
         }
     }
 
-    private async Task MaintenanceLoopAsync(CancellationToken stop)
+    private async Task MaintenanceLoopAsync(CancellationTokenSource fatal, CancellationToken stop)
     {
         using var timer = new PeriodicTimer(_options.WatermarkInterval);
         DateOnly? lastBackup = null;
@@ -573,6 +624,12 @@ public sealed class JobRunner
             {
                 try
                 {
+                    await RecheckIdentityAsync(fatal, stop).ConfigureAwait(false);
+                    if (Volatile.Read(ref _identityLost) is not null)
+                    {
+                        return;
+                    }
+
                     await CheckWatermarkAsync(stop).ConfigureAwait(false);
                     if (Interlocked.Exchange(ref _syncNeeded, 0) == 1)
                     {

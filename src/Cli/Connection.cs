@@ -41,6 +41,9 @@ internal sealed class Connection
 
     public int HttpPort { get; }
 
+    /// <summary>The event store as messages name it: <c>host:port</c> of the native endpoint.</summary>
+    public string Server => string.Create(CultureInfo.InvariantCulture, $"{Host}:{NativePort}");
+
     public string IngestUser { get; }
 
     public string IngestPassword { get; }

@@ -15,6 +15,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <!-- A row-for-row dump of a metadata file: how the store identity tests assert that nothing was written. -->
+    <Compile Include="../Shared/MetadataDump.cs" Link="Shared/MetadataDump.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Api/Api.csproj" />
   </ItemGroup>
 </Project>

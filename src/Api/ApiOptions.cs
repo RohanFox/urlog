@@ -36,6 +36,9 @@ public sealed class ClickHouseOptions
     public string User { get; set; } = "urlog_ingest";
 
     public string Password { get; set; } = "urlog_ingest";
+
+    /// <summary>How often the store identity comparison is tried again while it has not passed.</summary>
+    public TimeSpan RetryInterval { get; set; } = TimeSpan.FromSeconds(5);
 }
 
 /// <summary>The job runner the backend hosts.</summary>
@@ -85,7 +88,10 @@ public sealed class IngestWatermarkOptions
 
 public sealed class MetadataOptions
 {
-    /// <summary>The SQLite metadata file; created and migrated at startup. <c>URLOG_DB</c> overrides it.</summary>
+    /// <summary>
+    /// The SQLite metadata file, created by <c>urlog migrate --db</c> and migrated at startup once its store identity
+    /// matches the event store's. <c>URLOG_DB</c> overrides it.
+    /// </summary>
     public string Path { get; set; } = "data/metadata.db";
 }
 

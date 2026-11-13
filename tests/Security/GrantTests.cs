@@ -93,6 +93,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     [InlineData("SELECT count() FROM default.events")]
     [InlineData("SELECT count() FROM file_generation")]
     [InlineData("SELECT count() FROM schema_migrations")]
+    [InlineData("SELECT store_id FROM store_identity")]
     [InlineData("SELECT count() FROM system.query_log")]
     [InlineData("SELECT count() FROM system.processes")]
     [InlineData("SELECT count() FROM system.users")]
@@ -256,6 +257,9 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         Assert.All(disks, d => Assert.True(d.TotalBytes > 0 && d.FreeBytes >= 0 && d.FreeBytes <= d.TotalBytes));
 
         Assert.NotNull(await ingest.ExecuteScalarAsync("SELECT max(current) FROM file_generation", cancellationToken: Ct));
+
+        // The store identity is readable by the write path (none in this fixture: nothing paired it) and by nobody below it.
+        Assert.Null(await new EventStoreAdmin(ingest).ReadStoreIdentityAsync(Ct));
     }
 
     [Theory]
@@ -284,6 +288,11 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     [InlineData("ALTER TABLE field_stats ADD COLUMN ingest_probe UInt8")]
     [InlineData("DROP TABLE field_stats")]
     [InlineData("DELETE FROM schema_migrations WHERE 1")]
+    [InlineData("INSERT INTO store_identity (store_id, created_at, created_by) VALUES ('00000000000000000000000000000000', now64(3), 'x')")]
+    [InlineData("DELETE FROM store_identity WHERE 1")]
+    [InlineData("ALTER TABLE store_identity DELETE WHERE 1")]
+    [InlineData("TRUNCATE TABLE store_identity")]
+    [InlineData("DROP TABLE store_identity")]
     [InlineData("TRUNCATE TABLE field_stats")]
     [InlineData("CREATE USER ingest_user")]
     [InlineData("GRANT SELECT ON default.events TO urlog_query")]
@@ -372,6 +381,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
                 "ALTER DELETE default.events", "INSERT default.events", "SELECT default.events",
                 "ALTER DELETE default.field_stats", "INSERT default.field_stats",
                 "INSERT default.file_generation", "SELECT default.file_generation",
+                "SELECT default.store_identity",
                 "SELECT system.disks", "SELECT system.merges", "SELECT system.mutations", "SELECT system.parts",
             ],
             grants);

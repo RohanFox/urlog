@@ -21,6 +21,8 @@ internal static class UserCommand
         var verb = args.Positional.Count > 0 ? args.Positional[0].ToLowerInvariant() : "";
         var path = VerifyAuditCommand.MetadataPath(args, mustExist: false);
         var name = args.Required("name");
+        // Accounts live in the metadata file alone: it must have its identity, the event store need not be up.
+        await StoreCheck.LocalAsync(path, ct).ConfigureAwait(false);
         var store = new MetadataStore(path);
         await store.MigrateAsync(ct).ConfigureAwait(false);
         await using var db = store.CreateDbContext();

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Urlog.Api.Auth;
 using Urlog.Api.Endpoints;
 using Urlog.Api.Middleware;
+using Urlog.Core.Jobs;
 using Urlog.Core.Metadata;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -36,7 +37,8 @@ public static class ApiHost
             !string.IsNullOrWhiteSpace(o.Metadata.Path) && o.Auth.LockoutThreshold > 0 && o.Auth.LoginThrottle.Attempts > 0 && o.Auth.LoginThrottle.Window > TimeSpan.Zero
             && o.Auth.IdleTimeout > TimeSpan.Zero && o.Auth.AbsoluteTimeout > TimeSpan.Zero && o.Auth.LockoutDuration > TimeSpan.Zero
             && o.Ingest.MaxConcurrentJobs > 0 && o.Ingest.Writers > 0 && o.Ingest.Parallelism >= 0 && o.Ingest.ProgressInterval > TimeSpan.Zero
-            && o.Ingest.Watermark.MinFreeBytes >= 0 && o.Ingest.Watermark.MinFreePercent is >= 0 and <= 100,
+            && o.Ingest.Watermark.MinFreeBytes >= 0 && o.Ingest.Watermark.MinFreePercent is >= 0 and <= 100
+            && o.ClickHouse.RetryInterval > TimeSpan.Zero,
             "Urlog: metadata path, lockout, throttle, session timeouts and the ingest settings must be set and in range").ValidateOnStart();
 
         services.AddSingleton(TimeProvider.System);
@@ -48,6 +50,15 @@ public static class ApiHost
         });
         services.AddScoped(sp => sp.GetRequiredService<MetadataStore>().CreateDbContext());
         services.AddSingleton<PasswordService>();
+        // The event store as the ingest account: the store identity check of this host, and the job runner's store.
+        services.AddSingleton<IJobEventStore>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<UrlogOptions>>().Value;
+            return ClickHouseJobEventStore.Create(options.ClickHouse.Host, options.ClickHouse.NativePort, options.ClickHouse.User, options.ClickHouse.Password, options.Ingest.Writers);
+        });
+        services.AddSingleton<IStoreIdentitySource>(sp => sp.GetRequiredService<IJobEventStore>());
+        services.AddSingleton<StoreReadiness>();
+        services.AddHostedService<StoreReadinessService>();
         if (builder.Configuration.GetValue($"{UrlogOptions.Section}:Ingest:Enabled", true))
         {
             // The ingest queue runs in this process as the ingest account; it holds no admin credential.
@@ -58,7 +69,7 @@ public static class ApiHost
         services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, null);
         services.AddAuthorizationBuilder()
-            // Every endpoint needs a session unless it says AllowAnonymous (login only; CaseAccess.AssertGuarded checks).
+            // Every endpoint needs a session unless it says AllowAnonymous (login and health only; CaseAccess.AssertGuarded checks).
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
             .AddPolicy(AdminPolicy, policy => policy.RequireRole(Names.Of(UserRole.Admin)));
 
@@ -108,6 +119,8 @@ public static class ApiHost
 
         app.UseExceptionHandler();
         app.UseStatusCodePages();
+        // Before anything that reads the metadata file: until the store identity check has passed, only the health route answers.
+        app.UseMiddleware<StoreGateMiddleware>();
         if (Directory.Exists(app.Environment.WebRootPath))
         {
             // web/ builds into wwwroot (milestone 2); until it exists there is nothing to serve and nothing to warn about.
@@ -125,6 +138,7 @@ public static class ApiHost
     {
         ArgumentNullException.ThrowIfNull(app);
         var api = app.MapGroup("/api/v1");
+        HealthEndpoints.Map(api);
         AuthEndpoints.Map(api);
         UserEndpoints.Map(api);
         CaseEndpoints.Map(api);
@@ -137,19 +151,16 @@ public static class ApiHost
         }
     }
 
-    /// <summary>Migrates the metadata store (creates the file on first run, writes the genesis row) and warns when nobody can log in yet.</summary>
+    /// <summary>
+    /// The first comparison of the metadata file's store identity with the event store's, before the host listens.
+    /// When it passes, the metadata file is migrated and the host serves from its first request. When it does not
+    /// (the event store is away, or the two do not belong together) the host starts all the same and answers the
+    /// health route alone, with the reason, while <see cref="StoreReadinessService"/> tries again. The host never
+    /// creates a metadata file: <c>urlog migrate --db</c> does.
+    /// </summary>
     public static async Task StartAsync(WebApplication app)
     {
         ArgumentNullException.ThrowIfNull(app);
-        var store = app.Services.GetRequiredService<MetadataStore>();
-        Directory.CreateDirectory(Path.GetDirectoryName(store.Path)!);
-        await store.MigrateAsync(app.Lifetime.ApplicationStopping).ConfigureAwait(false);
-        await using var db = store.CreateDbContext();
-        var users = await db.Users.CountAsync(app.Lifetime.ApplicationStopping).ConfigureAwait(false);
-        Log.Migrated(app.Logger, store.Path, users);
-        if (users == 0)
-        {
-            Log.NoUsers(app.Logger, store.Path);
-        }
+        await app.Services.GetRequiredService<StoreReadiness>().TryAsync(app.Lifetime.ApplicationStopping).ConfigureAwait(false);
     }
 }

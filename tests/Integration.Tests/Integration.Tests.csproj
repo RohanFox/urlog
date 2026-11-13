@@ -17,6 +17,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <!-- A row-for-row dump of a metadata file: how the store identity tests assert that nothing was written. -->
+    <Compile Include="../Shared/MetadataDump.cs" Link="Shared/MetadataDump.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
     <ProjectReference Include="../../src/Sources/Sources.csproj" />
     <!-- The fixed-seed 1 GiB fixture (generated on first use) for the worker tests. -->

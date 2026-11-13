@@ -22,15 +22,15 @@ public sealed class SchemaTests(ClickHouseFixture ch, ITestOutputHelper output) 
         await Reset(client);
         var migrator = new ClickHouseMigrator(client);
         var embedded = MigrationSet.Embedded();
-        Assert.Equal([1, 2, 3, 4, 5, 6], embedded.Select(m => m.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], embedded.Select(m => m.Version));
 
         var first = await migrator.ApplyAsync(embedded, Ct);
-        Assert.Equal([1, 2, 3, 4, 5, 6], first.Applied);
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], first.Applied);
         Assert.Empty(first.AlreadyApplied);
 
         var second = await migrator.ApplyAsync(embedded, Ct);
         Assert.Empty(second.Applied);
-        Assert.Equal([1, 2, 3, 4, 5, 6], second.AlreadyApplied);
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], second.AlreadyApplied);
 
         var tables = new List<string>();
         await foreach (var row in client.QueryAsync("SELECT name FROM system.tables WHERE database = currentDatabase() ORDER BY name", cancellationToken: Ct))
@@ -45,9 +45,10 @@ public sealed class SchemaTests(ClickHouseFixture ch, ITestOutputHelper output) 
         Assert.DoesNotContain("file_generation_dict", tables); // created by 0002, retired by 0006
         Assert.Contains("field_stats", tables);
         Assert.Contains("schema_migrations", tables);
+        Assert.Contains("store_identity", tables);
 
         var recorded = Convert.ToInt64(await client.ExecuteScalarAsync("SELECT count() FROM schema_migrations FINAL", cancellationToken: Ct), CultureInfo.InvariantCulture);
-        Assert.Equal(6, recorded);
+        Assert.Equal(7, recorded);
 
         var edited = embedded.Select(m => m.Version == 2 ? m with { Sql = m.Sql + "\n-- edited after it shipped" } : m).ToList();
         var error = await Assert.ThrowsAsync<MigrationException>(() => migrator.ApplyAsync(edited, Ct));
@@ -180,7 +181,7 @@ public sealed class SchemaTests(ClickHouseFixture ch, ITestOutputHelper output) 
         foreach (var statement in new[]
                  {
                      "DROP VIEW IF EXISTS events_v", "DROP DICTIONARY IF EXISTS file_generation_dict", "DROP TABLE IF EXISTS file_generation",
-                     "DROP TABLE IF EXISTS field_stats", "DROP TABLE IF EXISTS events", "DROP TABLE IF EXISTS schema_migrations",
+                     "DROP TABLE IF EXISTS field_stats", "DROP TABLE IF EXISTS events", "DROP TABLE IF EXISTS store_identity", "DROP TABLE IF EXISTS schema_migrations",
                  })
         {
             await client.ExecuteAsync(statement, cancellationToken: Ct);

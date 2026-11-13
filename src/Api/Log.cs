@@ -14,6 +14,12 @@ internal static partial class Log
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "the users table is empty: nobody can log in until `urlog user create --db {Path} --name <name> --admin` has run")]
     public static partial void NoUsers(ILogger logger, string path);
 
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "not serving yet, only the health route answers: {Reason}")]
+    public static partial void StoreWaiting(ILogger logger, string reason);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "not serving, only the health route answers: {Reason}")]
+    public static partial void StoreMismatch(ILogger logger, string reason);
+
     [LoggerMessage(EventId = 20, Level = LogLevel.Information, Message = "ingest: job runner starting as {User} at {Host}:{Port}, {Jobs} job(s) at a time")]
     public static partial void IngestStarting(ILogger logger, string user, string host, int port, int jobs);
 

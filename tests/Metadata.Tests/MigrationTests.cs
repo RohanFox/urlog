@@ -28,7 +28,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         await using var db = temp.Open();
         var pending = await db.Database.GetPendingMigrationsAsync(Ct);
         Assert.Empty(pending);
-        Assert.Equal(["20261106171503_Initial", "20261106175518_AuditTriggers", "20261111172457_Sessions", "20261112151235_DetectionRecord", "20261113061516_IntakeMembers"], await db.Database.GetAppliedMigrationsAsync(Ct));
+        Assert.Equal(["20261106171503_Initial", "20261106175518_AuditTriggers", "20261111172457_Sessions", "20261112151235_DetectionRecord", "20261113061516_IntakeMembers", "20261113082434_StoreIdentity"], await db.Database.GetAppliedMigrationsAsync(Ct));
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         await using var temp = await TempDb.CreateAsync();
         await temp.Store.MigrateAsync(Ct);
         await using var db = temp.Open();
-        Assert.Equal(5, (await db.Database.GetAppliedMigrationsAsync(Ct)).Count());
+        Assert.Equal(6, (await db.Database.GetAppliedMigrationsAsync(Ct)).Count());
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         var ddl = await SchemaAsync(db);
         // __EFMigrationsLock is EF Core's own migration lock table (created by Migrate, kept empty), like its history table.
         var tables = ddl.Where(d => d.Type == "table" && d.Name != "__EFMigrationsLock").Select(d => d.Name).Order().ToList();
-        Assert.Equal(["audit", "case_members", "cases", MetadataDb.MigrationsHistoryTable, "files", "hosts", "jobs", "sessions", "users"], tables);
+        Assert.Equal(["audit", "case_members", "cases", MetadataDb.MigrationsHistoryTable, "files", "hosts", "jobs", "sessions", "store_identity", "users"], tables);
         Assert.DoesNotContain(ddl, d => d.Name.StartsWith("sqlite_", StringComparison.Ordinal));
         var all = string.Join("\n", ddl.Select(d => d.Sql));
         Assert.DoesNotContain("AUTOINCREMENT", all, StringComparison.OrdinalIgnoreCase);

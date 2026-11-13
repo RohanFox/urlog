@@ -39,6 +39,7 @@ internal static class ExpandCommand
         }
 
         var store = new MetadataStore(VerifyAuditCommand.MetadataPath(args, mustExist: true));
+        await StoreCheck.FullAsync(store.Path, new Connection(args), ct).ConfigureAwait(false);
         await store.MigrateAsync(ct).ConfigureAwait(false);
         await using var db = store.CreateDbContext();
         try

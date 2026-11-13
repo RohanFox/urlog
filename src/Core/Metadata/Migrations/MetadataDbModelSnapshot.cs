@@ -643,6 +643,41 @@ namespace Urlog.Core.Metadata.Migrations
                     b.ToTable("sessions", (string)null);
                 });
 
+            modelBuilder.Entity("Urlog.Core.Metadata.StoreIdentityRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("origin");
+
+                    b.Property<string>("StoreId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("store_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_store_identity");
+
+                    b.ToTable("store_identity", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_store_identity_origin", "origin IN ('created', 'paired')");
+
+                            t.HasCheckConstraint("ck_store_identity_single", "id = 1");
+
+                            t.HasCheckConstraint("ck_store_identity_store_id", "length(store_id) = 32");
+                        });
+                });
+
             modelBuilder.Entity("Urlog.Core.Metadata.User", b =>
                 {
                     b.Property<long>("Id")

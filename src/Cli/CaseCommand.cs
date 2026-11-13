@@ -21,6 +21,8 @@ internal static class CaseCommand
         var path = VerifyAuditCommand.MetadataPath(args, mustExist: false);
         var name = args.Required("name");
         var ownerName = args.Required("owner");
+        // A case id is a partition key in one event store: both identities are compared.
+        await StoreCheck.FullAsync(path, new Connection(args), ct).ConfigureAwait(false);
         var store = new MetadataStore(path);
         await store.MigrateAsync(ct).ConfigureAwait(false);
         await using var db = store.CreateDbContext();

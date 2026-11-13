@@ -22,10 +22,19 @@ internal sealed class FakeEventStore : IJobEventStore
     private readonly Dictionary<(ulong File, uint Generation), long> _rows = [];
     private readonly Dictionary<ulong, uint> _current = [];
     private readonly List<string> _calls = [];
+    private int _identityReads;
 
     public long FreeBytes { get; set; } = 500L << 30;
 
     public long TotalBytes { get; set; } = 1000L << 30;
+
+    public string Endpoint => "fake-store:9000";
+
+    /// <summary>The identity this store carries; null for none. The harness gives its metadata file the same one.</summary>
+    public string? StoreId { get; set; }
+
+    /// <summary>How often the identity was read.</summary>
+    public int IdentityReads => Volatile.Read(ref _identityReads);
 
     /// <summary>Thrown by the next generation commit, once.</summary>
     public Exception? FailNextCommit { get; set; }
@@ -94,6 +103,12 @@ internal sealed class FakeEventStore : IJobEventStore
     }
 
     public Task RequireSchemaAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _identityReads);
+        return Task.FromResult(StoreId);
+    }
 
     public Task DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken)
     {
@@ -283,6 +298,10 @@ internal sealed class RunnerHarness : IAsyncDisposable
         db.Users.Add(user);
         await db.SaveChangesAsync(Ct);
         harness._ownerId = user.Id;
+        // A pair: the metadata file and the fake store carry one identity.
+        harness.Events.StoreId = StoreIdentity.NewId();
+        db.StoreIdentity.Add(new StoreIdentityRow { StoreId = harness.Events.StoreId, CreatedAt = DateTime.UtcNow, Origin = StoreIdentityOrigin.Created });
+        await db.SaveChangesAsync(Ct);
         return harness;
     }
 

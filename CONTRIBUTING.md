@@ -5,6 +5,7 @@ Requirements: .NET 10 SDK, Docker (the development ClickHouse and the integratio
     powershell -File tools/install-hooks.ps1      (once per clone)
     dotnet build -warnaserror
     docker compose -f compose.dev.yml up -d clickhouse
+    dotnet run --project src/Cli -- migrate --db src/Api/data/metadata.db    (once: the schema, and one store identity for the pair)
     dotnet test
     powershell -File tools/pre-merge.ps1          (before a merge: all tests, the benchmarks, the regression gate)
 
@@ -14,6 +15,20 @@ period and at most 72 characters. The commit-msg hook checks the subject.
 
 The design is in docs/design-record.md and the decisions in docs/adr/. A change to a parser or to the insert path
 comes with benchmark numbers (bench/README.md).
+
+## A metadata file and its event store
+
+A metadata file belongs to one event store, and both hold the same store identity (docs/design-record.md,
+"Consistency", Store identity). Every command that writes compares the two first and refuses a pair that does not
+match. `urlog migrate --db <file>` gives a new metadata file and an empty store their identity; `urlog pair --db <file>`
+joins a file and a store that already hold data, after showing what it joins and asking for the identity to be typed
+back. A development store that was filled before this rule is paired once that way.
+
+Never point a second metadata file at the development store. A measurement or an experiment that needs a metadata
+file of its own gets an event store of its own:
+
+    powershell -File tools/scratch-store.ps1 -MetadataFile <new file>     (a second ClickHouse on ports 19000/18123, no volume)
+    powershell -File tools/scratch-store.ps1 -Down
 
 ## Upgrades
 

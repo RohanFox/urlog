@@ -7,7 +7,7 @@
   Accounts:
     default         admin: migrations (`urlog migrate`), definer of events_v; never held by the backend at runtime
     urlog_query     read: SELECT on events_v and field_stats, readonly=2, constrained limits
-    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit, field statistics
+    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit, field statistics; reads the store identity
 -->
 <clickhouse>
     <users>
@@ -48,6 +48,10 @@
                 <query>GRANT INSERT, SELECT ON default.events</query>
                 <query>GRANT ALTER DELETE ON default.events</query>
                 <query>GRANT INSERT, SELECT ON default.file_generation</query>
+                <!-- The store's identity, read before every start of a runner and by every command that writes, to
+                     compare it with the metadata file's (migration 0007). Read only: the admin account writes the
+                     one row, once. -->
+                <query>GRANT SELECT ON default.store_identity</query>
                 <!-- ALTER DELETE: a case's statistics are removed when the case is deleted or purged, and replaced
                      when they are recomputed (migration 0004; decided 2026-11-11). -->
                 <query>GRANT INSERT, ALTER DELETE ON default.field_stats</query>

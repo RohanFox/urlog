@@ -15,6 +15,8 @@
   <ItemGroup>
     <!-- The allocation measurement every zero-allocation test uses. -->
     <Compile Include="../Shared/AllocationProbe.cs" Link="Shared/AllocationProbe.cs" />
+    <!-- A row-for-row dump of a metadata file: how the store identity tests assert that nothing was written. -->
+    <Compile Include="../Shared/MetadataDump.cs" Link="Shared/MetadataDump.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- The fixture corpus's own xz, tar and zip encoders: the decoder tests need whole and cut files of every format. -->

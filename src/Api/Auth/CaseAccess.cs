@@ -134,7 +134,7 @@ public static class CaseAccess
 
     /// <summary>
     /// Every route with a <c>caseId</c> parameter or under <c>/api/v1/cases/</c> carries a <see cref="CaseAccessRequirement"/>;
-    /// every route under <c>/api/v1/</c> other than login requires an authenticated caller (none allows anonymous);
+    /// every route under <c>/api/v1/</c> other than login and health requires an authenticated caller (none allows anonymous);
     /// every route under <c>/api/v1/users</c> and <c>/api/v1/admin/</c> carries the admin policy, and an admin route carries
     /// no membership requirement (the admin policy stands in its place).
     /// </summary>
@@ -169,7 +169,9 @@ public static class CaseAccess
                 continue;
             }
 
-            var isLogin = string.Equals(text, LoginRoute, StringComparison.OrdinalIgnoreCase);
+            // Two anonymous routes: login, and the health route, which answers before anyone can log in.
+            var isLogin = string.Equals(text, LoginRoute, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(text, StoreGateMiddleware.HealthRoute, StringComparison.OrdinalIgnoreCase);
             if (!isLogin && endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null)
             {
                 offenders.Add($"{display}: allows anonymous callers");

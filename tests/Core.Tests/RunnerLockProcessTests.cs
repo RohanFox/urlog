@@ -93,7 +93,7 @@ public sealed class RunnerLockProcessTests
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        // A port nothing listens on: the worker takes the lock, migrates, then waits for an event store that never answers.
+        // A port nothing listens on: the worker takes the lock, then waits for an event store that never answers.
         foreach (var argument in new[] { CliPath(), "worker", "--db", db, "--clickhouse", "127.0.0.1", "--native-port", "1", "--min-free-gb", "0", "--min-free-percent", "0" })
         {
             start.ArgumentList.Add(argument);

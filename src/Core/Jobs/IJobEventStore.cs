@@ -11,12 +11,22 @@ public interface IJobSink : IBatchSink, IAsyncDisposable
     long AckedRows { get; }
 }
 
+/// <summary>The event store's side of the store identity check (<see cref="StoreIdentityGuard"/>).</summary>
+public interface IStoreIdentitySource
+{
+    /// <summary>Where the store is, as <c>host:port</c>, for messages that have to name it.</summary>
+    string Endpoint { get; }
+
+    /// <summary>The identity the store carries, null when it has none.</summary>
+    Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// What the job runner needs from the event store, as the ingest account: the schema check, the generation-scoped
 /// deletes, the generation commit and its read-back, the disk figures and a sink per job. ClickHouse behind
 /// <see cref="ClickHouseJobEventStore"/>; a fake in the tests that run without Docker.
 /// </summary>
-public interface IJobEventStore
+public interface IJobEventStore : IStoreIdentitySource
 {
     Task RequireSchemaAsync(CancellationToken cancellationToken);
 
@@ -53,8 +63,16 @@ public sealed class ClickHouseJobEventStore(Func<ClickHouseTcpClient> control, N
             new NativeInserterOptions { Host = host, Port = nativePort, User = user, Password = password, Database = "default", Table = "events", Writers = writers });
     }
 
+    public string Endpoint { get; } = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{inserter.Host}:{inserter.Port}");
+
     public Task RequireSchemaAsync(CancellationToken cancellationToken) =>
         WithAsync(admin => admin.RequireSchemaAsync(cancellationToken));
+
+    public async Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken)
+    {
+        await using var client = control();
+        return await new EventStoreAdmin(client).ReadStoreIdentityAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     public Task DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken) =>
         WithAsync(admin => admin.DeleteFileGenerationsExceptAsync(caseId, fileId, keep, cancellationToken).AsTask());

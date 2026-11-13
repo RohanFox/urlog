@@ -1,5 +1,6 @@
 using System.Globalization;
 using ClickHouse.Driver.Tcp;
+using Urlog.Core.Metadata;
 
 namespace Urlog.Core.Ingest;
 
@@ -103,6 +104,62 @@ public sealed class EventStoreAdmin(ClickHouseTcpClient client)
             throw new EventStoreSchemaException("the account lacks the write path's grants (server code 497); the write path runs as urlog_ingest (deploy/clickhouse/users.d/urlog.xml)", e);
         }
     }
+
+    /// <summary>
+    /// The identity this event store carries, or null when it has none yet. The ingest account may read it and
+    /// nobody but the admin account may write it.
+    /// </summary>
+    /// <exception cref="EventStoreSchemaException">The schema is older than the identity table, or the account lacks the grant.</exception>
+    /// <exception cref="StoreIdentityException">The table holds more than one row.</exception>
+    public async Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken = default)
+    {
+        var ids = new List<string>(2);
+        try
+        {
+            await foreach (var row in client.QueryAsync("SELECT store_id FROM store_identity LIMIT 2", cancellationToken: cancellationToken).ConfigureAwait(false))
+            {
+                ids.Add((string)row[0]!);
+            }
+        }
+        catch (ClickHouseTcpServerException e) when (e.RawCode is 60 or 81)
+        {
+            throw new EventStoreSchemaException($"the event store's schema has no store_identity table (server code {e.RawCode}); run 'urlog migrate' as the admin account first", e);
+        }
+        catch (ClickHouseTcpServerException e) when (e.RawCode == 497)
+        {
+            throw new EventStoreSchemaException("the account may not read store_identity (server code 497); the ingest account needs GRANT SELECT ON default.store_identity (deploy/clickhouse/users.d/urlog.xml)", e);
+        }
+
+        return ids.Count switch
+        {
+            0 => null,
+            1 => ids[0],
+            _ => throw new StoreIdentityException("the event store's store_identity table holds more than one row; a store has one identity, and this one has to be repaired by hand before anything writes to it"),
+        };
+    }
+
+    /// <summary>Writes the store's identity. The admin account only, and only into a store that has none.</summary>
+    public async ValueTask WriteStoreIdentityAsync(string storeId, string createdBy, CancellationToken cancellationToken = default)
+    {
+        if (!StoreIdentity.IsValid(storeId))
+        {
+            throw new ArgumentException("a store identity is 32 lowercase hex characters", nameof(storeId));
+        }
+
+        if (await ReadStoreIdentityAsync(cancellationToken).ConfigureAwait(false) is { } existing)
+        {
+            throw new StoreIdentityException($"the event store already has store identity {existing}; it is never replaced", null, existing);
+        }
+
+        var ids = ClickHouseTcpColumn.Create("store_id", new[] { storeId });
+        var times = ClickHouseTcpColumn.Create("created_at", new[] { ClickHouseMigrator.UtcNowMilliseconds() });
+        var authors = ClickHouseTcpColumn.Create("created_by", new[] { createdBy });
+        await client.InsertAsync("INSERT INTO store_identity (store_id, created_at, created_by) VALUES", [ids, times, authors], cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Rows in the active parts of <c>events</c>, from <c>system.parts</c>: what the table holds without reading it.</summary>
+    public async Task<long> StoredEventRowsAsync(CancellationToken cancellationToken = default) =>
+        Convert.ToInt64(await client.ExecuteScalarAsync("SELECT sum(rows) FROM system.parts WHERE database = currentDatabase() AND table = 'events' AND active", cancellationToken: cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
 
     /// <summary>Free and total bytes of every disk the server stores data on (<c>system.disks</c>), for the ingest watermark.</summary>
     public async Task<IReadOnlyList<DiskSpace>> DiskSpaceAsync(CancellationToken cancellationToken = default)

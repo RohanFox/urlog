@@ -80,6 +80,15 @@ public static class AuditActions
     /// <summary>Free space is back above the mark and the queue runs again.</summary>
     public const string IngestResumed = "ingest_resumed";
 
+    /// <summary>The first store identity of a new metadata file and event store: the value and the server in the details.</summary>
+    public const string StoreIdentityCreated = "store_identity_created";
+
+    /// <summary>
+    /// The metadata file was joined to an event store by hand: the identity it held before, the one it holds now,
+    /// the server, and the counts the operator confirmed on.
+    /// </summary>
+    public const string StorePaired = "store_paired";
+
     /// <summary><c>close</c> -> <c>case_close</c>, and so on for every <see cref="CaseLifecycle"/> operation.</summary>
     public static string ForCaseOperation(string operation)
     {
@@ -96,4 +105,7 @@ public static class AuditTargets
     public const string User = "user";
     public const string Query = "query";
     public const string Backup = "backup";
+
+    /// <summary>The event store the metadata file belongs to; no id.</summary>
+    public const string Store = "store";
 }

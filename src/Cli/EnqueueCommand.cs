@@ -44,6 +44,8 @@ internal static class EnqueueCommand
         }
 
         var store = new MetadataStore(VerifyAuditCommand.MetadataPath(args, mustExist: true));
+        // The record and its job mean something in one event store only.
+        await StoreCheck.FullAsync(store.Path, new Connection(args), ct).ConfigureAwait(false);
         await store.MigrateAsync(ct).ConfigureAwait(false);
         var intake = new IntakePipeline(store, FileDetection.Catalog(), args.Option("evidence-root"));
         IntakeOutcome outcome;

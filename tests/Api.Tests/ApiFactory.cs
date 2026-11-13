@@ -21,17 +21,31 @@ namespace Urlog.Api.Tests;
 /// test-only startup filter that sets the socket address from the <c>X-Test-Client-Address</c> header (TestServer has no
 /// socket). Settings overrides go through <paramref name="settings"/> (<c>Urlog:Auth:LoginThrottle:Attempts</c>, ...).
 /// </summary>
-internal sealed class ApiFactory(IDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
+/// <param name="paired">
+/// True: the metadata file exists and carries the identity the fake event store answers with, as after
+/// <c>urlog migrate --db</c>. False: no metadata file, so the host finds no identity on its side.
+/// </param>
+internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, bool paired = true) : WebApplicationFactory<Program>
 {
     public const string ClientAddressHeader = "X-Test-Client-Address";
 
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("urlog-api-");
+    private FakeIdentitySource? _eventStore;
 
     public FakeClock Clock { get; } = new();
 
     public CaptureLoggerProvider Logs { get; } = new();
 
+    /// <summary>The event store's side of the store identity check; set before the first request to change what the host finds.</summary>
+    public FakeIdentitySource EventStore => _eventStore ??= new FakeIdentitySource { StoreId = StoreId };
+
+    /// <summary>The identity a paired factory writes into its metadata file, whatever a test makes the event store answer later.</summary>
+    public string StoreId { get; } = StoreIdentity.NewId();
+
     public string MetadataPath => Path.Combine(_directory.FullName, "metadata.db");
+
+    /// <summary>Every row of the metadata file as it was when the host was built, for tests that assert the host wrote nothing.</summary>
+    public string MetadataAtStart { get; private set; } = string.Empty;
 
     public static JsonSerializerOptions Json { get; } = new(JsonSerializerDefaults.Web)
     {
@@ -44,6 +58,24 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null) 
         builder.UseEnvironment("Testing");
         builder.UseSetting("Urlog:Metadata:Path", MetadataPath);
         builder.UseSetting("Urlog:Ingest:Enabled", "false"); // no event store behind these tests; the runner has its own
+        builder.UseSetting("Urlog:ClickHouse:RetryInterval", "00:00:00.050");
+        if (paired && !File.Exists(MetadataPath))
+        {
+            var id = StoreId;
+            Task.Run(async () =>
+            {
+                var store = new MetadataStore(MetadataPath);
+                await store.MigrateAsync();
+                await using var db = store.CreateDbContext();
+                db.StoreIdentity.Add(new StoreIdentityRow { StoreId = id, CreatedAt = DateTime.UtcNow, Origin = StoreIdentityOrigin.Created });
+                await db.SaveChangesAsync();
+            }).GetAwaiter().GetResult();
+            SqliteConnection.ClearAllPools();
+        }
+
+        // What the file held before the host saw it (a test may have put a file of its own there).
+        MetadataAtStart = Urlog.Tests.Shared.MetadataDump.TakeAsync(MetadataPath).GetAwaiter().GetResult();
+
         if (settings is not null)
         {
             foreach (var (key, value) in settings)
@@ -56,6 +88,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null) 
         {
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<ILoggerProvider>(Logs);
+            services.AddSingleton<Urlog.Core.Jobs.IStoreIdentitySource>(EventStore);
             services.AddTransient<IStartupFilter, TestClientAddressFilter>();
         });
     }
@@ -107,6 +140,27 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null) 
             });
             next(app);
         };
+    }
+}
+
+/// <summary>The event store as the host's store identity check sees it: an identity, none, or no answer.</summary>
+internal sealed class FakeIdentitySource : Urlog.Core.Jobs.IStoreIdentitySource
+{
+    private int _reads;
+
+    public string Endpoint => "fake-store:9000";
+
+    public string? StoreId { get; set; }
+
+    /// <summary>Thrown in place of an answer: the store is away.</summary>
+    public Exception? Failure { get; set; }
+
+    public int Reads => Volatile.Read(ref _reads);
+
+    public Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _reads);
+        return Failure is { } failure ? Task.FromException<string?>(failure) : Task.FromResult(StoreId);
     }
 }
 

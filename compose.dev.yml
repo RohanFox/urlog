@@ -12,7 +12,7 @@ services:
       # Accounts on this stack (deploy/clickhouse/users.d/urlog.xml):
       #   default         admin: `urlog migrate`, benches' scratch tables, definer of events_v (never drop or rename)
       #   urlog_query     read-only: SELECT on events_v and field_stats; `urlog query`, the API's search
-      #   urlog_ingest    write path: INSERT/SELECT/ALTER DELETE on events, INSERT/SELECT on file_generation, INSERT/ALTER DELETE on field_stats; `urlog ingest`
+      #   urlog_ingest    write path: INSERT/SELECT/ALTER DELETE on events, INSERT/SELECT on file_generation, INSERT/ALTER DELETE on field_stats, SELECT on store_identity; `urlog ingest`
       # The two backend accounts' ::/0 network and password = name are dev stubs as well.
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
@@ -37,6 +37,34 @@ services:
       retries: 20
       start_period: 10s
     restart: unless-stopped
+
+  # A second, throwaway event store for measurements and experiments that need a metadata file of their own
+  # (tools/scratch-store.ps1). A scratch metadata file never goes near the store above: the store identity check
+  # refuses the pair. Same image and accounts, other ports, no volume: `down` forgets everything it held.
+  clickhouse-scratch:
+    profiles: ["scratch"]
+    image: clickhouse/clickhouse-server:26.8.36.3
+    container_name: urlog-clickhouse-scratch
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:18123:8123"
+      - "127.0.0.1:19000:9000"
+    volumes:
+      - ./deploy/clickhouse/config.d/urlog.xml:/etc/clickhouse-server/config.d/urlog.xml:ro
+      - ./deploy/clickhouse/users.d/urlog.xml:/etc/clickhouse-server/users.d/urlog.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
 
 volumes:
   clickhouse-data:

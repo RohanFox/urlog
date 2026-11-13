@@ -9,10 +9,11 @@ namespace Urlog.Api;
 /// <summary>
 /// The job runner inside the backend: workers are threads of this process (design record, "Consistency"). It runs as
 /// the ingest account and holds the metadata file's runner lock; when a <c>urlog worker</c> already holds it, the
-/// backend serves without ingesting and says so. Stopping the host stops the running jobs and puts them back in the
-/// queue.
+/// backend serves without ingesting and says so. It starts once the host's store identity check has passed, and
+/// compares the two identities again itself, like every runner. Stopping the host stops the running jobs and puts
+/// them back in the queue.
 /// </summary>
-public sealed class IngestService(MetadataStore store, IOptions<UrlogOptions> options, IWebHostEnvironment environment, ILoggerFactory loggers, ILogger<IngestService> logger) : BackgroundService
+public sealed class IngestService(MetadataStore store, IJobEventStore events, StoreReadiness readiness, IOptions<UrlogOptions> options, IWebHostEnvironment environment, ILoggerFactory loggers, ILogger<IngestService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,14 +34,19 @@ public sealed class IngestService(MetadataStore store, IOptions<UrlogOptions> op
 
         var catalog = new SourceCatalog();
         catalog.Add(Urlog.Sources.LogSourceRegistry.Registrations);
-        var events = ClickHouseJobEventStore.Create(clickHouse.Host, clickHouse.NativePort, clickHouse.User, clickHouse.Password, runnerOptions.Pipeline.Writers);
-        Log.IngestStarting(logger, clickHouse.User, clickHouse.Host, clickHouse.NativePort, runnerOptions.MaxConcurrentJobs);
         try
         {
+            await readiness.WhenReady.WaitAsync(stoppingToken).ConfigureAwait(false);
+            Log.IngestStarting(logger, clickHouse.User, clickHouse.Host, clickHouse.NativePort, runnerOptions.MaxConcurrentJobs);
             await new JobRunner(store, events, catalog, runnerOptions, loggers: loggers).RunAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (RunnerLockedException e)
         {
+            Log.IngestNotStarted(logger, e.Message);
+        }
+        catch (StoreIdentityException e)
+        {
+            readiness.Lost(e);
             Log.IngestNotStarted(logger, e.Message);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

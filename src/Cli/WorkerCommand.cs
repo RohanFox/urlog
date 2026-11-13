@@ -65,6 +65,10 @@ internal static class WorkerCommand
         {
             throw new CliException(e.Message);
         }
+        catch (StoreIdentityException e)
+        {
+            throw new CliException(e.Message);
+        }
         catch (Urlog.Core.Ingest.EventStoreSchemaException e)
         {
             throw new CliException($"{e.Message} (connected as '{connection.IngestUser}')");

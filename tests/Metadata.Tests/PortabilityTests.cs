@@ -15,7 +15,7 @@ public sealed partial class PortabilityTests(ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static readonly string[] Tables = ["users", "cases", "case_members", "hosts", "files", "jobs", "audit", "sessions"];
+    private static readonly string[] Tables = ["users", "cases", "case_members", "hosts", "files", "jobs", "audit", "sessions", "store_identity"];
 
     [Fact]
     public void TheModelGeneratesAPostgresScript()

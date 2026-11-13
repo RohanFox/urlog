@@ -251,11 +251,11 @@ public sealed class NativeFramingTests
     }
 
     [Fact]
-    public void EmbeddedMigrationsAreTheSixInOrder()
+    public void EmbeddedMigrationsAreTheSevenInOrder()
     {
         var set = MigrationSet.Embedded();
-        Assert.Equal(["events", "file_generation", "events_v", "field_stats", "events_v_definer", "events_v_hide_uncommitted"], set.Select(m => m.Name));
-        Assert.Equal([1, 2, 3, 4, 5, 6], set.Select(m => m.Version));
+        Assert.Equal(["events", "file_generation", "events_v", "field_stats", "events_v_definer", "events_v_hide_uncommitted", "store_identity"], set.Select(m => m.Name));
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7], set.Select(m => m.Version));
         Assert.All(set, m => Assert.NotEmpty(m.Statements()));
         Assert.Contains("tokenizer = 'splitByNonAlpha'", set[0].Sql, StringComparison.Ordinal);
     }

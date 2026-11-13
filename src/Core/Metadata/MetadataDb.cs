@@ -31,6 +31,8 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
 
     public DbSet<Session> Sessions => Set<Session>();
 
+    public DbSet<StoreIdentityRow> StoreIdentity => Set<StoreIdentityRow>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
@@ -171,6 +173,21 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             // Lockout, role change and password reset end every session of the user.
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<StoreIdentityRow>(e =>
+        {
+            e.ToTable("store_identity", t =>
+            {
+                // One row: a file belongs to one event store.
+                t.HasCheckConstraint("ck_store_identity_single", "id = 1");
+                t.HasCheckConstraint("ck_store_identity_store_id", "length(store_id) = 32");
+                t.HasCheckConstraint("ck_store_identity_origin", Names.EnumCheck<StoreIdentityOrigin>("origin"));
+            });
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.StoreId).HasMaxLength(32);
+            e.Property(x => x.Origin).HasConversion(EnumText<StoreIdentityOrigin>()).HasMaxLength(8);
         });
 
         ApplySnakeCaseNames(modelBuilder);

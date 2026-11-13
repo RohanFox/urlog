@@ -34,6 +34,9 @@ internal sealed class WorkerHarness : IAsyncDisposable
 
     public MetadataStore Store { get; }
 
+    /// <summary>The identity the harness gave its metadata file and the event store.</summary>
+    public string StoreId { get; } = StoreIdentity.NewId();
+
     public string Folder => _directory.FullName;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -47,10 +50,14 @@ internal sealed class WorkerHarness : IAsyncDisposable
             // Every test starts its own metadata file at id 1, so the store starts empty too.
             await admin.ExecuteAsync("TRUNCATE TABLE events", cancellationToken: Ct);
             await admin.ExecuteAsync("TRUNCATE TABLE file_generation", cancellationToken: Ct);
+            // And a new pair: the store takes the identity of this test's metadata file.
+            await admin.ExecuteAsync("TRUNCATE TABLE store_identity", cancellationToken: Ct);
+            await new EventStoreAdmin(admin).WriteStoreIdentityAsync(harness.StoreId, ClickHouseFixture.AdminUser, Ct);
         }
 
         await harness.Store.MigrateAsync(Ct);
         await using var db = harness.Store.CreateDbContext();
+        db.StoreIdentity.Add(new StoreIdentityRow { StoreId = harness.StoreId, CreatedAt = DateTime.UtcNow, Origin = StoreIdentityOrigin.Created });
         var user = new User { Name = "alice", PasswordHash = "argon2id$placeholder", CreatedAt = DateTime.UtcNow };
         db.Users.Add(user);
         await db.SaveChangesAsync(Ct);
@@ -71,28 +78,8 @@ internal sealed class WorkerHarness : IAsyncDisposable
     }
 
     /// <summary>The intake record of a file already on disk (its SHA-256 known) and a queued parse.</summary>
-    public async Task<(EvidenceFile File, Job Job)> AddFileAsync(long caseId, string path, string sha256, string source = "nginx")
-    {
-        await using var db = Store.CreateDbContext();
-        var host = await HostOperations.GetOrCreateAsync(db, caseId, "web-01", DateTime.UtcNow, Ct);
-        var file = new EvidenceFile
-        {
-            CaseId = caseId,
-            HostId = host.Id,
-            Sha256 = sha256,
-            Size = new FileInfo(path).Length,
-            OriginalName = Path.GetFileName(path),
-            StoredPath = path,
-            Source = FileSource.Cli,
-            Uploader = "alice",
-            ReceivedAt = DateTime.UtcNow,
-            Encoding = "utf8",
-            DetectedSource = source,
-        };
-        var added = (await FileOperations.AddAsync(db, Store.Audit, new AuditActor("alice"), file, Ct)).File;
-        var job = await JobOperations.EnqueueAsync(db, added.Id, DateTime.UtcNow, Ct);
-        return (added, job);
-    }
+    public Task<(EvidenceFile File, Job Job)> AddFileAsync(long caseId, string path, string sha256, string source = "nginx") =>
+        AddFileAsync(Store, caseId, path, sha256, source);
 
     public async Task<Job> JobAsync(long id)
     {
@@ -168,6 +155,139 @@ internal sealed class WorkerHarness : IAsyncDisposable
         return worker;
     }
 
+    /// <summary>
+    /// Runs one <c>urlog</c> command to its end against this event store (not against this metadata file unless
+    /// the arguments say so). Standard input is <paramref name="stdin"/> and then closed, so the command never sees
+    /// a terminal.
+    /// </summary>
+    public async Task<CliResult> RunCliAsync(string? stdin, params string[] arguments) =>
+        await RunCliAsync(_ch.NativeHostPort, stdin, arguments);
+
+    /// <summary>As <see cref="RunCliAsync(string?, string[])"/>, at a native port of the caller's choosing (1: nothing listens there).</summary>
+    public async Task<CliResult> RunCliAsync(int nativePort, string? stdin, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false };
+        foreach (var variable in new[] { "URLOG_DB", "URLOG_CH_HOST", "URLOG_CH_TCP_PORT", "URLOG_CH_USER", "URLOG_CH_PASSWORD", "URLOG_CH_ADMIN_USER", "URLOG_CH_ADMIN_PASSWORD", "URLOG_PASSWORD", "URLOG_BACKUP_DIR" })
+        {
+            start.Environment.Remove(variable);
+        }
+
+        string[] all = [CliPath(), .. arguments, "--clickhouse", _ch.Host, "--native-port", nativePort.ToString(CultureInfo.InvariantCulture)];
+        foreach (var argument in all)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start)!;
+        if (stdin is not null)
+        {
+            await process.StandardInput.WriteAsync(stdin);
+        }
+
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync(Ct);
+        var error = process.StandardError.ReadToEndAsync(Ct);
+        await process.WaitForExitAsync(Ct).WaitAsync(TimeSpan.FromSeconds(120), Ct);
+        return new CliResult(process.ExitCode, await output, await error);
+    }
+
+    /// <summary>
+    /// Everything in the event store a wrong pairing could change, as text: every <c>file_generation</c> row with
+    /// its time, the rows of <c>events</c> per file and generation, the mutations queued on <c>events</c> (a
+    /// lightweight delete is one), and the store's identity. Read as the admin account.
+    /// </summary>
+    public async Task<string> StoreSnapshotAsync()
+    {
+        await using var admin = Admin();
+        var text = new System.Text.StringBuilder();
+        foreach (var sql in new[]
+                 {
+                     "SELECT 'file_generation', toString(file_id), toString(current), toString(updated_at) FROM file_generation ORDER BY file_id, updated_at, current",
+                     "SELECT 'events', toString(file_id), toString(parse_generation), toString(count()) FROM events GROUP BY file_id, parse_generation ORDER BY file_id, parse_generation",
+                     "SELECT 'parts', toString(sum(rows)), toString(count()), '' FROM system.parts WHERE database = currentDatabase() AND table = 'events' AND active",
+                     "SELECT 'mutations', toString(count()), '', '' FROM system.mutations WHERE database = currentDatabase() AND table = 'events'",
+                     "SELECT 'store_identity', store_id, toString(created_at), created_by FROM store_identity ORDER BY created_at",
+                 })
+        {
+            await foreach (var row in admin.QueryAsync(sql, cancellationToken: Ct))
+            {
+                text.Append(row[0]).Append(' ').Append(row[1]).Append(' ').Append(row[2]).Append(' ').Append(row[3]).Append('\n');
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>The visible generation per file id, as the ingest account reads <c>file_generation</c>.</summary>
+    public async Task<Dictionary<ulong, uint>> EventStoreGenerationsAsync()
+    {
+        await using var ingest = new ClickHouseTcpClient(_ch.NativeConnectionString(IngestUser, IngestPassword));
+        return await new EventStoreAdmin(ingest).ReadFileGenerationsAsync(Ct);
+    }
+
+    /// <summary>The store's identity as the admin account reads it; null for none.</summary>
+    public async Task<string?> StoreIdentityAsync()
+    {
+        await using var admin = Admin();
+        return await new EventStoreAdmin(admin).ReadStoreIdentityAsync(Ct);
+    }
+
+    /// <summary>Takes the identity away from the event store: the state of a store from before the identity existed.</summary>
+    public async Task ClearStoreIdentityAsync()
+    {
+        await using var admin = Admin();
+        await admin.ExecuteAsync("TRUNCATE TABLE store_identity", cancellationToken: Ct);
+    }
+
+    /// <summary>
+    /// A second metadata file that has nothing to do with this event store, in a folder of its own: migrated, with
+    /// a user and a case, and with an identity of its own unless <paramref name="identity"/> is false. Its ids
+    /// start at 1 like every new file's.
+    /// </summary>
+    public async Task<(MetadataStore Store, long CaseId, string? StoreId)> AddForeignMetadataAsync(string name, bool identity = true)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_directory.FullName, name));
+        var store = new MetadataStore(Path.Combine(folder.FullName, "metadata.db"));
+        await store.MigrateAsync(Ct);
+        await using var db = store.CreateDbContext();
+        var user = new User { Name = "mallory", PasswordHash = "argon2id$placeholder", CreatedAt = DateTime.UtcNow };
+        db.Users.Add(user);
+        string? id = null;
+        if (identity)
+        {
+            id = Urlog.Core.Metadata.StoreIdentity.NewId();
+            db.StoreIdentity.Add(new StoreIdentityRow { StoreId = id, CreatedAt = DateTime.UtcNow, Origin = StoreIdentityOrigin.Created });
+        }
+
+        await db.SaveChangesAsync(Ct);
+        var @case = await CaseOperations.CreateAsync(db, store.Audit, new AuditActor("mallory"), "scratch", user.Id, DateTime.UtcNow, Ct);
+        return (store, @case.Id, id);
+    }
+
+    /// <summary>An intake record with a queued parse in <paramref name="store"/> (this harness's own file, or a foreign one).</summary>
+    public static async Task<(EvidenceFile File, Job Job)> AddFileAsync(MetadataStore store, long caseId, string path, string sha256, string source = "nginx")
+    {
+        await using var db = store.CreateDbContext();
+        var host = await HostOperations.GetOrCreateAsync(db, caseId, "web-01", DateTime.UtcNow, Ct);
+        var file = new EvidenceFile
+        {
+            CaseId = caseId,
+            HostId = host.Id,
+            Sha256 = sha256,
+            Size = new FileInfo(path).Length,
+            OriginalName = Path.GetFileName(path),
+            StoredPath = path,
+            Source = FileSource.Cli,
+            Uploader = "alice",
+            ReceivedAt = DateTime.UtcNow,
+            Encoding = "utf8",
+            DetectedSource = source,
+        };
+        var added = (await FileOperations.AddAsync(db, store.Audit, new AuditActor("alice"), file, Ct)).File;
+        var job = await JobOperations.EnqueueAsync(db, added.Id, DateTime.UtcNow, Ct);
+        return (added, job);
+    }
+
     public static async Task EventuallyAsync(Func<Task<bool>> condition, string what, int seconds = 120, int pollMilliseconds = 20)
     {
         var deadline = Stopwatch.StartNew();
@@ -211,6 +331,12 @@ internal sealed class WorkerHarness : IAsyncDisposable
         Assert.True(File.Exists(path), $"urlog.dll is not built at {path}");
         return path;
     }
+}
+
+/// <summary>How one <c>urlog</c> command ended.</summary>
+internal sealed record CliResult(int ExitCode, string Output, string Error)
+{
+    public override string ToString() => $"exit {ExitCode}\n--- stdout\n{Output}\n--- stderr\n{Error}";
 }
 
 /// <summary>A <c>urlog worker</c> child process. Its output is read as it comes, so the pipe never fills and a test can wait for a line.</summary>

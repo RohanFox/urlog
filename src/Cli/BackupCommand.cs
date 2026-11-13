@@ -18,6 +18,7 @@ internal static class BackupCommand
         var directory = args.Option("dir") ?? Environment.GetEnvironmentVariable("URLOG_BACKUP_DIR") ?? SqliteBackup.DefaultDirectory(path);
         var reason = args.Option("reason") ?? SqliteBackup.ReasonManual;
         var actor = args.Option("actor") ?? Environment.UserName;
+        await StoreCheck.LocalAsync(path, ct).ConfigureAwait(false);
         var store = new MetadataStore(path);
         BackupResult backup;
         try

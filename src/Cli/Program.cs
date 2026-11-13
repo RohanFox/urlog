@@ -35,6 +35,7 @@ try
     return args[0].ToLowerInvariant() switch
     {
         "migrate" => await MigrateCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
+        "pair" => await PairCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "ingest" => await IngestCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "enqueue" => await EnqueueCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "expand" => await ExpandCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
@@ -76,8 +77,9 @@ static int Unknown(string verb)
 static void Usage()
 {
     Console.WriteLine("""
-        urlog migrate
-        urlog ingest --case <id> --host <name> [--host-id n] [--file-id n] [--generation n] [--source id]
+        urlog migrate [--db <metadata.db>]
+        urlog pair --db <metadata.db> [--confirm <identity>]
+        urlog ingest --case <id> --host <name> [--host-id n] [--file-id n] [--generation n] [--source id] [--store-id <identity>]
                      [--format <nginx log_format or layout>] [--tz zone] [--year yyyy] [--parallelism n] [--writers n] [--slo] <file>
         urlog enqueue --db <metadata.db> --case <id> [--host name] [--source id] [--format <nginx log_format or layout>]
                      [--tz zone] [--year yyyy] [--evidence-root dir] <file>
@@ -125,6 +127,19 @@ static void Usage()
         and passwd sets a new password and ends the user's sessions, both the break-glass for a locked or forgotten sole
         admin. The password is read from stdin (--password-stdin), URLOG_PASSWORD, or a no-echo prompt; never from an
         argument. Every command writes its audit row as the OS user and prints the new head.
+
+        Store identity: a metadata file belongs to one event store, and both hold the same identity (32 hex
+        characters). migrate --db gives a new deployment its identity: a metadata file without file records and a
+        store that holds nothing. worker, enqueue, expand and case compare the two before they write and refuse,
+        naming both values, when they differ or one side has none. user and backup need only that the metadata
+        file has an identity; the event store need not be up. verify-audit reads only and runs on any metadata
+        file, with an identity or without. pair joins a metadata file and a store that
+        already hold data (an upgrade from before the identity existed, a metadata file restored from an old
+        backup, a replaced store): it prints what each side holds and what the next start of a runner would write,
+        and asks for the identity to be typed back (--confirm for a script). The store's identity never changes;
+        the metadata file's change is in its audit chain. No job runner may be up on the file while it runs.
+        ingest keeps no record: into a store that has an identity it needs --store-id with that identity, and a
+        --case and a --file-id from 4611686018427387904 (2^62) up, the ranges the metadata file never allocates.
 
         ClickHouse: --clickhouse host --native-port 9000 --http-port 8123, or URLOG_CH_HOST / URLOG_CH_TCP_PORT /
         URLOG_CH_HTTP_PORT. Three accounts, one per role; each command prints the account it connected as (the name,
