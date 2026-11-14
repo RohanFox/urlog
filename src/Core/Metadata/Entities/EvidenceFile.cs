@@ -172,4 +172,7 @@ public sealed class EvidenceFile
     /// change of that zone's offset: times may be one hour off on one side.
     /// </summary>
     public bool SpansDst { get; set; }
+
+    /// <summary>When the integrity sweep last read the stored bytes and compared them with <see cref="Sha256"/>; null for never.</summary>
+    public DateTime? VerifiedAt { get; set; }
 }

@@ -27,6 +27,22 @@ public static class CaseLifecycle
     public const string Purge = "purge";
     public const string PurgeComplete = "purge_complete";
 
+    /// <summary>Who may ask for an operation. The executor's own steps (<see cref="PurgeComplete"/>) have no requester.</summary>
+    public static LifecycleRole RequiredRole(string operation) => operation switch
+    {
+        Close or Reopen or Archive or Reimport => LifecycleRole.Owner,
+        SoftDelete or Restore => LifecycleRole.OwnerOrAdmin,
+        Purge => LifecycleRole.Admin,
+        _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "not an operation a person asks for"),
+    };
+
+    /// <summary>What every refusal of new evidence says for a case that is not <c>active</c>: an upload, a drop, a command.</summary>
+    public static string IngestRefusal(CaseRecord @case)
+    {
+        ArgumentNullException.ThrowIfNull(@case);
+        return new CaseNotActiveException(@case.Id, @case.State).Message;
+    }
+
     /// <summary>The operation that moves <paramref name="from"/> to <paramref name="to"/>, or null when the table has no cell.</summary>
     public static string? Operation(CaseState from, CaseState to) => (from, to) switch
     {
@@ -60,7 +76,7 @@ public static class CaseLifecycle
     /// original close or archive time survives. Returns the operation name for the audit row.
     /// </summary>
     /// <exception cref="InvalidCaseTransitionException">The table has no cell for the pair.</exception>
-    public static string Apply(CaseRecord @case, CaseState to, DateTime nowUtc)
+    internal static string Apply(CaseRecord @case, CaseState to, DateTime nowUtc)
     {
         if (!CanTransition(@case, to, out var operation))
         {
@@ -101,4 +117,16 @@ public static class CaseLifecycle
         @case.State = to;
         return operation!;
     }
+}
+/// <summary>The role a lifecycle operation asks of the account that requests it.</summary>
+public enum LifecycleRole
+{
+    /// <summary>An owner of the case.</summary>
+    Owner,
+
+    /// <summary>An owner of the case, or an administrator.</summary>
+    OwnerOrAdmin,
+
+    /// <summary>An administrator.</summary>
+    Admin,
 }

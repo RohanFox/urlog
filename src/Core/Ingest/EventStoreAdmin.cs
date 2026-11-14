@@ -173,27 +173,71 @@ public sealed class EventStoreAdmin(ClickHouseTcpClient client)
         return disks;
     }
 
-    /// <summary>Drops one month's partition of a case (purge and archive). Idempotent: a missing partition is not an error.</summary>
+    /// <summary>
+    /// Drops one month's partition of a case (purge and archive). Idempotent: a missing partition is not an error.
+    /// The statement lifts the server's size limit on a partition drop for itself (50 GB by default; a case month
+    /// can be larger): the limit is there against a mistyped statement, and this one takes its partition from
+    /// <see cref="CasePartitionsAsync"/>.
+    /// </summary>
     public ValueTask DropCasePartitionAsync(ulong caseId, int yyyymm, CancellationToken cancellationToken = default) =>
-        client.ExecuteAsync($"ALTER TABLE events DROP PARTITION ({caseId.ToString(CultureInfo.InvariantCulture)}, {yyyymm.ToString(CultureInfo.InvariantCulture)})", cancellationToken: cancellationToken);
+        client.ExecuteAsync($"ALTER TABLE events DROP PARTITION ({Text(caseId)}, {yyyymm.ToString(CultureInfo.InvariantCulture)}) SETTINGS max_partition_size_to_drop = 0", cancellationToken: cancellationToken);
 
-    /// <summary>The months a case spans, from the parts that exist, for <see cref="DropCasePartitionAsync"/>.</summary>
-    public async Task<IReadOnlyList<int>> CasePartitionMonthsAsync(ulong caseId, CancellationToken cancellationToken = default)
+    /// <summary>The partitions a case has active parts in, with their rows and bytes on disk (<c>system.parts</c>), by month.</summary>
+    public async Task<IReadOnlyList<CasePartition>> CasePartitionsAsync(ulong caseId, CancellationToken cancellationToken = default)
     {
-        var months = new List<int>();
+        var partitions = new List<CasePartition>();
+        var prefix = "(" + Text(caseId) + ",";
         await foreach (var row in client.QueryAsync(
-            "SELECT DISTINCT toYYYYMM(min_time) FROM system.parts WHERE database = currentDatabase() AND table = 'events' AND active " +
-            $"AND partition LIKE '({caseId.ToString(CultureInfo.InvariantCulture)},%' ORDER BY 1",
+            "SELECT partition, sum(rows), sum(bytes_on_disk) FROM system.parts WHERE database = currentDatabase() AND table = 'events' AND active " +
+            $"AND startsWith(partition, '{prefix}') GROUP BY partition ORDER BY partition",
             cancellationToken: cancellationToken).ConfigureAwait(false))
         {
-            months.Add(Convert.ToInt32(row[0], CultureInfo.InvariantCulture));
+            // The partition key is (case_id, toYYYYMM(ts)); system.parts shows it as "(7,202601)".
+            var text = (string)row[0]!;
+            var month = int.Parse(text.AsSpan(prefix.Length).TrimEnd(')').Trim(), NumberStyles.None, CultureInfo.InvariantCulture);
+            partitions.Add(new CasePartition(month, Convert.ToInt64(row[1], CultureInfo.InvariantCulture), Convert.ToInt64(row[2], CultureInfo.InvariantCulture)));
         }
 
-        return months;
+        return partitions;
     }
+
+    /// <summary>Removes a case's field statistics (purge and archive). A lightweight delete; idempotent.</summary>
+    public ValueTask DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken = default) =>
+        client.ExecuteAsync($"DELETE FROM field_stats WHERE case_id = {Text(caseId)}", cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Removes the generation rows of the given file ids (purge), so an id the metadata file hands out again starts
+    /// from no row. A lightweight delete, which returns when its mask is applied; idempotent.
+    /// </summary>
+    public async ValueTask ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fileIds);
+        foreach (var batch in fileIds.Chunk(IdBatch))
+        {
+            await client.ExecuteAsync($"DELETE FROM file_generation WHERE file_id IN ({string.Join(',', batch.Select(Text))})", cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>How many generation rows the store still holds for the given file ids.</summary>
+    public async Task<long> CountFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fileIds);
+        long total = 0;
+        foreach (var batch in fileIds.Chunk(IdBatch))
+        {
+            total += Convert.ToInt64(await client.ExecuteScalarAsync($"SELECT count() FROM file_generation WHERE file_id IN ({string.Join(',', batch.Select(Text))})", cancellationToken: cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        }
+
+        return total;
+    }
+
+    private const int IdBatch = 1000;
 
     private static string Text(ulong value) => value.ToString(CultureInfo.InvariantCulture);
 }
+
+/// <summary>One month of a case in <c>events</c>: the partition <c>(case_id, yyyymm)</c> with what its active parts hold.</summary>
+public sealed record CasePartition(int Month, long Rows, long BytesOnDisk);
 
 /// <summary>Free and total bytes of one volume: a ClickHouse disk (<c>clickhouse:&lt;name&gt;</c>) or a local path.</summary>
 public sealed record DiskSpace(string Name, long FreeBytes, long TotalBytes);

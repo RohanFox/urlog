@@ -658,11 +658,15 @@ public static class JobOperations
         return db.Jobs.AnyAsync(j => j.State == JobState.Queued, cancellationToken);
     }
 
-    /// <summary>The committed generation of every file that has one: the highest generation among its <c>done</c> jobs. SQLite is the truth the event store is synced to.</summary>
+    /// <summary>
+    /// The committed generation of every file that has one: the highest generation among its <c>done</c> jobs. SQLite
+    /// is the truth the event store is synced to. Files of a case in <c>purging</c> are left out: the purge removes
+    /// their generation rows, and the sync must not write them back.
+    /// </summary>
     public static async Task<Dictionary<long, int>> CommittedGenerationsAsync(MetadataDb db, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var rows = await db.Jobs.Where(j => j.State == JobState.Done).GroupBy(j => j.FileId).Select(g => new { FileId = g.Key, Generation = g.Max(j => j.Generation) }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.Jobs.Where(j => j.State == JobState.Done && !db.Cases.Any(c => c.Id == j.CaseId && c.State == CaseState.Purging)).GroupBy(j => j.FileId).Select(g => new { FileId = g.Key, Generation = g.Max(j => j.Generation) }).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.ToDictionary(r => r.FileId, r => r.Generation);
     }
 

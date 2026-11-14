@@ -202,11 +202,16 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         output.WriteLine($"after the generation-2 commit as urlog_ingest: {string.Join(" / ", visible[0])}");
         Assert.Equal(["60", "2", "2"], visible[0]);
 
-        var months = await store.CasePartitionMonthsAsync(caseId, Ct);
-        Assert.Equal([202603], months);
+        var months = await store.CasePartitionsAsync(caseId, Ct);
+        Assert.Equal([202603], months.Select(m => m.Month));
+        // The parts still count the 100 rows the lightweight delete masked, until a merge drops them.
+        Assert.InRange(months[0].Rows, 60, 160);
+        Assert.True(months[0].BytesOnDisk > 0);
         await store.DropCasePartitionAsync(caseId, 202603, Ct);
         Assert.Equal("0", (await QueryAsync("SELECT count() FROM events_v", allowed))[0][0]);
-        Assert.Empty(await store.CasePartitionMonthsAsync(caseId, Ct));
+        Assert.Empty(await store.CasePartitionsAsync(caseId, Ct));
+        // Dropping what is not there is not an error: a purge repeats its drops after a stop.
+        await store.DropCasePartitionAsync(caseId, 202603, Ct);
 
         // The seed is untouched.
         Assert.Equal(ClickHouseFixture.RowsPerCase.ToString(CultureInfo.InvariantCulture), (await QueryAsync("SELECT count() FROM events_v", new() { ["SQL_allowed_cases"] = "[1]" }))[0][0]);
@@ -282,8 +287,10 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     [InlineData("ALTER TABLE events MODIFY TTL toDateTime(ts) + INTERVAL 1 DAY")]
     [InlineData("ALTER TABLE events UPDATE host = 'x' WHERE 0")]
     [InlineData("OPTIMIZE TABLE events FINAL")]
-    [InlineData("DELETE FROM file_generation WHERE 0")]
-    [InlineData("ALTER TABLE file_generation DROP PARTITION tuple()")]
+    [InlineData("TRUNCATE TABLE file_generation")]
+    [InlineData("ALTER TABLE file_generation UPDATE current = 9 WHERE 1")]
+    [InlineData("DROP TABLE file_generation")]
+    [InlineData("ALTER TABLE file_generation ADD COLUMN ingest_probe UInt8")]
     [InlineData("ALTER TABLE field_stats UPDATE count = 0 WHERE 1")]
     [InlineData("ALTER TABLE field_stats ADD COLUMN ingest_probe UInt8")]
     [InlineData("DROP TABLE field_stats")]
@@ -343,6 +350,69 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     }
 
     [Fact]
+    public async Task IngestAccountRemovesTheGenerationRowsOfAPurgedCaseAndTheDeleteIsAppliedWhenItReturns()
+    {
+        // Ids of their own, far from the seed's.
+        ulong[] files = [9101, 9102, 9103];
+        await using var ingest = ch.Ingest();
+        var store = new EventStoreAdmin(ingest);
+        await store.CommitFileGenerationsAsync([new(9101, 1), new(9102, 3), new(9103, 1)], Ct);
+        await store.CommitFileGenerationAsync(9101, 2, Ct);
+        Assert.Equal(4, await store.CountFileGenerationsAsync(files, Ct));
+
+        await store.ClearFileGenerationsAsync([9101, 9102], Ct);
+        // No wait between the delete and the read: the statement returns with its mask applied.
+        Assert.Equal(0, await store.CountFileGenerationsAsync([9101, 9102], Ct));
+        Assert.Equal(1, await store.CountFileGenerationsAsync(files, Ct));
+        Assert.Equal(0u, await store.ReadFileGenerationAsync(9101, Ct));
+
+        // A repeat and an id that never had a row are not errors: a purge repeats this step after a stop.
+        await store.ClearFileGenerationsAsync([9101, 9102, 9199], Ct);
+        // An id handed out again starts from no row.
+        await store.CommitFileGenerationAsync(9101, 1, Ct);
+        Assert.Equal(1u, await store.ReadFileGenerationAsync(9101, Ct));
+        await store.ClearFileGenerationsAsync(files, Ct);
+        Assert.Equal(0, await store.CountFileGenerationsAsync(files, Ct));
+    }
+
+    [Fact]
+    public async Task AlterDeleteOnFileGenerationAlsoLetsTheIngestAccountEmptyTheTable()
+    {
+        // Measured, not wanted: there is no privilege for a row delete alone, and ALTER DELETE passes a drop of
+        // the table's one partition. It hides every file until a runner starts and writes the generations back
+        // from the metadata file. Nothing in the code does it; this pins the width. The rows are put back here.
+        await using var admin = ch.Admin();
+        var before = new List<(ulong File, uint Current)>();
+        await foreach (var row in admin.QueryAsync("SELECT file_id, argMax(current, updated_at) FROM file_generation GROUP BY file_id", cancellationToken: Ct))
+        {
+            before.Add((Convert.ToUInt64(row[0], CultureInfo.InvariantCulture), Convert.ToUInt32(row[1], CultureInfo.InvariantCulture)));
+        }
+
+        await using var ingest = ch.Ingest();
+        await ingest.ExecuteAsync("ALTER TABLE file_generation DROP PARTITION tuple()", cancellationToken: Ct);
+        Assert.Equal(0L, Convert.ToInt64(await ingest.ExecuteScalarAsync("SELECT count() FROM file_generation", cancellationToken: Ct), CultureInfo.InvariantCulture));
+        await new EventStoreAdmin(ingest).CommitFileGenerationsAsync([.. before.Select(b => new KeyValuePair<ulong, uint>(b.File, b.Current))], Ct);
+    }
+
+    [Fact]
+    public async Task IngestAccountLiftsTheDropLimitForItsOwnStatementOnly()
+    {
+        // The server refuses to drop a partition above max_partition_size_to_drop (50 GB by default). The purge's
+        // statement carries the setting with 0; the same account with a limit of one byte is refused, which shows
+        // the server takes the statement's value.
+        const ulong caseId = 9;
+        await ch.InsertAsync(caseId, fileId: 900, generation: 1, month: 5, rows: 10);
+        await using var ingest = ch.Ingest();
+        var refused = await Assert.ThrowsAsync<ClickHouseTcpServerException>(() => ingest.ExecuteAsync("ALTER TABLE events DROP PARTITION (9, 202605) SETTINGS max_partition_size_to_drop = 1", cancellationToken: Ct).AsTask());
+        Assert.Equal(359, refused.RawCode);
+        var store = new EventStoreAdmin(ingest);
+        Assert.Single(await store.CasePartitionsAsync(caseId, Ct));
+        await store.DropCasePartitionAsync(caseId, 202605, Ct);
+        Assert.Empty(await store.CasePartitionsAsync(caseId, Ct));
+        await store.DeleteCaseFieldStatsAsync(caseId, Ct);
+    }
+
+    [Fact]
     public async Task TheDictionaryAndItsReaderAccountAreGone()
     {
         // events_v decides visibility from file_generation itself (migration 0006), as its definer. What the
@@ -380,7 +450,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
             [
                 "ALTER DELETE default.events", "INSERT default.events", "SELECT default.events",
                 "ALTER DELETE default.field_stats", "INSERT default.field_stats",
-                "INSERT default.file_generation", "SELECT default.file_generation",
+                "ALTER DELETE default.file_generation", "INSERT default.file_generation", "SELECT default.file_generation",
                 "SELECT default.store_identity",
                 "SELECT system.disks", "SELECT system.merges", "SELECT system.mutations", "SELECT system.parts",
             ],

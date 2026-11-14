@@ -7,7 +7,7 @@
   Accounts:
     default         admin: migrations (`urlog migrate`), definer of events_v; never held by the backend at runtime
     urlog_query     read: SELECT on events_v and field_stats, readonly=2, constrained limits
-    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit, field statistics; reads the store identity
+    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit and its removal at a purge, field statistics; reads the store identity
 -->
 <clickhouse>
     <users>
@@ -48,6 +48,12 @@
                 <query>GRANT INSERT, SELECT ON default.events</query>
                 <query>GRANT ALTER DELETE ON default.events</query>
                 <query>GRANT INSERT, SELECT ON default.file_generation</query>
+                <!-- A purge removes the generation rows of the case's files, so a file id the metadata file
+                     hands out again starts from no row (design record, "Consistency", Purge). Measured on
+                     26.8.36.3: the grant also passes ALTER TABLE file_generation DROP PARTITION tuple(), which
+                     empties the table; every file is then hidden until a runner starts and writes the rows back
+                     from the metadata file. The account could already hide any file by inserting generation 0. -->
+                <query>GRANT ALTER DELETE ON default.file_generation</query>
                 <!-- The store's identity, read before every start of a runner and by every command that writes, to
                      compare it with the metadata file's (migration 0007). Read only: the admin account writes the
                      one row, once. -->

@@ -40,11 +40,14 @@ public static class CaseOperations
     }
 
     /// <summary>
+    /// The transition table alone: no role, no precondition. Internal on purpose. What a person asks for goes
+    /// through <see cref="LifecycleOperations"/>, and the API assembly cannot reach this method, so no route can
+    /// skip the roles and the preconditions (tests/Api.Tests pins it).
     /// Applies one lifecycle transition, saves it and writes its audit row (<c>case_</c> + the operation, with the states it
     /// moved between), in one transaction. Returns the operation name. A concurrent transition of the same case surfaces
     /// as <see cref="DbUpdateConcurrencyException"/> on a provider without the immediate lock (the state is a concurrency token).
     /// </summary>
-    public static async Task<string> TransitionAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, CaseState to, DateTime nowUtc, CancellationToken cancellationToken = default)
+    internal static async Task<string> TransitionAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, CaseState to, DateTime nowUtc, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);

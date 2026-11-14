@@ -67,10 +67,10 @@ public sealed record UploadInfo
 public sealed class UploadFolders
 {
     /// <summary>Unfinished uploads of a case; the only folder the expiry sweep opens.</summary>
-    public const string UploadsFolder = ".uploads";
+    public const string UploadsFolder = Urlog.Core.Lifecycle.CaseFolders.Uploads;
 
     /// <summary>Finished uploads of a case, each under its upload id: no name an uploader chose reaches the file system.</summary>
-    public const string FinishedFolder = "web";
+    public const string FinishedFolder = Urlog.Core.Lifecycle.CaseFolders.Web;
 
     private const string InfoSuffix = ".json";
     private const string TempSuffix = ".json.tmp";

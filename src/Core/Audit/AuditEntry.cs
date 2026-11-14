@@ -5,6 +5,24 @@ namespace Urlog.Core.Audit;
 /// <summary>Who did it: the user name (or the OS user, or <see cref="AuditActions.SystemActor"/>) and the user id when there is one.</summary>
 public sealed record AuditActor(string Name, long? UserId = null)
 {
+    /// <summary>
+    /// The OS user that ran the command when the actor is an account named on the command line
+    /// (<c>--as</c>): the row then says both who it was done as and who was at the keyboard. Null otherwise.
+    /// </summary>
+    public string? OsUser { get; init; }
+
+    /// <summary><paramref name="details"/> with <c>os_user</c> added when this actor carries one.</summary>
+    public Dictionary<string, object?> Stamp(Dictionary<string, object?> details)
+    {
+        ArgumentNullException.ThrowIfNull(details);
+        if (OsUser is not null)
+        {
+            details["os_user"] = OsUser;
+        }
+
+        return details;
+    }
+
     /// <summary>The tool acting on its own behalf (scheduled backup, sweep, reconciler).</summary>
     public static AuditActor System { get; } = new(AuditActions.SystemActor);
 }

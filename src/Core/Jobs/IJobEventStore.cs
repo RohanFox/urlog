@@ -45,6 +45,21 @@ public interface IJobEventStore : IStoreIdentitySource
 
     Task<IReadOnlyList<DiskSpace>> DiskSpaceAsync(CancellationToken cancellationToken);
 
+    /// <summary>The partitions of <c>events</c> the case has rows in, with rows and bytes on disk.</summary>
+    Task<IReadOnlyList<CasePartition>> CasePartitionsAsync(ulong caseId, CancellationToken cancellationToken);
+
+    /// <summary>Drops one month of a case. A partition that is not there is not an error.</summary>
+    Task DropCasePartitionAsync(ulong caseId, int yyyymm, CancellationToken cancellationToken);
+
+    /// <summary>Removes the case's field statistics. Returns when they are gone.</summary>
+    Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken);
+
+    /// <summary>Removes the generation rows of the file ids. Returns when the delete is applied.</summary>
+    Task ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken);
+
+    /// <summary>Generation rows the store still holds for the file ids.</summary>
+    Task<long> CountFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken);
+
     IJobSink OpenSink(PipelineOptions pipeline);
 }
 
@@ -99,6 +114,27 @@ public sealed class ClickHouseJobEventStore(Func<ClickHouseTcpClient> control, N
     {
         await using var client = control();
         return await new EventStoreAdmin(client).DiskSpaceAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<CasePartition>> CasePartitionsAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        await using var client = control();
+        return await new EventStoreAdmin(client).CasePartitionsAsync(caseId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task DropCasePartitionAsync(ulong caseId, int yyyymm, CancellationToken cancellationToken) =>
+        WithAsync(admin => admin.DropCasePartitionAsync(caseId, yyyymm, cancellationToken).AsTask());
+
+    public Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken) =>
+        WithAsync(admin => admin.DeleteCaseFieldStatsAsync(caseId, cancellationToken).AsTask());
+
+    public Task ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken) =>
+        WithAsync(admin => admin.ClearFileGenerationsAsync(fileIds, cancellationToken).AsTask());
+
+    public async Task<long> CountFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken)
+    {
+        await using var client = control();
+        return await new EventStoreAdmin(client).CountFileGenerationsAsync(fileIds, cancellationToken).ConfigureAwait(false);
     }
 
     public IJobSink OpenSink(PipelineOptions pipeline)

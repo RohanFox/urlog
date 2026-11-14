@@ -164,6 +164,5 @@ public static class UploadEndpoints
         return TypedResults.Ok(new UploadStatusResponse(info.Id, info.State, store.Offset(info), info.Length, info.Fields.Name, info.CreatedAt, info.ExpiresAt, info.FileId, info.Sha256, info.JobId, info.Message));
     }
 
-    private static string Closed(CaseRecord @case) =>
-        string.Create(CultureInfo.InvariantCulture, $"case {@case.Id} is {Names.Of(@case.State)}; only an active case takes files");
+    private static string Closed(CaseRecord @case) => CaseLifecycle.IngestRefusal(@case);
 }

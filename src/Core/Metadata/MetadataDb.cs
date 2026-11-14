@@ -27,6 +27,8 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
 
     public DbSet<Job> Jobs => Set<Job>();
 
+    public DbSet<CaseTask> CaseTasks => Set<CaseTask>();
+
     public DbSet<AuditRow> Audit => Set<AuditRow>();
 
     public DbSet<Session> Sessions => Set<Session>();
@@ -144,6 +146,28 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.HasOne<EvidenceFile>().WithMany().HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.State, x.CreatedAt });
             e.HasIndex(x => x.FileId);
+        });
+
+        modelBuilder.Entity<CaseTask>(e =>
+        {
+            e.ToTable("case_tasks", t =>
+            {
+                t.HasCheckConstraint("ck_case_tasks_kind", Names.EnumCheck<CaseTaskKind>("kind"));
+                t.HasCheckConstraint("ck_case_tasks_state", Names.EnumCheck<CaseTaskState>("state"));
+            });
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Kind).HasConversion(EnumText<CaseTaskKind>()).HasMaxLength(16);
+            e.Property(x => x.State).HasConversion(EnumText<CaseTaskState>()).HasMaxLength(16);
+            e.Property(x => x.Step).HasMaxLength(32);
+            e.Property(x => x.RequestedBy).HasMaxLength(128);
+            e.Property(x => x.ConfirmedBy).HasMaxLength(128);
+            e.Property(x => x.BackupSha256).HasMaxLength(64);
+            e.Property(x => x.ArchiveDirectory).HasMaxLength(1024);
+            e.Property(x => x.TarSha256).HasMaxLength(64);
+            e.Property(x => x.ManifestSha256).HasMaxLength(64);
+            e.Property(x => x.Message).HasMaxLength(4000);
+            e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.CaseId, x.State });
         });
 
         modelBuilder.Entity<AuditRow>(e =>

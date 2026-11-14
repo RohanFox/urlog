@@ -32,6 +32,12 @@ public static class AuditActions
     public const string CaseReimport = "case_reimport";
     public const string CaseSoftDelete = "case_soft_delete";
     public const string CaseRestore = "case_restore";
+
+    /// <summary>
+    /// An administrator asked for a purge, or a second one confirmed it (<c>step</c> in the details). The purge
+    /// itself starts with <c>case_purge</c>, which marks the case.
+    /// </summary>
+    public const string CasePurgeRequest = "case_purge_request";
     public const string CasePurge = "case_purge";
     public const string CasePurgeComplete = "case_purge_complete";
 

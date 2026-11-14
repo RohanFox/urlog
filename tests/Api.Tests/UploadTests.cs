@@ -175,7 +175,7 @@ public sealed class UploadTests
         Assert.Equal(HttpStatusCode.NoContent, (await PatchAsync(h.Alice, url, 0, bytes[..100])).StatusCode);
         await using (var db = h.Factory.Open())
         {
-            await CaseOperations.TransitionAsync(db, h.Factory.Store.Audit, new Core.Audit.AuditActor("alice", 1), CaseId, CaseState.Closed, h.Factory.Clock.GetUtcNow().UtcDateTime, Ct);
+            await LifecycleOperations.CloseAsync(db, h.Factory.Store.Audit, new Core.Audit.AuditActor("alice", 1), CaseId, h.Factory.Clock, Ct);
         }
 
         var closed = await CreateAsync(h.Alice, 10, metadata);

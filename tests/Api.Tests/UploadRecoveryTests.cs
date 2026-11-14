@@ -178,7 +178,7 @@ public sealed class UploadRecoveryTests
         await File.WriteAllBytesAsync(h.Folders.Data(CaseId, id), bytes, Ct);
         await using (var db = h.Factory.Open())
         {
-            await CaseOperations.TransitionAsync(db, h.Factory.Store.Audit, new Core.Audit.AuditActor("alice", 1), CaseId, CaseState.Closed, h.Factory.Clock.GetUtcNow().UtcDateTime, Ct);
+            await LifecycleOperations.CloseAsync(db, h.Factory.Store.Audit, new Core.Audit.AuditActor("alice", 1), CaseId, h.Factory.Clock, Ct);
         }
 
         await h.Sweeper.RunOnceAsync(Ct);

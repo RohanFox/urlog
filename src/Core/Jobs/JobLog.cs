@@ -56,7 +56,7 @@ internal static partial class JobLog
     [LoggerMessage(EventId = 122, Level = LogLevel.Information, Message = "file_generation synced from the metadata store: {Written} of {Files} files written")]
     public static partial void GenerationsSynced(ILogger logger, int written, int files);
 
-    [LoggerMessage(EventId = 123, Level = LogLevel.Warning, Message = "case {CaseId} is in purging; its purge has not completed")]
+    [LoggerMessage(EventId = 123, Level = LogLevel.Warning, Message = "case {CaseId} was left in purging by a stop; its purge goes on")]
     public static partial void PurgeWaiting(ILogger logger, long caseId);
 
     [LoggerMessage(EventId = 130, Level = LogLevel.Warning, Message = "ingest paused: {Reason}")]

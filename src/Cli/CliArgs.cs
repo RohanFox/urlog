@@ -9,7 +9,7 @@ namespace Urlog.Cli;
 /// </summary>
 internal sealed class CliArgs
 {
-    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "slo", "cold", "sql", "explain", "help", "quiet", "json", "head", "admin", "password-stdin", "once", "small-box", "allow-truncated" };
+    private static readonly HashSet<string> Flags = new(StringComparer.Ordinal) { "slo", "cold", "sql", "explain", "help", "quiet", "json", "head", "admin", "password-stdin", "once", "small-box", "allow-truncated", "two-person", "no-sweep" };
 
     private readonly Dictionary<string, string> _options = new(StringComparer.Ordinal);
     private readonly HashSet<string> _flags = new(StringComparer.Ordinal);

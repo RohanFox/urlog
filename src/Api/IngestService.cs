@@ -19,6 +19,7 @@ public sealed class IngestService(MetadataStore store, IJobEventStore events, St
     {
         var urlog = options.Value;
         var ingest = urlog.Ingest;
+        var lifecycle = urlog.Lifecycle;
         var clickHouse = urlog.ClickHouse;
         var parallelism = ingest.Parallelism > 0 ? ingest.Parallelism : Math.Min(Environment.ProcessorCount, 8);
         var runnerOptions = new JobRunnerOptions
@@ -30,6 +31,13 @@ public sealed class IngestService(MetadataStore store, IJobEventStore events, St
             Watermark = new WatermarkOptions { MinFreeBytes = ingest.Watermark.MinFreeBytes, MinFreePercent = ingest.Watermark.MinFreePercent, Paths = [.. ingest.Watermark.Paths] },
             NightlyBackupAtUtc = ingest.NightlyBackupAtUtc,
             BackupDirectory = string.IsNullOrWhiteSpace(ingest.BackupDirectory) ? null : Rooted(ingest.BackupDirectory),
+            Lifecycle = new Urlog.Core.Lifecycle.LifecycleOptions
+            {
+                TwoPersonPurge = lifecycle.TwoPersonPurge,
+                PurgeAfter = lifecycle.PurgeAfter,
+                ScheduledPurge = lifecycle.ScheduledPurge,
+                SweepAtUtc = lifecycle.SweepAtUtc,
+            },
         };
 
         var catalog = new SourceCatalog();

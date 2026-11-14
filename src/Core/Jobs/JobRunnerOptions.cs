@@ -1,4 +1,5 @@
 using Urlog.Core.Intake.Archives;
+using Urlog.Core.Lifecycle;
 using Urlog.Core.Metadata;
 using Urlog.Core.Pipeline;
 
@@ -77,6 +78,9 @@ public sealed record JobRunnerOptions
     /// <summary>The UTC time of day of the nightly backup; null turns the schedule off (<c>urlog worker --once</c>).</summary>
     public TimeOnly? NightlyBackupAtUtc { get; init; }
 
+    /// <summary>The purge window and approval, and the integrity sweep's schedule.</summary>
+    public LifecycleOptions Lifecycle { get; init; } = new();
+
     /// <summary>The name written to <c>jobs.worker</c>, without the slot number.</summary>
     public string WorkerName { get; init; } = $"{Environment.MachineName}:{Environment.ProcessId}";
 
@@ -84,6 +88,7 @@ public sealed record JobRunnerOptions
     {
         Pipeline.Validate();
         Archive.Validate();
+        Lifecycle.Validate();
         if (MaxConcurrentJobs < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConcurrentJobs), MaxConcurrentJobs, "must be positive");

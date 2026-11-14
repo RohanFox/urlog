@@ -68,3 +68,26 @@ public enum JobState
     Failed,
     Cancelled,
 }
+
+/// <summary>Lifecycle work that outlasts a transaction (<see cref="CaseTask"/>).</summary>
+public enum CaseTaskKind
+{
+    Purge,
+    Archive,
+    Reimport,
+}
+
+/// <summary>
+/// <c>requested</c> waits for a second administrator; <c>running</c> is the executor's to carry out;
+/// <c>committed</c> is past the point where it can only go forward; <c>done</c>, <c>failed</c> and
+/// <c>withdrawn</c> are final.
+/// </summary>
+public enum CaseTaskState
+{
+    Requested,
+    Running,
+    Committed,
+    Done,
+    Failed,
+    Withdrawn,
+}

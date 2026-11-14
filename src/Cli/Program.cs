@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Urlog.Cli;
 using Urlog.Core;
 
-// urlog migrate | ingest | enqueue | expand | worker | query | bench | verify-audit | backup | user | case.
+// urlog migrate | ingest | enqueue | expand | worker | query | bench | verify-audit | backup | user | case | sweep.
 if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
 {
     Usage();
@@ -46,6 +46,7 @@ try
         "backup" => await BackupCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "user" => await UserCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "case" => await CaseCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
+        "sweep" => await SweepCommand.RunAsync(cli, cts.Token).ConfigureAwait(false),
         "version" => Version(),
         _ => Unknown(args[0]),
     };
@@ -86,7 +87,7 @@ static void Usage()
         urlog expand --db <metadata.db> --file <id> [--max-depth n] [--max-ratio n] [--max-total-gb n] [--max-members n]
         urlog worker --db <metadata.db> [--once] [--jobs n] [--parallelism n] [--writers n] [--small-box]
                      [--evidence-root dir] [--cache-root dir] [--progress-interval ms] [--commit-timeout s]
-                     [--min-free-gb 20] [--min-free-percent 10]
+                     [--min-free-gb 20] [--min-free-percent 10] [--two-person] [--no-sweep]
         urlog query  --case <id> [--from t --to t] [--tz zone] [--now t] [--sql] [--explain] '<spl>'
         urlog bench  query --case <id> [--runs 20] [--cold] '<spl>'
         urlog verify-audit --db <metadata.db> [--head] [--expect <seq>:<hash>] [--backup <file>] [--json]
@@ -95,6 +96,11 @@ static void Usage()
         urlog user unlock --db <metadata.db> --name <name>
         urlog user passwd --db <metadata.db> --name <name> [--password-stdin]
         urlog case create --db <metadata.db> --name <case name> --owner <user name>
+        urlog case close|reopen|restore --db <metadata.db> --case <id> [--as <user name>]
+        urlog case soft-delete --db <metadata.db> --case <id> --confirm-name <case name> [--as <user name>]
+        urlog case purge --db <metadata.db> --case <id> [--as <admin name>] [--two-person] [--evidence-root dir] [--cache-root dir]
+        urlog case usage --db <metadata.db> [--case <id>] [--evidence-root dir] [--cache-root dir]
+        urlog sweep --db <metadata.db> [--evidence-root dir] [--cache-root dir]
         urlog version
 
         verify-audit walks the audit hash chain read-only and reports the first broken link (exit 1), then prints
@@ -127,6 +133,23 @@ static void Usage()
         and passwd sets a new password and ends the user's sessions, both the break-glass for a locked or forgotten sole
         admin. The password is read from stdin (--password-stdin), URLOG_PASSWORD, or a no-echo prompt; never from an
         argument. Every command writes its audit row as the OS user and prints the new head.
+
+        Case lifecycle: close freezes ingest (uploads and new files are refused, queued jobs wait) and keeps query;
+        reopen undoes it. soft-delete hides the case for 7 days and needs the case name typed as --confirm-name;
+        restore brings it back to the state it had. purge is for a soft-deleted case only: a backup of the metadata
+        file first, then the case is marked, its partitions, field statistics and generation rows are removed from
+        the event store, its directory under the evidence root and its cache go, and last its records, with a
+        case_purge_complete row that keeps its name, owner, file count, bytes and a digest of its evidence hashes.
+        There is no undo after the mark. A purge that is interrupted is finished by the next start of a runner. A
+        runner purges a case on its own once it has been soft-deleted for 7 days. With --two-person (or
+        URLOG_TWO_PERSON_PURGE=1) nothing is purged on schedule and a purge needs two administrator accounts: each
+        runs case purge with --as. --as <user name> makes that account the actor and holds it to the role the
+        operation asks for, and the audit row also names the OS user that ran the command (os_user); without
+        it the actor is the OS user. usage prints what each case occupies: recorded and
+        stored bytes, unfinished uploads, cache, and rows and bytes in the event store by partition.
+        sweep reads every stored file again and compares it with its intake record: integrity_ok or
+        integrity_mismatch in the audit chain per file, and a file that changed or is gone is quarantined (exit 1).
+        It needs the runner lock; a runner that is up sweeps nightly by itself and only while no job runs.
 
         Store identity: a metadata file belongs to one event store, and both hold the same identity (32 hex
         characters). migrate --db gives a new deployment its identity: a metadata file without file records and a

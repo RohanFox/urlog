@@ -185,6 +185,108 @@ namespace Urlog.Core.Metadata.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Urlog.Core.Metadata.CaseTask", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ArchiveDirectory")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("archive_directory");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<string>("BackupSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("backup_sha256");
+
+                    b.Property<long>("CaseId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("case_id");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<long?>("ConfirmedById")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("confirmed_by_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("ManifestSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("manifest_sha256");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("message");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long?>("RequestedById")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("requested_by_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Step")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("step");
+
+                    b.Property<string>("TarSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tar_sha256");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_case_tasks");
+
+                    b.HasIndex("CaseId", "State")
+                        .HasDatabaseName("ix_case_tasks_case_id_state");
+
+                    b.ToTable("case_tasks", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_case_tasks_kind", "kind IN ('purge', 'archive', 'reimport')");
+
+                            t.HasCheckConstraint("ck_case_tasks_state", "state IN ('requested', 'running', 'committed', 'done', 'failed', 'withdrawn')");
+                        });
+                });
+
             modelBuilder.Entity("Urlog.Core.Metadata.EvidenceFile", b =>
                 {
                     b.Property<long>("Id")
@@ -407,6 +509,10 @@ namespace Urlog.Core.Metadata.Migrations
                     b.Property<long?>("UploaderUserId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("uploader_user_id");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("verified_at");
 
                     b.Property<bool>("YearAssumed")
                         .HasColumnType("INTEGER")
@@ -766,6 +872,16 @@ namespace Urlog.Core.Metadata.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_cases_users_owner_id");
+                });
+
+            modelBuilder.Entity("Urlog.Core.Metadata.CaseTask", b =>
+                {
+                    b.HasOne("Urlog.Core.Metadata.CaseRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_case_tasks_cases_case_id");
                 });
 
             modelBuilder.Entity("Urlog.Core.Metadata.EvidenceFile", b =>

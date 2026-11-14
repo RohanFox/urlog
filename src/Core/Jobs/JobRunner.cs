@@ -6,6 +6,7 @@ using Urlog.Core.Audit;
 using Urlog.Core.Ingest;
 using Urlog.Core.Intake;
 using Urlog.Core.Intake.Archives;
+using Urlog.Core.Lifecycle;
 using Urlog.Core.Metadata;
 using Urlog.Core.Pipeline;
 using Urlog.Core.Detection;
@@ -47,6 +48,8 @@ public sealed class JobRunner
     private readonly ILoggerFactory _loggers;
     private readonly MemberStore _members;
     private readonly ArchiveExpander _expander;
+    private readonly LifecycleExecutor _lifecycle;
+    private readonly IntegritySweep _sweep;
     private int _running;
     private int _paused;
     private int _syncNeeded;
@@ -84,6 +87,9 @@ public sealed class JobRunner
         }
 
         _watermark = new DiskWatermark(options.Watermark, probe, local);
+        var paths = new LifecyclePaths(options.EvidenceRoot, _members.CacheRoot, options.BackupDirectory ?? SqliteBackup.DefaultDirectory(store.Path));
+        _lifecycle = new LifecycleExecutor(store, events, options.Lifecycle, paths, _loggers.CreateLogger<LifecycleExecutor>());
+        _sweep = new IntegritySweep(store, _members, options.EvidenceRoot, options.Lifecycle, _loggers.CreateLogger<IntegritySweep>());
     }
 
     /// <summary>True while the disk watermark holds the queue.</summary>
@@ -93,6 +99,12 @@ public sealed class JobRunner
 
     /// <summary>The expansion of archives this runner does; tests hook into its batches.</summary>
     public ArchiveExpander Expander => _expander;
+
+    /// <summary>The purge executor of this runner.</summary>
+    public LifecycleExecutor Lifecycle => _lifecycle;
+
+    /// <summary>What the last integrity sweep of this runner did; null before the first has ended.</summary>
+    public SweepReport? LastSweep { get; private set; }
 
     /// <summary>What the startup reconcilers did on the last <see cref="RunAsync"/>.</summary>
     public ReconcileReport? LastReconcile { get; private set; }
@@ -118,13 +130,14 @@ public sealed class JobRunner
 
         _identity = StoreIdentityGuard.Compare(_store.Path, metadataId, _events.Endpoint, storeId);
         await _store.MigrateAsync(cancellationToken).ConfigureAwait(false);
-        LastReconcile = await new StartupReconciler(_store, _events, _options, _logger).RunAsync(cancellationToken).ConfigureAwait(false);
+        LastReconcile = await new StartupReconciler(_store, _events, _options, _logger, _lifecycle).RunAsync(cancellationToken).ConfigureAwait(false);
         await CheckWatermarkAsync(cancellationToken).ConfigureAwait(false);
 
         // A slot that cannot go on (the metadata store refuses a commit) stops the others; cancellation from outside is a normal stop.
         using var fatal = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var maintenanceStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var maintenance = Task.Run(() => MaintenanceLoopAsync(fatal, maintenanceStop.Token), CancellationToken.None);
+        var lifecycle = Task.Run(() => LifecycleLoopAsync(maintenanceStop.Token), CancellationToken.None);
         var slots = new Task[_options.MaxConcurrentJobs];
         for (var i = 0; i < slots.Length; i++)
         {
@@ -140,6 +153,7 @@ public sealed class JobRunner
         {
             await maintenanceStop.CancelAsync().ConfigureAwait(false);
             await maintenance.ConfigureAwait(false);
+            await lifecycle.ConfigureAwait(false);
         }
 
         if (Volatile.Read(ref _identityLost) is { } lost)
@@ -636,6 +650,79 @@ public sealed class JobRunner
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    /// <summary>
+    /// The lifecycle's own work beside the queue: purges that are due, released or interrupted, and the
+    /// integrity sweep. The sweep reads only while no slot runs a job, and gives way to a purge that waits.
+    /// </summary>
+    private async Task LifecycleLoopAsync(CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(_options.Lifecycle.Interval);
+        DateTime? sweptFrom = null;
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop).ConfigureAwait(false))
+            {
+                if (Volatile.Read(ref _identityLost) is not null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    await _lifecycle.RunPendingAsync(stop).ConfigureAwait(false);
+                    // One sweep per scheduled instant; one that was stopped is taken up again on the next tick.
+                    if (IntegritySweep.DueFrom(_options.Lifecycle.SweepAtUtc, Now()) is { } dueFrom && dueFrom != sweptFrom && Running == 0)
+                    {
+                        var gate = new SweepGate(this, stop);
+                        var report = await _sweep.RunAsync(dueFrom, gate.Ask, stop).ConfigureAwait(false);
+                        LastSweep = report;
+                        sweptFrom = report.Complete ? dueFrom : sweptFrom;
+                    }
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception e)
+                {
+                    LifecycleLog.Failed(_logger, e.Message);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>What the sweep is told each time it asks whether it may read.</summary>
+    private sealed class SweepGate(JobRunner runner, CancellationToken stop)
+    {
+        private bool _purgeWaits;
+        private int _asked;
+
+        public SweepSignal Ask()
+        {
+            if (stop.IsCancellationRequested || Volatile.Read(ref runner._identityLost) is not null)
+            {
+                return SweepSignal.Stop;
+            }
+
+            // The queue first: while a slot has a job the disk is its.
+            if (runner.Running > 0)
+            {
+                return SweepSignal.Wait;
+            }
+
+            // A purge released while the sweep runs is looked for on every 8th question.
+            if (!_purgeWaits && _asked++ % 8 == 7)
+            {
+                _purgeWaits = runner._lifecycle.HasPendingAsync(stop).GetAwaiter().GetResult();
+            }
+
+            return _purgeWaits ? SweepSignal.Stop : SweepSignal.Go;
         }
     }
 

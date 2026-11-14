@@ -1,3 +1,4 @@
+using Urlog.Core.Lifecycle;
 using Urlog.Core.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -8,8 +9,9 @@ namespace Urlog.Core.Jobs;
 /// <param name="Requeued">Jobs found in <c>parsing</c> and queued again.</param>
 /// <param name="FailedAtCap">Jobs found in <c>parsing</c> for the last allowed time and failed.</param>
 /// <param name="GenerationsWritten">Files whose <c>file_generation</c> row was written from SQLite.</param>
-/// <param name="PurgingCases">Cases still in <c>purging</c>.</param>
-public sealed record ReconcileReport(int Requeued, int FailedAtCap, int GenerationsWritten, IReadOnlyList<long> PurgingCases);
+/// <param name="PurgingCases">Cases found in <c>purging</c>: purges a stop interrupted.</param>
+/// <param name="Purged">Purges carried to their end, the interrupted ones and those released and waiting.</param>
+public sealed record ReconcileReport(int Requeued, int FailedAtCap, int GenerationsWritten, IReadOnlyList<long> PurgingCases, int Purged = 0);
 
 /// <summary>
 /// The cross-store reconcilers (design record, "Consistency"), run by the runner after it holds the lock and before
@@ -20,19 +22,22 @@ public sealed record ReconcileReport(int Requeued, int FailedAtCap, int Generati
 /// The event store first, SQLite last: a stop in between repeats the step.</item>
 /// <item><c>file_generation</c>. SQLite is the truth: every file whose committed generation differs from the event
 /// store's row gets the row written. This repairs a stop between the SQLite commit and the event store's.</item>
-/// <item>Cases in <c>purging</c>, where the purge resumes.</item>
+/// <item>Cases in <c>purging</c>: the purge goes on from its store step (<see cref="LifecycleExecutor"/>), and so
+/// does every purge that was released and not yet started. One that cannot finish now keeps its task and is tried
+/// again by the runner's lifecycle loop.</item>
 /// </list>
 /// Jobs before generations, so the sync reads settled job states; both before any claim, so no new insert races a
 /// recovery delete.
 /// </summary>
-public sealed class StartupReconciler(MetadataStore store, IJobEventStore events, JobRunnerOptions options, ILogger logger)
+public sealed class StartupReconciler(MetadataStore store, IJobEventStore events, JobRunnerOptions options, ILogger logger, LifecycleExecutor? lifecycle = null)
 {
     public async Task<ReconcileReport> RunAsync(CancellationToken cancellationToken)
     {
         var (requeued, failed) = await RecoverParsingJobsAsync(cancellationToken).ConfigureAwait(false);
         var written = await SyncGenerationsAsync(cancellationToken).ConfigureAwait(false);
         var purging = await PurgingCasesAsync(cancellationToken).ConfigureAwait(false);
-        return new ReconcileReport(requeued, failed, written, purging);
+        var purged = lifecycle is null ? 0 : await lifecycle.RunPendingAsync(cancellationToken).ConfigureAwait(false);
+        return new ReconcileReport(requeued, failed, written, purging, purged);
     }
 
     /// <summary>Step 1. Returns the jobs requeued and the jobs failed at the cap.</summary>
@@ -95,7 +100,7 @@ public sealed class StartupReconciler(MetadataStore store, IJobEventStore events
         return differ.Count;
     }
 
-    /// <summary>Step 3. The purge's own steps arrive with the case lifecycle; until then a case left in <c>purging</c> is reported.</summary>
+    /// <summary>Step 3, the report: the cases a stop left in <c>purging</c>. The executor finishes them next.</summary>
     public async Task<IReadOnlyList<long>> PurgingCasesAsync(CancellationToken cancellationToken)
     {
         await using var db = store.CreateDbContext();

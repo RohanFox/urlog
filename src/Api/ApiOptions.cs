@@ -21,6 +21,8 @@ public sealed class UrlogOptions
 
     public IngestOptions Ingest { get; set; } = new();
 
+    public LifecycleSettings Lifecycle { get; set; } = new();
+
     public UploadOptions Upload { get; set; } = new();
 }
 
@@ -100,6 +102,22 @@ public sealed class IngestOptions
 
     /// <summary>Where backups go; empty is <c>backups</c> next to the metadata file.</summary>
     public string BackupDirectory { get; set; } = "";
+}
+
+/// <summary><c>Urlog:Lifecycle</c>: the purge window and approval, and the integrity sweep (design record, "Case lifecycle").</summary>
+public sealed class LifecycleSettings
+{
+    /// <summary>A purge needs two different administrators, and nothing is purged on schedule.</summary>
+    public bool TwoPersonPurge { get; set; }
+
+    /// <summary>How long a soft-deleted case can be restored.</summary>
+    public TimeSpan PurgeAfter { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Purge soft-deleted cases whose window has passed, as <c>system</c>.</summary>
+    public bool ScheduledPurge { get; set; } = true;
+
+    /// <summary>UTC time from which the nightly integrity sweep reads every stored file; null turns it off.</summary>
+    public TimeOnly? SweepAtUtc { get; set; } = new TimeOnly(3, 0);
 }
 
 /// <summary>Ingest pauses while any watched volume has less free space than the larger of the two marks.</summary>

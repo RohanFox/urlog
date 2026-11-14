@@ -234,7 +234,7 @@ public sealed class CaseNotActiveException : MetadataException
     }
 
     public CaseNotActiveException(long caseId, CaseState state)
-        : base($"case {caseId} is {Names.Of(state)}: ingest is only allowed while a case is active")
+        : base(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"case {caseId} is {Names.Of(state)}; only an active case takes files"))
     {
         CaseId = caseId;
         State = state;
@@ -243,4 +243,40 @@ public sealed class CaseNotActiveException : MetadataException
     public long CaseId { get; }
 
     public CaseState State { get; }
+}
+
+/// <summary>A lifecycle operation whose transition the table allows is refused by what the case holds right now (a running job, unfinished work, a wrong typed name).</summary>
+public sealed class LifecycleRefusedException : MetadataException
+{
+    public LifecycleRefusedException()
+    {
+    }
+
+    public LifecycleRefusedException(string message)
+        : base(message)
+    {
+    }
+
+    public LifecycleRefusedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>The account may not carry out this lifecycle operation on this case.</summary>
+public sealed class LifecycleRoleException : MetadataException
+{
+    public LifecycleRoleException()
+    {
+    }
+
+    public LifecycleRoleException(string message)
+        : base(message)
+    {
+    }
+
+    public LifecycleRoleException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }

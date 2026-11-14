@@ -22,7 +22,18 @@ internal sealed class FakeEventStore : IJobEventStore
     private readonly Dictionary<(ulong File, uint Generation), long> _rows = [];
     private readonly Dictionary<ulong, uint> _current = [];
     private readonly List<string> _calls = [];
+    private readonly Dictionary<(ulong Case, int Month), long> _partitions = [];
+    private readonly HashSet<ulong> _fieldStats = [];
     private int _identityReads;
+
+    /// <summary>Called at the start of every call the purge makes, with its name; a test throws from it to stop a purge there.</summary>
+    public Action<string>? BeforePurgeCall { get; set; }
+
+    /// <summary>The delete of generation rows returns and removes nothing, as a delete that is still being applied would look.</summary>
+    public bool GenerationDeleteStuck { get; set; }
+
+    /// <summary>A partition that comes back after every drop, as a writer nobody stopped would make it.</summary>
+    public (ulong Case, int Month)? PartitionThatReturns { get; set; }
 
     public long FreeBytes { get; set; } = 500L << 30;
 
@@ -102,12 +113,108 @@ internal sealed class FakeEventStore : IJobEventStore
         }
     }
 
+    /// <summary>Rows in one month of a case, as the insert path would have left them.</summary>
+    public void SeedPartition(ulong caseId, int month, long rows)
+    {
+        lock (_lock)
+        {
+            _partitions[(caseId, month)] = rows;
+        }
+    }
+
+    public void SeedFieldStats(ulong caseId)
+    {
+        lock (_lock)
+        {
+            _fieldStats.Add(caseId);
+        }
+    }
+
+    public int[] Partitions(ulong caseId)
+    {
+        lock (_lock)
+        {
+            return [.. _partitions.Keys.Where(k => k.Case == caseId).Select(k => k.Month).Order()];
+        }
+    }
+
+    public bool HasFieldStats(ulong caseId)
+    {
+        lock (_lock)
+        {
+            return _fieldStats.Contains(caseId);
+        }
+    }
+
     public Task RequireSchemaAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task<string?> ReadStoreIdentityAsync(CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _identityReads);
         return Task.FromResult(StoreId);
+    }
+
+    public Task<IReadOnlyList<CasePartition>> CasePartitionsAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("partitions");
+        lock (_lock)
+        {
+            return Task.FromResult<IReadOnlyList<CasePartition>>([.. _partitions.Where(p => p.Key.Case == caseId).OrderBy(p => p.Key.Month).Select(p => new CasePartition(p.Key.Month, p.Value, p.Value * 40))]);
+        }
+    }
+
+    public Task DropCasePartitionAsync(ulong caseId, int yyyymm, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("drop");
+        lock (_lock)
+        {
+            _calls.Add($"drop {caseId} {yyyymm}");
+            if (PartitionThatReturns != (caseId, yyyymm))
+            {
+                _partitions.Remove((caseId, yyyymm));
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("field-stats");
+        lock (_lock)
+        {
+            _calls.Add($"field-stats {caseId}");
+            _fieldStats.Remove(caseId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("clear-generations");
+        lock (_lock)
+        {
+            _calls.Add($"clear-generations {string.Join(',', fileIds)}");
+            if (!GenerationDeleteStuck)
+            {
+                foreach (var id in fileIds)
+                {
+                    _current.Remove(id);
+                }
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<long> CountFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("count-generations");
+        lock (_lock)
+        {
+            return Task.FromResult((long)fileIds.Count(_current.ContainsKey));
+        }
     }
 
     public Task DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken)

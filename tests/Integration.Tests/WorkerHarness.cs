@@ -155,6 +155,21 @@ internal sealed class WorkerHarness : IAsyncDisposable
         return worker;
     }
 
+    /// <summary>Starts any <c>urlog</c> command against this event store and returns while it runs, so a test can stop it part-way.</summary>
+    public WorkerProcess StartCli(params string[] arguments)
+    {
+        var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        string[] all = [CliPath(), .. arguments, "--clickhouse", _ch.Host, "--native-port", _ch.NativeHostPort.ToString(CultureInfo.InvariantCulture), "--user", IngestUser, "--password", IngestPassword];
+        foreach (var argument in all)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        var process = new WorkerProcess(Process.Start(start)!);
+        _workers.Add(process);
+        return process;
+    }
+
     /// <summary>
     /// Runs one <c>urlog</c> command to its end against this event store (not against this metadata file unless
     /// the arguments say so). Standard input is <paramref name="stdin"/> and then closed, so the command never sees
@@ -308,9 +323,15 @@ internal sealed class WorkerHarness : IAsyncDisposable
         SqliteConnection.ClearAllPools();
         try
         {
+            // Evidence stored under a root is read-only on disk, which a recursive delete does not get past.
+            foreach (var file in _directory.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
             _directory.Delete(recursive: true);
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
         }
 

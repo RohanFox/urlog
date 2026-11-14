@@ -41,6 +41,8 @@ internal static class WorkerCommand
             NightlyBackupAtUtc = once ? null : new TimeOnly(2, 0),
             BackupDirectory = Environment.GetEnvironmentVariable("URLOG_BACKUP_DIR"),
             Watermark = new WatermarkOptions { MinFreeBytes = (long)args.Int("min-free-gb", 20) << 30, MinFreePercent = args.Int("min-free-percent", 10) },
+            // A one-shot run finishes the purges that wait and takes no sweep; a long-running worker sweeps from 03:00 UTC.
+            Lifecycle = CaseCommand.Lifecycle(args) with { SweepAtUtc = once || args.Flag("no-sweep") ? null : new TimeOnly(3, 0) },
         };
         try
         {

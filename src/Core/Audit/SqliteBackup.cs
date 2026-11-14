@@ -27,6 +27,14 @@ public static class SqliteBackup
     public static string DefaultDirectory(string databasePath) =>
         System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(databasePath)) ?? ".", "backups");
 
+    /// <summary>The path a backup taken now would get: one name per second of the store's clock.</summary>
+    public static string PathFor(MetadataStore store, string directory)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        var stamp = store.Clock.GetUtcNow().UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
+        return System.IO.Path.Combine(System.IO.Path.GetFullPath(directory), "metadata-" + stamp + ".sqlite");
+    }
+
     public static async Task<BackupResult> TakeAsync(MetadataStore store, string directory, string reason, string actor, long? actorId = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -35,8 +43,7 @@ public static class SqliteBackup
         ArgumentException.ThrowIfNullOrWhiteSpace(actor);
 
         Directory.CreateDirectory(directory);
-        var stamp = store.Clock.GetUtcNow().UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
-        var path = System.IO.Path.Combine(System.IO.Path.GetFullPath(directory), "metadata-" + stamp + ".sqlite");
+        var path = PathFor(store, directory);
         var sidecar = path + ".sha256";
         if (File.Exists(path) || File.Exists(sidecar))
         {

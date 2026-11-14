@@ -133,7 +133,7 @@ public sealed class CaseAccessTests
         Assert.Equal(HttpStatusCode.OK, (await a.GetAsync("/api/v1/cases/1")).StatusCode);
         await using (var db = factory.Open())
         {
-            await CaseOperations.TransitionAsync(db, factory.Store.Audit, new Core.Audit.AuditActor("alice", alice.Id), 1, CaseState.SoftDeleted, factory.Clock.GetUtcNow().UtcDateTime, Ct);
+            await LifecycleOperations.SoftDeleteAsync(db, factory.Store.Audit, new Core.Audit.AuditActor("alice", alice.Id), 1, "incident 1", TimeSpan.FromDays(7), factory.Clock, Ct);
         }
 
         Assert.Equal(HttpStatusCode.NotFound, (await a.GetAsync("/api/v1/cases/1")).StatusCode);
