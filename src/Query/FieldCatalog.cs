@@ -101,6 +101,12 @@ public sealed class FieldCatalog
                 throw new InvalidDataException("field catalog: a field without a name");
             }
 
+            if (!Names.IsCatalogName(e.Name))
+            {
+                // A catalog name is written into the SQL as an identifier; nothing else from outside the code is.
+                throw new InvalidDataException($"field catalog: '{e.Name}' is not a field name (letters, digits, '_' and '.', and not of the form c<number>)");
+            }
+
             var type = (e.Type ?? "").ToLowerInvariant() switch
             {
                 "time" => FieldType.Time,

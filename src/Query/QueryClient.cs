@@ -7,6 +7,36 @@ using ClickHouse.Driver.ADO.Parameters;
 
 namespace Urlog.Query;
 
+/// <summary>
+/// A query the gate let through and the server then refused while running it (an unknown table, a pattern it cannot
+/// compile, a limit of the profile): a query error for the caller to show, with the server's code and first line.
+/// </summary>
+public sealed class QueryFailedException : Exception
+{
+    public QueryFailedException()
+    {
+    }
+
+    public QueryFailedException(string message)
+        : base(message)
+    {
+    }
+
+    public QueryFailedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public QueryFailedException(int errorCode, string message, Exception innerException)
+        : base(message, innerException)
+    {
+        ErrorCode = errorCode;
+    }
+
+    /// <summary>The ClickHouse error code (60 UNKNOWN_TABLE, 159 TIMEOUT_EXCEEDED, ...); 0 when there is none.</summary>
+    public int ErrorCode { get; }
+}
+
 /// <summary>Rows of a query as text, column names from the result, and the client-side elapsed time.</summary>
 public sealed record QueryTable(IReadOnlyList<string> Columns, IReadOnlyList<string[]> Rows, TimeSpan Elapsed);
 
@@ -36,7 +66,10 @@ public sealed class ClickHouseQueryClient
         ArgumentNullException.ThrowIfNull(query);
         var cases = AllowedCases(allowedCases ?? [query.CaseId]);
         await EnsureAllowedAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
-        return await ExecuteAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
+        var table = await RunGatedAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
+
+        // The SQL names a column the analyst named by a generated alias; the headers are the transpiler's.
+        return query.Columns.Length == table.Columns.Count ? table with { Columns = query.Columns } : table;
     }
 
     /// <summary>
@@ -51,7 +84,7 @@ public sealed class ClickHouseQueryClient
         var text = RawSqlGate.Normalise(sql);
         var cases = AllowedCases(allowedCases);
         await EnsureAllowedAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
-        return await ExecuteAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
+        return await RunGatedAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary><c>EXPLAIN indexes = 1</c> of a transpiled query (gated first), one line per row of the plan.</summary>
@@ -60,7 +93,7 @@ public sealed class ClickHouseQueryClient
         ArgumentNullException.ThrowIfNull(query);
         var cases = AllowedCases(allowedCases ?? [query.CaseId]);
         await EnsureAllowedAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
-        var table = await ExecuteAsync("EXPLAIN indexes = 1 " + query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
+        var table = await RunGatedAsync("EXPLAIN indexes = 1 " + query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
         return table.Rows.Select(r => r[0]).ToList();
     }
 
@@ -72,7 +105,7 @@ public sealed class ClickHouseQueryClient
         var text = RawSqlGate.Normalise(sql);
         var cases = AllowedCases(allowedCases);
         await EnsureAllowedAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
-        var table = await ExecuteAsync("EXPLAIN indexes = 1 " + text, [], cases, cancellationToken).ConfigureAwait(false);
+        var table = await RunGatedAsync("EXPLAIN indexes = 1 " + text, [], cases, cancellationToken).ConfigureAwait(false);
         return table.Rows.Select(r => r[0]).ToList();
     }
 
@@ -115,6 +148,19 @@ public sealed class ClickHouseQueryClient
         if (RawSqlGate.Inspect(ast) is { } reason)
         {
             throw new RawSqlRejectedException(reason);
+        }
+    }
+
+    /// <summary>A query that passed the gate, run: what the server refuses at this point is the caller's query error, with the server's code.</summary>
+    private async Task<QueryTable> RunGatedAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ExecuteAsync(sql, parameters, allowedCases, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ClickHouseServerException e)
+        {
+            throw new QueryFailedException(e.ErrorCode, e.Message.Split((char)10, 2)[0], e);
         }
     }
 

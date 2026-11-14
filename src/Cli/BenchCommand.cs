@@ -67,7 +67,7 @@ internal static class BenchCommand
             }
 
             var sw = Stopwatch.StartNew();
-            var table = await client.RunAsync(result, cancellationToken: ct).ConfigureAwait(false);
+            var table = await QueryCommand.GuardAsync(() => client.RunAsync(result, cancellationToken: ct)).ConfigureAwait(false);
             sw.Stop();
             times.Add(sw.Elapsed.TotalMilliseconds);
             if (rows >= 0 && rows != table.Rows.Count)

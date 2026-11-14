@@ -82,7 +82,7 @@ public sealed class RawSqlGateTests(ClickHouseFixture ch, ITestOutputHelper outp
         // `еvents_v` with a Cyrillic е: the dump prints it as an unknown unqualified name, which the gate takes for a
         // CTE (the tree does not carry CTE names, ADR 0001); the server then finds no such table. Zero rows either way.
         var client = ch.QueryClient();
-        var e = await Assert.ThrowsAsync<ClickHouseServerException>(() => client.RunSqlAsync("SELECT * FROM `еvents_v`", [1, 2, 3], Ct));
+        var e = await Assert.ThrowsAsync<QueryFailedException>(() => client.RunSqlAsync("SELECT * FROM `еvents_v`", [1, 2, 3], Ct));
         output.WriteLine($"{e.ErrorCode}: {e.Message.Split('\n')[0]}");
         Assert.Equal(60, e.ErrorCode); // UNKNOWN_TABLE
     }

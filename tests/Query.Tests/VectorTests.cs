@@ -122,6 +122,7 @@ public sealed class VectorTests
                 Warnings = [.. result.Warnings.Select(w => $"{w.Code}@{w.Span.Offset}+{w.Span.Length}")],
                 Fields = [.. result.Fields.Select(f => f.Name)],
                 Aggregate = result.IsAggregate,
+                Columns = result.IsAggregate ? [.. result.Columns] : null,
             }, null);
         }
         catch (QueryException e)
@@ -169,6 +170,9 @@ public sealed class VectorTests
         public string[] Fields { get; set; } = [];
 
         public bool Aggregate { get; set; }
+
+        /// <summary>The result's headers, for an aggregate: the SQL names such a column by a generated alias.</summary>
+        public string[]? Columns { get; set; }
     }
 
     public sealed class VectorError

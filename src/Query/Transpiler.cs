@@ -28,7 +28,15 @@ public sealed record TranspileResult(
     bool IsAggregate,
     ulong CaseId,
     DateTimeOffset RangeFrom,
-    DateTimeOffset RangeTo);
+    DateTimeOffset RangeTo)
+{
+    /// <summary>
+    /// The name of each output column, in SELECT order: what the analyst wrote (an alias, a field the catalog does
+    /// not list) or the catalog name. The SQL carries a generated alias for the former, so the reader of the result
+    /// takes its headers from here.
+    /// </summary>
+    public ImmutableArray<string> Columns { get; init; } = [];
+}
 
 /// <summary>
 /// AST -> parameterised ClickHouse SQL over <c>events_v</c> (design record, "Query language"): every value is a
@@ -39,6 +47,7 @@ public sealed record TranspileResult(
 public sealed class Transpiler
 {
     private const string DefaultColumns = "ts, host, program, severity, source_ip, message";
+    private static readonly string[] DefaultColumnNames = ["ts", "host", "program", "severity", "source_ip", "message"];
     private static readonly SearchValues<char> Wildcards = SearchValues.Create("*?");
 
     private readonly FieldCatalog _catalog;
@@ -149,8 +158,10 @@ public sealed class Transpiler
         }
 
         var sql = new StringBuilder();
+        var columns = new List<string>();
         if (stats is null)
         {
+            columns.AddRange(DefaultColumnNames);
             sql.Append("SELECT ").Append(DefaultColumns).Append(" FROM events_v WHERE ").Append(where);
             sql.Append(" ORDER BY ");
             if (sort is null)
@@ -174,16 +185,23 @@ public sealed class Transpiler
         }
         else
         {
-            var groups = new List<(string Alias, string Expression)>();
+            // An output column is named in the SQL by a catalog field name or by a generated alias, never by text
+            // from the query: the analyst's names (an alias, a field the catalog does not list) label the result
+            // beside it, in Columns.
+            var generated = 0;
+            var groups = new List<(string Name, string Alias, string Expression)>();
             foreach (var (name, span) in stats.By)
             {
                 var field = Resolve(name, span);
-                groups.Add((Quote(field.Name), field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null)));
+                var alias = field.IsUnknown ? Names.Generated(generated++) : field.Name;
+                groups.Add((field.Name, Quote(alias), field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null)));
+                columns.Add(field.Name);
             }
 
-            var countAlias = Quote(stats.Alias);
+            var countAlias = Quote(Names.Generated(generated));
+            columns.Add(stats.Alias);
             sql.Append("SELECT ");
-            foreach (var (alias, expression) in groups)
+            foreach (var (_, alias, expression) in groups)
             {
                 sql.Append(expression).Append(" AS ").Append(alias).Append(", ");
             }
@@ -207,7 +225,7 @@ public sealed class Transpiler
                     else
                     {
                         var field = Resolve(name, span);
-                        var match = groups.FindIndex(g => g.Alias == Quote(field.Name));
+                        var match = groups.FindIndex(g => g.Name == field.Name);
                         if (match < 0)
                         {
                             throw new QueryException(span, $"sort after stats: '{name}' is neither {stats.Alias} nor a by field");
@@ -229,7 +247,7 @@ public sealed class Transpiler
             }
         }
 
-        return new TranspileResult(sql.ToString(), [.. _parameters], [.. _warnings], [.. _fields.Values], stats is not null, caseId, from, to);
+        return new TranspileResult(sql.ToString(), [.. _parameters], [.. _warnings], [.. _fields.Values], stats is not null, caseId, from, to) { Columns = [.. columns] };
     }
 
     private string Expression(SearchNode node)
@@ -565,7 +583,9 @@ public sealed class Transpiler
 
     private void Warn(string code, TextSpan span, string message) => _warnings.Add(new QueryWarning(code, span, message));
 
-    private static string Quote(string identifier) => "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
+    /// <summary>Backquotes a catalog field name or a generated alias: the only two things that are ever an identifier in the SQL.</summary>
+    private static string Quote(string identifier) =>
+        Names.IsCatalogName(identifier) || Names.IsGenerated(identifier) ? "`" + identifier + "`" : throw new InvalidOperationException("not a catalog name or a generated alias");
 
     private static string Sql(CompareOp op) => op switch
     {

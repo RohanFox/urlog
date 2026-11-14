@@ -368,7 +368,10 @@ public sealed class Parser
             }
 
             alias = Advance().Text;
-            ValidateName(alias, _tokens[_i - 1].Span);
+            if (!Names.IsStrict(alias))
+            {
+                throw new QueryException(_tokens[_i - 1].Span, $"'{alias}' is not a name: use letters, digits and '_', starting with a letter or '_', at most {Names.MaxLength} characters");
+            }
         }
 
         var by = ImmutableArray.CreateBuilder<(string, TextSpan)>();

@@ -28,19 +28,36 @@ internal static class QueryCommand
             return 0;
         }
 
-        var table = await client.RunAsync(result, cancellationToken: ct).ConfigureAwait(false);
+        var table = await GuardAsync(() => client.RunAsync(result, cancellationToken: ct)).ConfigureAwait(false);
         PrintTable(table, hideEmptyColumns: !result.IsAggregate);
         Console.WriteLine($"{table.Rows.Count:N0} rows ({table.Elapsed.TotalMilliseconds:N0} ms); range {Transpiler.Fmt(result.RangeFrom)} .. {Transpiler.Fmt(result.RangeTo)} UTC, case {result.CaseId}");
         if (args.Flag("explain"))
         {
             Console.WriteLine();
-            foreach (var line in await client.ExplainAsync(result, cancellationToken: ct).ConfigureAwait(false))
+            foreach (var line in await GuardAsync(() => client.ExplainAsync(result, cancellationToken: ct)).ConfigureAwait(false))
             {
                 Console.WriteLine(line);
             }
         }
 
         return 0;
+    }
+
+    /// <summary>A query the gate or the server refused is an error message and exit code 1, like a query the parser refused.</summary>
+    public static async Task<T> GuardAsync<T>(Func<Task<T>> run)
+    {
+        try
+        {
+            return await run().ConfigureAwait(false);
+        }
+        catch (RawSqlRejectedException e)
+        {
+            throw new CliException("query refused: " + e.Message);
+        }
+        catch (QueryFailedException e)
+        {
+            throw new CliException($"query error from the server ({e.ErrorCode.ToString(CultureInfo.InvariantCulture)}): {e.Message}");
+        }
     }
 
     /// <summary>Parses the common options, resolves the range and transpiles. Shared with <c>bench query</c>.</summary>

@@ -3,7 +3,7 @@
     "name": "stats-count-by-url-path",
     "spl": "src_ip=10.0.0.5 | stats count by url.path",
     "expect": {
-      "sql": "SELECT url_path AS `url.path`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip = toIPv6({p0:String})) GROUP BY url_path",
+      "sql": "SELECT url_path AS `url.path`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (source_ip = toIPv6({p0:String})) GROUP BY url_path",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -15,14 +15,18 @@
         "source.ip",
         "url.path"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "count"
+      ]
     }
   },
   {
     "name": "stats-count-by-two-fields",
     "spl": "| stats count by host, program",
     "expect": {
-      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
+      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -33,14 +37,19 @@
         "host.name",
         "program"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "program",
+        "count"
+      ]
     }
   },
   {
     "name": "stats-count-alias-sort-head",
     "spl": "status>=500 | stats count as n by url.path | sort -n | head 20",
     "expect": {
-      "sql": "SELECT url_path AS `url.path`, count() AS `n` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) GROUP BY url_path ORDER BY `n` DESC LIMIT {limit:UInt64}",
+      "sql": "SELECT url_path AS `url.path`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) GROUP BY url_path ORDER BY `c0` DESC LIMIT {limit:UInt64}",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -53,14 +62,18 @@
         "http.response.status_code",
         "url.path"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "n"
+      ]
     }
   },
   {
     "name": "stats-count-without-by",
     "spl": "| stats count",
     "expect": {
-      "sql": "SELECT count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
+      "sql": "SELECT count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -68,14 +81,17 @@
       },
       "warnings": [],
       "fields": [],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "count"
+      ]
     }
   },
   {
     "name": "stats-by-extra-field",
     "spl": "| stats count by request_uri",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `url.original`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `url.original`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -86,14 +102,18 @@
       "fields": [
         "url.original"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "url.original",
+        "count"
+      ]
     }
   },
   {
     "name": "stats-by-unknown-field",
     "spl": "| stats count by proxy_upstream_name",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `proxy_upstream_name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -106,7 +126,11 @@
       "fields": [
         "proxy_upstream_name"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "proxy_upstream_name",
+        "count"
+      ]
     }
   },
   {
@@ -166,7 +190,7 @@
     "name": "sort-after-stats-by-field",
     "spl": "| stats count by host | sort host",
     "expect": {
-      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `host.name` ASC",
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `host.name` ASC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -176,14 +200,18 @@
       "fields": [
         "host.name"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
     }
   },
   {
     "name": "sort-after-stats-count",
     "spl": "| stats count by host | sort -count",
     "expect": {
-      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `count` DESC",
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -193,14 +221,18 @@
       "fields": [
         "host.name"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
     }
   },
   {
     "name": "stats-by-whitespace-list",
     "spl": "| stats count by host program",
     "expect": {
-      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
+      "sql": "SELECT host AS `host.name`, program AS `program`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host, program",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -211,7 +243,12 @@
         "host.name",
         "program"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "program",
+        "count"
+      ]
     }
   },
   {
@@ -241,7 +278,7 @@
     "name": "verbs-case-insensitive",
     "spl": "| STATS COUNT BY host | SORT -COUNT | HEAD 3",
     "expect": {
-      "sql": "SELECT host AS `host.name`, count() AS `count` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `count` DESC LIMIT {limit:UInt64}",
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `c0` DESC LIMIT {limit:UInt64}",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -252,7 +289,11 @@
       "fields": [
         "host.name"
       ],
-      "aggregate": true
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
     }
   }
 ]
