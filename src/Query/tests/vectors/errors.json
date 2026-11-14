@@ -23,43 +23,86 @@
     "error": {
       "offset": 2,
       "length": 4,
-      "message": "not supported in v1: rare (use stats count by <field> | sort -count | head)"
+      "message": "not supported in v1: rare (use stats count by <field> | sort count | head)"
     }
   },
   {
     "name": "verb-where",
     "spl": "| where count > 5",
     "error": {
-      "offset": 2,
-      "length": 5,
-      "message": "not supported in v1: where"
+      "offset": 8,
+      "length": 9,
+      "message": "count is a string: <, >, <= and >= need a numeric or time field"
     }
   },
   {
     "name": "verb-table",
     "spl": "host=a | table host",
-    "error": {
-      "offset": 9,
-      "length": 5,
-      "message": "not supported in v1: table"
+    "expect": {
+      "sql": "SELECT host AS `host.name` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name"
+      ]
     }
   },
   {
     "name": "verb-rex",
     "spl": "| rex field=raw \"(?P<x>.*)\"",
-    "error": {
-      "offset": 2,
-      "length": 3,
-      "message": "not supported in v1: rex"
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?P<x>.*)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "x"
+      ]
     }
   },
   {
     "name": "verb-timechart",
     "spl": "| timechart span=1h count",
-    "error": {
-      "offset": 2,
-      "length": 9,
-      "message": "not supported in v1: timechart"
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
     }
   },
   {
@@ -86,7 +129,7 @@
     "error": {
       "offset": 2,
       "length": 5,
-      "message": "not supported in v1: dedup"
+      "message": "not supported in v1: dedup (use stats count by <field>, or stats latest(raw) by <field> for one event of each)"
     }
   },
   {
@@ -104,7 +147,7 @@
     "error": {
       "offset": 2,
       "length": 6,
-      "message": "not supported in v1: fields"
+      "message": "not supported in v1: fields (use table <field> ...)"
     }
   },
   {
@@ -113,7 +156,7 @@
     "error": {
       "offset": 2,
       "length": 6,
-      "message": "not supported in v1: rename"
+      "message": "not supported in v1: rename (name an aggregate with as: stats count as <name>)"
     }
   },
   {
@@ -128,19 +171,44 @@
   {
     "name": "stats-dc",
     "spl": "| stats dc(src_ip)",
-    "error": {
-      "offset": 8,
-      "length": 2,
-      "message": "not supported in v1: stats dc(...) (only count by <field>)"
+    "expect": {
+      "sql": "SELECT uniqExactIf(source_ip, source_ip != toIPv6({p0:String})) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "dc(src_ip)"
+      ]
     }
   },
   {
     "name": "stats-sum",
     "spl": "| stats sum(bytes) by host",
-    "error": {
-      "offset": 8,
-      "length": 3,
-      "message": "not supported in v1: stats sum(...) (only count by <field>)"
+    "expect": {
+      "sql": "SELECT host AS `host.name`, sum(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "sum(bytes)"
+      ]
     }
   },
   {
@@ -148,17 +216,31 @@
     "spl": "| stats count(host)",
     "error": {
       "offset": 8,
-      "length": 5,
-      "message": "not supported in v1: stats count(...) (only count by <field>)"
+      "length": 11,
+      "message": "not supported in v1: stats count(host) (use host=* | stats count)"
     }
   },
   {
     "name": "stats-second-function",
     "spl": "| stats count dc(host) by program",
-    "error": {
-      "offset": 14,
-      "length": 2,
-      "message": "not supported in v1: stats dc(...) (only count by <field>)"
+    "expect": {
+      "sql": "SELECT program AS `program`, count() AS `c0`, uniqExactIf(host, notEmpty(host)) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(program) GROUP BY program",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "program",
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "program",
+        "count",
+        "dc(host)"
+      ]
     }
   },
   {
@@ -167,7 +249,7 @@
     "error": {
       "offset": 8,
       "length": 3,
-      "message": "stats: expected count, got 'foo'"
+      "message": "stats: 'foo' is not an aggregate: count, dc(f), sum(f), avg(f), min(f), max(f), values(f), earliest(f), latest(f)"
     }
   },
   {
@@ -176,7 +258,7 @@
     "error": {
       "offset": 2,
       "length": 5,
-      "message": "stats: expected count"
+      "message": "stats: expected an aggregate: count, dc(f), sum(f), avg(f), min(f), max(f), values(f), earliest(f), latest(f)"
     }
   },
   {
@@ -464,7 +546,7 @@
     "error": {
       "offset": 29,
       "length": 8,
-      "message": "sort after stats: 'program' is neither count nor a by field"
+      "message": "'program' is not a column of the result: host.name, count"
     }
   },
   {
@@ -537,6 +619,96 @@
       "offset": 6,
       "length": 1,
       "message": "unexpected ','"
+    }
+  },
+  {
+    "name": "verb-search",
+    "spl": "| search host=a",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: search (use where <expression>)"
+    }
+  },
+  {
+    "name": "verb-regex",
+    "spl": "| regex _raw=\"x\"",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "not supported in v1: regex (use rex field=<field> \"(?<name>...)\" | where name=*)"
+    }
+  },
+  {
+    "name": "verb-chart",
+    "spl": "| chart count by host",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "not supported in v1: chart (use stats ... by <field>)"
+    }
+  },
+  {
+    "name": "verb-bin",
+    "spl": "| bin _time span=1h",
+    "error": {
+      "offset": 2,
+      "length": 3,
+      "message": "not supported in v1: bin (use timechart span=<N><unit> ...)"
+    }
+  },
+  {
+    "name": "verb-bucket",
+    "spl": "| bucket _time span=1h",
+    "error": {
+      "offset": 2,
+      "length": 6,
+      "message": "not supported in v1: bucket (use timechart span=<N><unit> ...)"
+    }
+  },
+  {
+    "name": "verb-tail",
+    "spl": "| tail 5",
+    "error": {
+      "offset": 2,
+      "length": 4,
+      "message": "not supported in v1: tail (use sort _time | head <N>)"
+    }
+  },
+  {
+    "name": "verb-reverse",
+    "spl": "| reverse",
+    "error": {
+      "offset": 2,
+      "length": 7,
+      "message": "not supported in v1: reverse (use sort with the other sign)"
+    }
+  },
+  {
+    "name": "verb-eventstats-has-no-rewrite",
+    "spl": "| eventstats count by host",
+    "error": {
+      "offset": 2,
+      "length": 10,
+      "message": "not supported in v1: eventstats"
+    }
+  },
+  {
+    "name": "verb-unknown-word",
+    "spl": "| frobnicate host",
+    "error": {
+      "offset": 2,
+      "length": 10,
+      "message": "not supported in v1: frobnicate"
+    }
+  },
+  {
+    "name": "verb-upper-case-is-the-same-verb",
+    "spl": "| DEDUP host",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "not supported in v1: dedup (use stats count by <field>, or stats latest(raw) by <field> for one event of each)"
     }
   }
 ]

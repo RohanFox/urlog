@@ -38,7 +38,16 @@ public sealed class QueryFailedException : Exception
 }
 
 /// <summary>Rows of a query as text, column names from the result, and the client-side elapsed time.</summary>
-public sealed record QueryTable(IReadOnlyList<string> Columns, IReadOnlyList<string[]> Rows, TimeSpan Elapsed);
+public sealed record QueryTable(IReadOnlyList<string> Columns, IReadOnlyList<string[]> Rows, TimeSpan Elapsed)
+{
+    /// <summary>
+    /// Rows where a <c>values(f)</c> cell reached the cap: the group has more values than the cell shows. A result
+    /// with any such row carries the <c>values_capped</c> warning; one without does not.
+    /// </summary>
+    public IReadOnlyList<int> CappedRows { get; init; } = [];
+
+    public bool ValuesCapped => CappedRows.Count > 0;
+}
 
 /// <summary>
 /// The query path's transport (ADR 0003): the driver's HTTP client as the read-only user, with the allowed-case
@@ -66,7 +75,7 @@ public sealed class ClickHouseQueryClient
         ArgumentNullException.ThrowIfNull(query);
         var cases = AllowedCases(allowedCases ?? [query.CaseId]);
         await EnsureAllowedAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
-        var table = await RunGatedAsync(query.Sql, query.Parameters, cases, cancellationToken).ConfigureAwait(false);
+        var table = await RunGatedAsync(query.Sql, query.Parameters, cases, cancellationToken, query.ValuesColumns).ConfigureAwait(false);
 
         // The SQL names a column the analyst named by a generated alias; the headers are the transpiler's.
         return query.Columns.Length == table.Columns.Count ? table with { Columns = query.Columns } : table;
@@ -152,11 +161,11 @@ public sealed class ClickHouseQueryClient
     }
 
     /// <summary>A query that passed the gate, run: what the server refuses at this point is the caller's query error, with the server's code.</summary>
-    private async Task<QueryTable> RunGatedAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, CancellationToken cancellationToken)
+    private async Task<QueryTable> RunGatedAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, CancellationToken cancellationToken, IReadOnlyList<int>? valuesColumns = null)
     {
         try
         {
-            return await ExecuteAsync(sql, parameters, allowedCases, cancellationToken).ConfigureAwait(false);
+            return await ExecuteAsync(sql, parameters, allowedCases, cancellationToken, valuesColumns).ConfigureAwait(false);
         }
         catch (ClickHouseServerException e)
         {
@@ -185,7 +194,7 @@ public sealed class ClickHouseQueryClient
 
     private static string AllowedCases(IReadOnlyCollection<ulong> cases) => "[" + string.Join(",", cases.Select(c => c.ToString(CultureInfo.InvariantCulture))) + "]";
 
-    private async Task<QueryTable> ExecuteAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, CancellationToken cancellationToken)
+    private async Task<QueryTable> ExecuteAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, CancellationToken cancellationToken, IReadOnlyList<int>? valuesColumns = null)
     {
         var sw = Stopwatch.StartNew();
         await using var connection = new ClickHouseConnection(_connectionString);
@@ -210,18 +219,37 @@ public sealed class ClickHouseQueryClient
         }
 
         var rows = new List<string[]>();
+        var capped = new List<int>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var row = new string[reader.FieldCount];
+            var rowCapped = false;
             for (var i = 0; i < row.Length; i++)
             {
-                row[i] = Text(reader.GetValue(i));
+                var value = reader.GetValue(i);
+
+                // values(f) asked for one value more than the cap: a cell that holds it is cut back and its row marked.
+                if (valuesColumns?.Contains(i) == true && value is Array { Length: > Transpiler.ValuesCap } list)
+                {
+                    var kept = Array.CreateInstance(list.GetType().GetElementType()!, Transpiler.ValuesCap);
+                    Array.Copy(list, kept, Transpiler.ValuesCap);
+                    row[i] = Text(kept)[..^1] + ", ...]";
+                    rowCapped = true;
+                    continue;
+                }
+
+                row[i] = Text(value);
+            }
+
+            if (rowCapped)
+            {
+                capped.Add(rows.Count);
             }
 
             rows.Add(row);
         }
 
-        return new QueryTable(columns, rows, sw.Elapsed);
+        return new QueryTable(columns, rows, sw.Elapsed) { CappedRows = capped };
     }
 
     /// <summary>The driver formats a request parameter from a typed value: instants as UTC DateTime, integers as integers, the rest as text.</summary>
@@ -229,11 +257,13 @@ public sealed class ClickHouseQueryClient
     {
         "DateTime64(3)" => DateTime.SpecifyKind(DateTime.ParseExact(p.Value, "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture), DateTimeKind.Utc),
         "UInt64" => ulong.Parse(p.Value, CultureInfo.InvariantCulture),
+        "UInt32" => uint.Parse(p.Value, CultureInfo.InvariantCulture),
+        "Float64" => double.Parse(p.Value, CultureInfo.InvariantCulture),
         "Int64" => long.Parse(p.Value, CultureInfo.InvariantCulture),
         _ => p.Value,
     };
 
-    /// <summary>A cell as the CLI prints it: instants in UTC with milliseconds, IPv4-mapped addresses as IPv4, maps as <c>{k:v, ...}</c>.</summary>
+    /// <summary>A cell as the CLI prints it: instants in UTC with milliseconds, IPv4-mapped addresses as IPv4, lists as <c>[a, b]</c>, maps as <c>{k:v, ...}</c>.</summary>
     public static string Text(object? value) => value switch
     {
         null or DBNull => "",
@@ -242,6 +272,7 @@ public sealed class ClickHouseQueryClient
         IPAddress ip => ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4().ToString() : ip.ToString(),
         string s => s,
         byte[] bytes => System.Text.Encoding.UTF8.GetString(bytes),
+        Array list => "[" + string.Join(", ", list.Cast<object?>().Select(Text)) + "]",
         IDictionary<string, string> map => "{" + string.Join(", ", map.Select(kv => kv.Key + ":" + kv.Value)) + "}",
         System.Collections.IDictionary map => "{" + string.Join(", ", map.Keys.Cast<object>().Select(k => k + ":" + map[k])) + "}",
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),

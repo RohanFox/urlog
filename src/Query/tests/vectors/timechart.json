@@ -1,0 +1,643 @@
+[
+  {
+    "name": "timechart-count-by-host",
+    "spl": "status>=500 | timechart span=1h count by host",
+    "expect": {
+      "sql": "WITH top AS (SELECT host AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) AND notEmpty(host) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, host IN top AS `c0`, if(`c0`, host, defaultValueOfArgumentType(host)) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) AND notEmpty(host) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500",
+        "span": "UInt32:1",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-span-after-the-by-clause",
+    "spl": "status>=500 | timechart count by host span=1h",
+    "expect": {
+      "sql": "WITH top AS (SELECT host AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) AND notEmpty(host) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, host IN top AS `c0`, if(`c0`, host, defaultValueOfArgumentType(host)) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) AND notEmpty(host) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500",
+        "span": "UInt32:1",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-span-after-the-aggregate-without-by",
+    "spl": "| timechart count span=15m",
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalMinute({span:UInt32})) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:15"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-without-by",
+    "spl": "| timechart span=15m count",
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalMinute({span:UInt32})) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:15"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-distinct-count-named",
+    "spl": "| timechart span=1h dc(src_ip) as ips by program",
+    "expect": {
+      "sql": "WITH top AS (SELECT program AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(program) GROUP BY s ORDER BY uniqExactIf(source_ip, source_ip != toIPv6({p0:String})) DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, program IN top AS `c0`, if(`c0`, program, defaultValueOfArgumentType(program)) AS `c1`, uniqExactIf(source_ip, source_ip != toIPv6({p0:String})) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(program) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:::",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip",
+        "program"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "program",
+        "ips"
+      ]
+    }
+  },
+  {
+    "name": "timechart-average-in-seconds",
+    "spl": "earliest=2026-03-15T11:00:00Z latest=2026-03-15T12:00:00Z | timechart span=30s avg(bytes)",
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalSecond({span:UInt32})) AS `_time`, avg(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-15 11:00:00.000",
+        "to": "DateTime64(3):2026-03-15 12:00:00.000",
+        "span": "UInt32:30"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "avg(bytes)"
+      ]
+    }
+  },
+  {
+    "name": "timechart-sum-by-number",
+    "spl": "| timechart span=6h sum(bytes) by status",
+    "expect": {
+      "sql": "WITH top AS (SELECT http_status AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND http_status != 0 GROUP BY s ORDER BY sum(http_response_body_bytes) DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, http_status IN top AS `c0`, if(`c0`, http_status, defaultValueOfArgumentType(http_status)) AS `c1`, sum(http_response_body_bytes) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND http_status != 0 GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:6",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.body.bytes",
+        "http.response.status_code"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "http.response.status_code",
+        "sum(bytes)"
+      ]
+    }
+  },
+  {
+    "name": "timechart-by-address",
+    "spl": "| timechart span=1h count by src_ip",
+    "expect": {
+      "sql": "WITH top AS (SELECT source_ip AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, source_ip IN top AS `c0`, if(`c0`, source_ip, defaultValueOfArgumentType(source_ip)) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:::",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "source.ip",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-by-unknown-field",
+    "spl": "| timechart span=1h count by tenant",
+    "expect": {
+      "sql": "WITH top AS (SELECT extras[{p0:String}] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extras[{p0:String}] IN top AS `c0`, if(`c0`, extras[{p0:String}], defaultValueOfArgumentType(extras[{p0:String}])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:tenant",
+        "top": "UInt64:10"
+      },
+      "warnings": [
+        "unknown_field@29+6"
+      ],
+      "fields": [
+        "tenant"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "tenant",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-by-rex-group",
+    "spl": "| rex field=url.path \"^/(?<top>[^/]+)\" | timechart span=1h count by top",
+    "expect": {
+      "sql": "WITH top AS (SELECT extractGroups(url_path, {p0:String})[1] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extractGroups(url_path, {p0:String})[1]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extractGroups(url_path, {p0:String})[1] IN top AS `c0`, if(`c0`, extractGroups(url_path, {p0:String})[1], defaultValueOfArgumentType(extractGroups(url_path, {p0:String})[1])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extractGroups(url_path, {p0:String})[1]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:^/(?<top>[^/]+)",
+        "span": "UInt32:1",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "top",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-after-where",
+    "spl": "| where status=404 | timechart span=1h max(bytes) by host",
+    "expect": {
+      "sql": "WITH top AS (SELECT host AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) AND notEmpty(host) GROUP BY s ORDER BY max(http_response_body_bytes) DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, host IN top AS `c0`, if(`c0`, host, defaultValueOfArgumentType(host)) AS `c1`, max(http_response_body_bytes) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) AND notEmpty(host) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:404",
+        "span": "UInt32:1",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "http.response.body.bytes",
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "host.name",
+        "max(bytes)"
+      ]
+    }
+  },
+  {
+    "name": "timechart-day-in-utc",
+    "spl": "| timechart span=1d count",
+    "expect": {
+      "sql": "SELECT toTimeZone(toStartOfInterval(ts, toIntervalDay({span:UInt32}), {tz:String}), {utc:String}) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "utc": "String:UTC",
+        "tz": "String:UTC"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-day-at-a-fixed-offset",
+    "spl": "| timechart span=1d count by host",
+    "options": {
+      "case": 1,
+      "from": "2026-03-01T00:00:00Z",
+      "to": "2026-04-01T00:00:00Z",
+      "tz": "+02:00",
+      "now": "2026-03-15T12:00:00Z",
+      "allowed": [
+        1,
+        7
+      ]
+    },
+    "expect": {
+      "sql": "WITH top AS (SELECT host AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT subtractSeconds(toStartOfInterval(addSeconds(ts, {shift:Int64}), toIntervalDay({span:UInt32}), {utc:String}), {shift:Int64}) AS `_time`, host IN top AS `c0`, if(`c0`, host, defaultValueOfArgumentType(host)) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "utc": "String:UTC",
+        "shift": "Int64:7200",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-week-at-a-fixed-offset",
+    "spl": "| timechart span=1w count",
+    "options": {
+      "case": 1,
+      "from": "2026-03-01T00:00:00Z",
+      "to": "2026-04-01T00:00:00Z",
+      "tz": "-05:30",
+      "now": "2026-03-15T12:00:00Z",
+      "allowed": [
+        1,
+        7
+      ]
+    },
+    "expect": {
+      "sql": "SELECT subtractSeconds(toDateTime(toStartOfInterval(addSeconds(ts, {shift:Int64}), toIntervalWeek({span:UInt32}), {utc:String}), {utc:String}), {shift:Int64}) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "utc": "String:UTC",
+        "shift": "Int64:-19800"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-three-days-in-utc",
+    "spl": "| timechart span=3d max(bytes)",
+    "expect": {
+      "sql": "SELECT toTimeZone(toStartOfInterval(ts, toIntervalDay({span:UInt32}), {tz:String}), {utc:String}) AS `_time`, max(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:3",
+        "utc": "String:UTC",
+        "tz": "String:UTC"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "max(bytes)"
+      ]
+    }
+  },
+  {
+    "name": "timechart-hours-ignore-the-zone",
+    "spl": "| timechart span=1h count",
+    "options": {
+      "case": 1,
+      "from": "2026-03-01T00:00:00Z",
+      "to": "2026-04-01T00:00:00Z",
+      "tz": "+05:30",
+      "now": "2026-03-15T12:00:00Z",
+      "allowed": [
+        1,
+        7
+      ]
+    },
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-largest-range-that-fits",
+    "spl": "| timechart span=9m count",
+    "expect": {
+      "sql": "SELECT toStartOfInterval(ts, toIntervalMinute({span:UInt32})) AS `_time`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY `_time` ORDER BY `_time` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:9"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "timechart-without-span",
+    "spl": "| timechart count by host",
+    "error": {
+      "offset": 2,
+      "length": 9,
+      "message": "timechart: span= is required, like span=1h (units s, m, h, d, w)"
+    }
+  },
+  {
+    "name": "timechart-span-unit",
+    "spl": "| timechart span=1y count",
+    "error": {
+      "offset": 17,
+      "length": 2,
+      "message": "timechart: '1y' is not a span: a whole number and a unit, like 5m, 1h or 1d (units s, m, h, d, w)"
+    }
+  },
+  {
+    "name": "timechart-span-month",
+    "spl": "| timechart span=1mon count",
+    "error": {
+      "offset": 17,
+      "length": 4,
+      "message": "timechart: '1mon' is not a span: a whole number and a unit, like 5m, 1h or 1d (units s, m, h, d, w)"
+    }
+  },
+  {
+    "name": "timechart-span-zero",
+    "spl": "| timechart span=0m count",
+    "error": {
+      "offset": 17,
+      "length": 2,
+      "message": "timechart: the span count must be between 1 and 10,000"
+    }
+  },
+  {
+    "name": "timechart-span-not-a-number",
+    "spl": "| timechart span=h count",
+    "error": {
+      "offset": 17,
+      "length": 1,
+      "message": "timechart: 'h' is not a span: a whole number and a unit, like 5m, 1h or 1d (units s, m, h, d, w)"
+    }
+  },
+  {
+    "name": "timechart-span-twice",
+    "spl": "| timechart span=1h count span=2h",
+    "error": {
+      "offset": 26,
+      "length": 7,
+      "message": "timechart: span= given twice"
+    }
+  },
+  {
+    "name": "timechart-too-many-buckets",
+    "spl": "| timechart span=1s count",
+    "error": {
+      "offset": 12,
+      "length": 7,
+      "message": "timechart: this span cuts the range into 2,678,400 buckets, more than 5,000: use a longer span or a shorter range"
+    }
+  },
+  {
+    "name": "timechart-one-bucket-too-many",
+    "spl": "| timechart span=8m count",
+    "error": {
+      "offset": 12,
+      "length": 7,
+      "message": "timechart: this span cuts the range into 5,580 buckets, more than 5,000: use a longer span or a shorter range"
+    }
+  },
+  {
+    "name": "timechart-values",
+    "spl": "| timechart span=1h values(user)",
+    "error": {
+      "offset": 20,
+      "length": 12,
+      "message": "timechart: values(...) is not a number to chart: use count, dc, sum, avg, min or max"
+    }
+  },
+  {
+    "name": "timechart-latest",
+    "spl": "| timechart span=1h latest(user) by host",
+    "error": {
+      "offset": 20,
+      "length": 12,
+      "message": "timechart: latest(...) is not a number to chart: use count, dc, sum, avg, min or max"
+    }
+  },
+  {
+    "name": "timechart-max-of-time",
+    "spl": "| timechart span=1h max(_time)",
+    "error": {
+      "offset": 20,
+      "length": 10,
+      "message": "timechart: a time is not a number to chart"
+    }
+  },
+  {
+    "name": "timechart-sum-of-a-keyword",
+    "spl": "| timechart span=1h sum(host)",
+    "error": {
+      "offset": 20,
+      "length": 9,
+      "message": "timechart: sum(host.name) needs a number: host.name is text"
+    }
+  },
+  {
+    "name": "timechart-two-by-fields",
+    "spl": "| timechart span=1h count by host, program",
+    "error": {
+      "offset": 35,
+      "length": 7,
+      "message": "timechart: one by field only; the series are its values"
+    }
+  },
+  {
+    "name": "timechart-two-aggregates",
+    "spl": "| timechart span=1h count dc(user)",
+    "error": {
+      "offset": 26,
+      "length": 2,
+      "message": "timechart: one aggregate only"
+    }
+  },
+  {
+    "name": "timechart-two-aggregates-comma",
+    "spl": "| timechart span=1h count, dc(user)",
+    "error": {
+      "offset": 25,
+      "length": 1,
+      "message": "timechart: one aggregate only"
+    }
+  },
+  {
+    "name": "timechart-count-of-a-field",
+    "spl": "| timechart span=1h count(user)",
+    "error": {
+      "offset": 20,
+      "length": 11,
+      "message": "not supported in v1: timechart count(user) (use user=* | timechart count)"
+    }
+  },
+  {
+    "name": "timechart-without-aggregate",
+    "spl": "| timechart span=1h",
+    "error": {
+      "offset": 2,
+      "length": 9,
+      "message": "timechart: expected timechart span=<N><s|m|h|d|w> <aggregate> [by <field>]"
+    }
+  },
+  {
+    "name": "timechart-by-without-field",
+    "spl": "| timechart span=1h count by",
+    "error": {
+      "offset": 26,
+      "length": 2,
+      "message": "expected a field name after 'by'"
+    }
+  },
+  {
+    "name": "timechart-two-by-fields-by-whitespace",
+    "spl": "| timechart span=1h count by host program",
+    "error": {
+      "offset": 34,
+      "length": 7,
+      "message": "timechart: one by field only; the series are its values"
+    }
+  },
+  {
+    "name": "timechart-span-between-aggregate-and-by",
+    "spl": "| timechart count span=1h by host",
+    "expect": {
+      "sql": "WITH top AS (SELECT host AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, host IN top AS `c0`, if(`c0`, host, defaultValueOfArgumentType(host)) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "top": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "host.name",
+        "count"
+      ]
+    }
+  }
+]

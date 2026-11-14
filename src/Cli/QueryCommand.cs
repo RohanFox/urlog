@@ -29,6 +29,12 @@ internal static class QueryCommand
         }
 
         var table = await GuardAsync(() => client.RunAsync(result, cancellationToken: ct)).ConfigureAwait(false);
+        if (table.ValuesCapped)
+        {
+            Console.Error.WriteLine($"warning: values_capped: {table.CappedRows.Count} row(s) hold more than {Transpiler.ValuesCap} values; their lists end in ...");
+        }
+
+        table = TimechartPivot.Pivot(table, result);
         PrintTable(table, hideEmptyColumns: !result.IsAggregate);
         Console.WriteLine($"{table.Rows.Count:N0} rows ({table.Elapsed.TotalMilliseconds:N0} ms); range {Transpiler.Fmt(result.RangeFrom)} .. {Transpiler.Fmt(result.RangeTo)} UTC, case {result.CaseId}");
         if (args.Flag("explain"))
@@ -74,7 +80,15 @@ internal static class QueryCommand
             throw new CliException("--case <id> is required (a positive integer)");
         }
 
-        var zone = TimeZones.Find(args.Option("tz") ?? "UTC");
+        TimeZoneInfo zone;
+        try
+        {
+            zone = TimeZones.Find(args.Option("tz") ?? "UTC");
+        }
+        catch (ArgumentException e)
+        {
+            throw new CliException("--tz: " + e.Message.Split(" (Parameter", 2)[0]);
+        }
         var now = args.Option("now") is { } nowText ? TimeExpr.Parse(nowText, DateTimeOffset.UtcNow, zone, out _) : DateTimeOffset.UtcNow;
         var connection = new Connection(args);
         Console.Error.WriteLine(connection.AnnounceQuery());

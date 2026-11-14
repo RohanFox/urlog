@@ -1,0 +1,266 @@
+[
+  {
+    "name": "table-catalog-fields",
+    "spl": "status=404 | table _time, src_ip, url.path",
+    "expect": {
+      "sql": "SELECT ts AS `_time`, source_ip AS `source.ip`, url_path AS `url.path` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "_time",
+        "source.ip",
+        "url.path"
+      ],
+      "aggregate": false,
+      "columns": [
+        "_time",
+        "source.ip",
+        "url.path"
+      ]
+    }
+  },
+  {
+    "name": "table-unknown-field-gets-a-generated-alias",
+    "spl": "| table host x_trace",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:x_trace",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@13+7"
+      ],
+      "fields": [
+        "host.name",
+        "x_trace"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "x_trace"
+      ]
+    }
+  },
+  {
+    "name": "table-extras-field-from-the-catalog",
+    "spl": "| table host, request_uri, upstream.addr",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `url.original`, extras[{p1:String}] AS `upstream.addr` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url.original",
+        "p1": "String:upstream.addr",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "url.original",
+        "upstream.addr"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "url.original",
+        "upstream.addr"
+      ]
+    }
+  },
+  {
+    "name": "table-after-stats-reorders",
+    "spl": "| stats count as n, dc(user) as u by host | table n host",
+    "expect": {
+      "sql": "SELECT count() AS `c0`, host AS `host.name` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "n",
+        "host.name"
+      ]
+    }
+  },
+  {
+    "name": "table-after-stats-keeps-a-hidden-column-usable",
+    "spl": "| stats count as n, dc(user) as u by host | where u>2 | table host n | sort -u",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (uniqExactIf(user_name, notEmpty(user_name)) > {p0:UInt64}) ORDER BY uniqExactIf(user_name, notEmpty(user_name)) DESC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:2"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "table-after-stats-count-by-name",
+    "spl": "| stats count by host | table count",
+    "expect": {
+      "sql": "SELECT count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "table-then-sort-and-head",
+    "spl": "| table host, message | sort host | head 5",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, message AS `message` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY host ASC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:5"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "message"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "message"
+      ]
+    }
+  },
+  {
+    "name": "table-of-a-rex-group",
+    "spl": "| rex field=message \"user (?<who>\\w+)\" | table _time who",
+    "expect": {
+      "sql": "SELECT ts AS `_time`, extractGroups(message, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:user (?<who>\\w+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "message",
+        "_time"
+      ],
+      "aggregate": false,
+      "columns": [
+        "_time",
+        "who"
+      ]
+    }
+  },
+  {
+    "name": "table-empty",
+    "spl": "| table",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "table: expected one or more fields, like table _time, host, message"
+    }
+  },
+  {
+    "name": "table-wildcard",
+    "spl": "| table host*",
+    "error": {
+      "offset": 8,
+      "length": 5,
+      "message": "table: wildcards are not supported; name each field"
+    }
+  },
+  {
+    "name": "table-twice",
+    "spl": "| table host | table program",
+    "error": {
+      "offset": 15,
+      "length": 13,
+      "message": "table given twice"
+    }
+  },
+  {
+    "name": "table-not-a-column-of-the-result",
+    "spl": "| stats count by host | table program",
+    "error": {
+      "offset": 30,
+      "length": 7,
+      "message": "'program' is not a column of the result: host.name, count"
+    }
+  },
+  {
+    "name": "table-field-twice",
+    "spl": "| table host host.name",
+    "error": {
+      "offset": 13,
+      "length": 9,
+      "message": "table: host.name is listed twice"
+    }
+  },
+  {
+    "name": "table-result-column-twice",
+    "spl": "| stats count as n by host | table n, host, n",
+    "error": {
+      "offset": 44,
+      "length": 1,
+      "message": "table: n is listed twice"
+    }
+  },
+  {
+    "name": "table-unnamed-aggregate",
+    "spl": "| stats dc(user) by host | table host dc(user)",
+    "error": {
+      "offset": 38,
+      "length": 2,
+      "message": "dc(...) has no name here: name it in stats, like stats dc(<field>) as n, then use n"
+    }
+  },
+  {
+    "name": "stats-after-table",
+    "spl": "| table host | stats count",
+    "error": {
+      "offset": 15,
+      "length": 11,
+      "message": "stats must come before table"
+    }
+  }
+]

@@ -4,20 +4,15 @@ using System.Globalization;
 namespace Urlog.Query;
 
 /// <summary>
-/// Recursive-descent parser for the v1 slice (design record, "Query language"): the filter grammar and the verbs
-/// <c>stats count [as x] [by f, ...]</c>, <c>sort [-]f, ...</c>, <c>head N</c>. Precedence: <c>NOT</c> binds tighter
-/// than implicit/explicit <c>AND</c>, which binds tighter than <c>OR</c>. Any other verb, and any other stats
-/// function, is an error "not supported in v1: ...". Ambiguity is an error with a position, never a guess.
+/// Recursive-descent parser for the v1 dialect (design record, "Query language"): the filter grammar here, the
+/// verbs in the other half of the class. Precedence: <c>NOT</c> binds tighter than implicit/explicit <c>AND</c>,
+/// which binds tighter than <c>OR</c>. Any other verb is an error "not supported in v1: ...". Ambiguity is an
+/// error with a position, never a guess.
 /// </summary>
-public sealed class Parser
+public sealed partial class Parser
 {
     public const int DefaultHead = 100;
     public const int MaxHead = 1_000_000;
-
-    private static readonly HashSet<string> StatsFunctions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "count", "dc", "distinct_count", "sum", "avg", "min", "max", "values", "earliest", "latest", "first", "last", "list", "median", "perc95", "p95", "stdev", "var", "range", "mode",
-    };
 
     private static readonly HashSet<string> ScopeWords = new(StringComparer.OrdinalIgnoreCase) { "index", "earliest", "latest" };
 
@@ -205,6 +200,11 @@ public sealed class Parser
         }
 
         Advance();
+        if (_afterAggregate && Current.Kind == TokenKind.LParen && AggregateFunctions.ContainsKey(t.Text))
+        {
+            throw NameTheAggregate(t);
+        }
+
         if (Current.Kind == TokenKind.Operator)
         {
             var op = Advance();
@@ -235,6 +235,11 @@ public sealed class Parser
                 if (compareOp != CompareOp.Eq)
                 {
                     throw new QueryException(op.Span, $"{t.Text.ToLowerInvariant()} takes '=' only");
+                }
+
+                if (_inWhere)
+                {
+                    throw new QueryException(span, $"{t.Text.ToLowerInvariant()}= sets the scope of the whole search: write it before the first '|', not in where");
                 }
 
                 if (!allowScope)
@@ -314,185 +319,6 @@ public sealed class Parser
                 _latest = (value, span);
                 break;
         }
-    }
-
-    private CommandNode ParseCommand()
-    {
-        var verb = Advance();
-        var name = verb.Text.ToLowerInvariant();
-        switch (name)
-        {
-            case "stats":
-                return ParseStats(verb);
-            case "sort":
-                return ParseSort(verb);
-            case "head":
-                return ParseHead(verb);
-            case "top":
-            case "rare":
-                throw new QueryException(verb.Span, $"not supported in v1: {name} (use stats count by <field> | sort -count | head)");
-            default:
-                throw new QueryException(verb.Span, $"not supported in v1: {name}");
-        }
-    }
-
-    private StatsCountNode ParseStats(Token verb)
-    {
-        var fn = Current;
-        if (fn.Kind != TokenKind.Word)
-        {
-            throw new QueryException(fn.Kind == TokenKind.End ? verb.Span : fn.Span, "stats: expected count");
-        }
-
-        var fnName = fn.Text;
-        var paren = fnName.IndexOf('(', StringComparison.Ordinal);
-        var bare = paren < 0 ? fnName : fnName[..paren];
-        if (!bare.Equals("count", StringComparison.OrdinalIgnoreCase) || paren >= 0 || (_i + 1 < _tokens.Count && _tokens[_i + 1].Kind == TokenKind.LParen))
-        {
-            if (StatsFunctions.Contains(bare))
-            {
-                throw new QueryException(fn.Span, $"not supported in v1: stats {bare.ToLowerInvariant()}(...) (only count by <field>)");
-            }
-
-            throw new QueryException(fn.Span, $"stats: expected count, got '{fn.Text}'");
-        }
-
-        Advance();
-        var alias = "count";
-        if (Current.IsWord("as"))
-        {
-            var @as = Advance();
-            if (Current.Kind != TokenKind.Word)
-            {
-                throw new QueryException(Current.Kind == TokenKind.End ? @as.Span : Current.Span, "expected a name after 'as'");
-            }
-
-            alias = Advance().Text;
-            if (!Names.IsStrict(alias))
-            {
-                throw new QueryException(_tokens[_i - 1].Span, $"'{alias}' is not a name: use letters, digits and '_', starting with a letter or '_', at most {Names.MaxLength} characters");
-            }
-        }
-
-        var by = ImmutableArray.CreateBuilder<(string, TextSpan)>();
-        if (Current.IsWord("by"))
-        {
-            var byToken = Advance();
-            while (true)
-            {
-                if (Current.Kind != TokenKind.Word)
-                {
-                    throw new QueryException(Current.Kind == TokenKind.End ? byToken.Span : Current.Span, "expected a field name after 'by'");
-                }
-
-                var f = Advance();
-                ValidateName(f.Text, f.Span);
-                by.Add((f.Text, f.Span));
-                if (Current.Kind == TokenKind.Comma)
-                {
-                    Advance();
-                    continue;
-                }
-
-                if (Current.Kind == TokenKind.Word)
-                {
-                    continue; // whitespace-separated list
-                }
-
-                break;
-            }
-        }
-
-        if (Current.Kind is not (TokenKind.Pipe or TokenKind.End))
-        {
-            if (Current.Kind == TokenKind.Word && StatsFunctions.Contains(Current.Text.Split('(')[0]))
-            {
-                throw new QueryException(Current.Span, $"not supported in v1: stats {Current.Text.Split('(')[0].ToLowerInvariant()}(...) (only count by <field>)");
-            }
-
-            throw new QueryException(Current.Span, $"stats: unexpected '{Current.Text}'");
-        }
-
-        return new StatsCountNode(alias, by.ToImmutable(), new TextSpan(verb.Span.Offset, PreviousEnd() - verb.Span.Offset));
-    }
-
-    private SortNode ParseSort(Token verb)
-    {
-        var keys = ImmutableArray.CreateBuilder<(string, bool, TextSpan)>();
-        while (Current.Kind is TokenKind.Word or TokenKind.Operator)
-        {
-            var k = Advance();
-            var text = k.Text;
-            var descending = false;
-            var span = k.Span;
-            if (k.Kind == TokenKind.Operator)
-            {
-                throw new QueryException(k.Span, $"sort: unexpected '{k.Text}'");
-            }
-
-            if (text.StartsWith('-') || text.StartsWith('+'))
-            {
-                descending = text[0] == '-';
-                text = text[1..];
-                if (text.Length == 0)
-                {
-                    throw new QueryException(k.Span, "sort: expected a field name after the sign");
-                }
-            }
-
-            if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
-            {
-                throw new QueryException(k.Span, "sort: a row limit is not supported here; use head N");
-            }
-
-            ValidateName(text, span);
-            keys.Add((text, descending, span));
-            if (Current.Kind == TokenKind.Comma)
-            {
-                Advance();
-                if (Current.Kind != TokenKind.Word)
-                {
-                    throw new QueryException(Current.Kind == TokenKind.End ? _tokens[_i - 1].Span : Current.Span, "sort: expected a field name after ','");
-                }
-            }
-        }
-
-        if (keys.Count == 0)
-        {
-            throw new QueryException(Current.Kind == TokenKind.End ? verb.Span : Current.Span, "sort: expected one or more fields, like sort -count");
-        }
-
-        if (Current.Kind is not (TokenKind.Pipe or TokenKind.End))
-        {
-            throw new QueryException(Current.Span, $"sort: unexpected '{Current.Text}'");
-        }
-
-        return new SortNode(keys.ToImmutable(), new TextSpan(verb.Span.Offset, PreviousEnd() - verb.Span.Offset));
-    }
-
-    private HeadNode ParseHead(Token verb)
-    {
-        var count = DefaultHead;
-        if (Current.Kind == TokenKind.Word)
-        {
-            var n = Advance();
-            if (!int.TryParse(n.Text, NumberStyles.None, CultureInfo.InvariantCulture, out count))
-            {
-                throw new QueryException(n.Span, $"head: expected a number, got '{n.Text}'");
-            }
-
-            if (count < 1 || count > MaxHead)
-            {
-                throw new QueryException(n.Span, $"head: the count must be between 1 and {MaxHead:N0}");
-            }
-        }
-
-        if (Current.Kind is not (TokenKind.Pipe or TokenKind.End))
-        {
-            throw new QueryException(Current.Span, $"head: unexpected '{Current.Text}'");
-        }
-
-        return new HeadNode(count, new TextSpan(verb.Span.Offset, PreviousEnd() - verb.Span.Offset));
     }
 
     private static void ValidateName(string name, TextSpan span)

@@ -30,6 +30,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     [InlineData("max_memory_usage", "9000000000")]
     [InlineData("max_result_rows", "5000000")]
     [InlineData("max_concurrent_queries_for_user", "100")]
+    [InlineData("cancel_http_readonly_queries_on_client_close", "0")]
     public async Task LimitsCannotBeRaisedByRequestParameter(string setting, string value)
     {
         var e = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT 1", new() { [setting] = value }));
@@ -51,9 +52,9 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     [Fact]
     public async Task LimitsAreWhatTheProfileSays()
     {
-        var limits = await QueryAsync("SELECT toString(getSetting('max_execution_time')), toString(getSetting('max_memory_usage')), toString(getSetting('max_result_rows')), toString(getSetting('readonly')), toString(getSetting('allow_ddl')), toString(getSetting('max_concurrent_queries_for_user'))");
+        var limits = await QueryAsync("SELECT toString(getSetting('max_execution_time')), toString(getSetting('max_memory_usage')), toString(getSetting('max_result_rows')), toString(getSetting('readonly')), toString(getSetting('allow_ddl')), toString(getSetting('max_concurrent_queries_for_user')), toString(getSetting('cancel_http_readonly_queries_on_client_close'))");
         output.WriteLine(string.Join(" / ", limits[0]));
-        Assert.Equal(["60", "4000000000", "1000000", "2", "false", "4"], limits[0]);
+        Assert.Equal(["60", "4000000000", "1000000", "2", "false", "4", "true"], limits[0]);
         // Lowering a limit is allowed (a client may ask for less); the constraint is readonly, so even that is refused.
         var lower = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT 1", new() { ["max_result_rows"] = "10" }));
         Assert.Equal(SettingConstraintViolation, lower.ErrorCode);
@@ -148,6 +149,51 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         Assert.Equal(["default.events_v", "default.field_stats"], visible.Select(r => r[0]).ToArray());
         var databases = await QueryAsync("SELECT name FROM system.databases ORDER BY name");
         Assert.Equal(["default"], databases.Select(r => r[0]).ToArray());
+    }
+
+    [Fact]
+    public async Task AQueryWhoseClientHasLeftIsStoppedWithinSeconds()
+    {
+        // A scan that would run to max_execution_time (60 s). The request is cancelled once the server shows the
+        // query in flight, which closes the connection; cancel_http_readonly_queries_on_client_close on the
+        // profile then stops it. Without the setting it stays in system.processes for the full minute.
+        const string Marker = "sipHash64(number) = 7341";
+        using var leaving = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var abandoned = Task.Run(async () =>
+        {
+            await using var connection = new ClickHouseConnection(ch.HttpConnectionString(ClickHouseFixture.QueryUser, ClickHouseFixture.QueryPassword));
+            await connection.OpenAsync(leaving.Token);
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT count() FROM numbers(1000000000000) WHERE {Marker}";
+            return await command.ExecuteScalarAsync(leaving.Token);
+        }, Ct);
+
+        await using var admin = ch.Admin();
+        async Task<ulong> InFlightAsync() => Convert.ToUInt64(
+            await admin.ExecuteScalarAsync($"SELECT count() FROM system.processes WHERE user = 'urlog_query' AND query LIKE '%{Marker}%' AND query NOT LIKE '%system.processes%'", cancellationToken: Ct),
+            CultureInfo.InvariantCulture);
+
+        for (var i = 0; i < 250 && await InFlightAsync() == 0; i++)
+        {
+            await Task.Delay(20, Ct);
+        }
+
+        Assert.Equal(1UL, await InFlightAsync());
+        await Task.Delay(500, Ct); // it is running, not about to finish
+        Assert.Equal(1UL, await InFlightAsync());
+
+        var left = System.Diagnostics.Stopwatch.StartNew();
+        await leaving.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
+        // No ceiling on a measured time: the wait ends when the query is gone, and gives up at a third of
+        // max_execution_time, the moment the query would have ended by itself with the setting off.
+        while (await InFlightAsync() != 0 && left.Elapsed < TimeSpan.FromSeconds(20))
+        {
+            await Task.Delay(50, Ct);
+        }
+
+        output.WriteLine($"gone from system.processes {left.ElapsedMilliseconds} ms after the client left");
+        Assert.Equal(0UL, await InFlightAsync());
     }
 
     [Fact]

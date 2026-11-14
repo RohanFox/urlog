@@ -39,7 +39,11 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
         "OR", "AND", "NOT", "IN", "as", "by", "count", "stats", "sort", "head", "index", "earliest", "latest",
+        "where", "table", "rex", "timechart", "field", "span", "dc", "sum", "avg", "min", "max", "values",
     };
+
+    [GeneratedRegex("[(][?]P?<([A-Za-z_][A-Za-z0-9_]*)>")]
+    private static partial Regex RexGroupName();
 
     [GeneratedRegex("`([^`]*)`")]
     private static partial Regex Backquoted();
@@ -170,6 +174,15 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
     [InlineData("SELECT 'x'", "character")]
     [InlineData("SELECT {p9:String}", "parameter")]
     [InlineData("SELECT 1 AS `c0", "backquote")]
+    [InlineData("SELECT count() AS `c0` FROM events", "FROM events")]
+    [InlineData("SELECT count() AS `c0` FROM events_v WHERE host IN (SELECT host FROM file_generation)", "FROM file_generation")]
+    [InlineData("SELECT count() AS `c0`", "no FROM events_v")]
+    [InlineData("SELECT count() AS `c0` FROM events_v SETTINGS max_threads = 0", "SETTINGS")]
+    [InlineData("SELECT count() AS `c0` FROM events_v AS a JOIN events_v AS b ON a.host = b.host", "JOIN")]
+    [InlineData("SELECT count() AS `c0` FROM events_v WHERE http_status = 404", "literal 404")]
+    [InlineData("SELECT count() AS `c0` FROM events_v LIMIT 10", "literal 10")]
+    [InlineData("SELECT extractGroups(raw, raw)[17] AS `c0` FROM events_v", "literal 17")]
+    [InlineData("SELECT groupUniqArray(100)(host) AS `c0` FROM events_v", "literal 100")]
     public void TheCheckItselfRefusesWhatItShould(string sql, string expected)
     {
         var problem = SqlTextProblem(new TranspileResult(sql, [], [], [], false, 1, Options.RangeFrom, Options.RangeTo));
@@ -210,9 +223,60 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
             }
         }
 
+        var used = Placeholder().Matches(sql).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        if (bound.FirstOrDefault(p => !used.Contains(p)) is { } unused)
+        {
+            return $"parameter {unused} has no placeholder";
+        }
+
         var text = Backquoted().Replace(Placeholder().Replace(sql, "?"), "?");
-        return text.AsSpan().IndexOfAny('{', '}', '`') >= 0 ? "a brace or a backquote outside a parameter and an identifier" : null;
+        if (text.AsSpan().IndexOfAny('{', '}', '`') >= 0)
+        {
+            return "a brace or a backquote outside a parameter and an identifier";
+        }
+
+        // Every read is of the view, and nothing sets a setting, joins, or names an output format.
+        foreach (Match m in AfterFrom().Matches(text))
+        {
+            if (m.Groups[1].Value != "events_v")
+            {
+                return $"FROM {m.Groups[1].Value}: every query reads events_v and nothing else";
+            }
+        }
+
+        if (!text.Contains(" FROM events_v ", StringComparison.Ordinal) && !text.EndsWith(" FROM events_v", StringComparison.Ordinal))
+        {
+            return "no FROM events_v";
+        }
+
+        if (ForbiddenWord().Match(text) is { Success: true } word)
+        {
+            return $"the word {word.Value}: the transpiler never writes it";
+        }
+
+        // A number that stands alone is one of the transpiler's constants: 0 (position(...) > 0, a column whose 0
+        // means absent), the values cap plus one, or the index of a rex group right after extractGroups(...).
+        foreach (Match m in Number().Matches(text))
+        {
+            var isIndex = m.Index >= 2 && text[m.Index - 1] == '[' && text[m.Index - 2] == ')' && m.Index + m.Length < text.Length && text[m.Index + m.Length] == ']'
+                && int.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture) is >= 1 and <= Re2Syntax.MaxGroups;
+            if (m.Value != "0" && m.Value != (Transpiler.ValuesCap + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) && !isIndex)
+            {
+                return $"the literal {m.Value} at {m.Index}: a value must be a parameter";
+            }
+        }
+
+        return null;
     }
+
+    [GeneratedRegex(@"\bFROM (\S+)")]
+    private static partial Regex AfterFrom();
+
+    [GeneratedRegex(@"\b(SETTINGS|SET|JOIN|FORMAT|INTO|UNION|INSERT|ALTER|DROP|events)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ForbiddenWord();
+
+    [GeneratedRegex(@"(?<![A-Za-z0-9_])[0-9]+(?![A-Za-z0-9_])")]
+    private static partial Regex Number();
 
     /// <summary>
     /// The query with every name and value of the analyst's replaced by another of the same shape: letters moved
@@ -222,30 +286,67 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
     /// </summary>
     private static (string Spl, int Replaced) ReplaceNamesAndValues(string spl, TranspileOptions options)
     {
-        // A name can stand in several places (a by field and its sort key, with or without a sign): every
-        // occurrence is replaced together, and the lengths never change, so the offsets hold throughout.
-        var tokens = Lexer.Tokenize(spl).Where(t => t.Kind is TokenKind.Word or TokenKind.Quoted).ToList();
+        // A name can stand in several places (a by field and its sort key, with or without a sign; a rex group
+        // and the where that reads it): every occurrence is replaced together, and the lengths never change, so
+        // the offsets hold throughout. Of a rex pattern only the group names are names; the pattern is a value
+        // whose letters carry meaning to the regex, so it stays.
+        var places = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        void Place(string key, int offset)
+        {
+            if (!places.TryGetValue(key, out var list))
+            {
+                places[key] = list = [];
+            }
+
+            list.Add(offset);
+        }
+
+        foreach (var token in Lexer.Tokenize(spl))
+        {
+            var raw = spl.Substring(token.Span.Offset, token.Span.Length);
+            if (token.Kind == TokenKind.Word)
+            {
+                var bare = raw.TrimStart('-', '+');
+                if (bare.Length > 0)
+                {
+                    Place(bare, token.Span.Offset + raw.Length - bare.Length);
+                }
+            }
+            else if (token.Kind == TokenKind.Quoted)
+            {
+                var groups = RexGroupName().Matches(raw);
+                if (groups.Count == 0)
+                {
+                    Place(raw, token.Span.Offset);
+                }
+
+                foreach (Match m in groups)
+                {
+                    Place(m.Groups[1].Value, token.Span.Offset + m.Groups[1].Index);
+                }
+            }
+        }
+
         var replaced = 0;
         var text = spl;
-        foreach (var group in tokens.GroupBy(t => spl.Substring(t.Span.Offset, t.Span.Length).TrimStart('-', '+'), StringComparer.Ordinal))
+        foreach (var (key, offsets) in places)
         {
-            if (group.Key.Length == 0 || (group.All(t => t.Kind == TokenKind.Word) && IsFixedWord(group.Key)))
+            if (IsFixedWord(key))
             {
                 continue;
             }
 
             for (var shift = 1; shift <= 3; shift++)
             {
-                var other = Shift(group.Key, shift);
-                if (other == group.Key || IsFixedWord(other))
+                var other = Shift(key, shift);
+                if (other == key || IsFixedWord(other) || places.ContainsKey(other))
                 {
                     continue;
                 }
 
                 var candidate = new StringBuilder(text);
-                foreach (var t in group)
+                foreach (var start in offsets)
                 {
-                    var start = t.Span.Offset + t.Span.Length - other.Length;
                     candidate.Remove(start, other.Length).Insert(start, other);
                 }
 
@@ -292,6 +393,14 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
         "\"{6}\" {2}!={3}*",
         "{0} {7} NOT {2}={3} | sort {4}",
         "| stats count as {1}",
+        "| rex field={2} \"(?<{1}>x{6})\" | table {1}, {4} | sort {1}",
+        "| rex field=raw \"(?<grp>\\w+)\" | where grp={3} | stats count as {1} by grp, {2}",
+        "| timechart span=1h count as {1} by {2}",
+        "{0} | timechart dc({2}) by {4} span=1d",
+        "| stats dc({2}) as {1}, values({4}), avg({2}) by {2} | where {1}>{3} | table {2} {1}",
+        "{2}=* | table {2}, {4} | sort {4}",
+        "| stats count by {2} | where {2}={3}* | sort -count",
+        "| where {2}={3} | stats earliest({4}) as {1} by {2} | where {1}={5}",
     ];
 
     /// <summary>Characters no template holds: an accepted input with one of them took it from a fill.</summary>

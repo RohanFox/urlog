@@ -20,6 +20,26 @@ public sealed record QueryParameter(string Name, string Type, string Value);
 /// <summary>A non-fatal note for the UI: <c>unindexed</c>, <c>assumed_timezone</c>, <c>unknown_field</c>.</summary>
 public sealed record QueryWarning(string Code, TextSpan Span, string Message);
 
+/// <summary>What the rows of a result are.</summary>
+public enum ResultKind
+{
+    /// <summary>Events, one per row.</summary>
+    Events,
+
+    /// <summary>One row per group of a <c>stats</c>.</summary>
+    Stats,
+
+    /// <summary>One row per time bucket and series of a <c>timechart</c>, to be pivoted by the reader.</summary>
+    Timechart,
+}
+
+/// <summary>
+/// Where a timechart's columns are. The SQL returns long rows because the series are data, not columns; the
+/// reader pivots. A row whose <see cref="InTop"/> cell is 0 is the rest (every series outside the top ten), and
+/// its series cell is the type's empty value, never a real one.
+/// </summary>
+public sealed record TimechartShape(int Time, int Value, int? InTop, int? Series);
+
 public sealed record TranspileResult(
     string Sql,
     ImmutableArray<QueryParameter> Parameters,
@@ -36,6 +56,17 @@ public sealed record TranspileResult(
     /// takes its headers from here.
     /// </summary>
     public ImmutableArray<string> Columns { get; init; } = [];
+
+    public ResultKind Kind { get; init; }
+
+    /// <summary>
+    /// Columns that hold <c>values(f)</c>. The SQL asks for one value more than the cap
+    /// (<see cref="Transpiler.ValuesCap"/>), so the reader can tell a group that reached it: it trims the cell to
+    /// the cap and marks the row.
+    /// </summary>
+    public ImmutableArray<int> ValuesColumns { get; init; } = [];
+
+    public TimechartShape? Timechart { get; init; }
 }
 
 /// <summary>
@@ -46,6 +77,18 @@ public sealed record TranspileResult(
 /// </summary>
 public sealed class Transpiler
 {
+    /// <summary>The most values <c>values(f)</c> shows for one group.</summary>
+    public const int ValuesCap = 100;
+
+    /// <summary>Series a timechart keeps; the rest is one series.</summary>
+    public const int TopSeries = 10;
+
+    /// <summary>The most buckets a timechart may ask for over its range.</summary>
+    public const int MaxBuckets = 5000;
+
+    /// <summary>The most <c>rex</c> verbs in one query.</summary>
+    public const int MaxRex = 4;
+
     private const string DefaultColumns = "ts, host, program, severity, source_ip, message";
     private static readonly string[] DefaultColumnNames = ["ts", "host", "program", "severity", "source_ip", "message"];
     private static readonly SearchValues<char> Wildcards = SearchValues.Create("*?");
@@ -54,7 +97,12 @@ public sealed class Transpiler
     private readonly List<QueryParameter> _parameters = [];
     private readonly List<QueryWarning> _warnings = [];
     private readonly Dictionary<string, FieldDef> _fields = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Operand> _rex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Operand> _rexOrder = [];
+    private List<Output>? _outputs;
     private int _next;
+    private int _generated;
+    private int _rexCount;
     private TranspileOptions? _current;
 
     public Transpiler(FieldCatalog catalog)
@@ -74,7 +122,12 @@ public sealed class Transpiler
         _parameters.Clear();
         _warnings.Clear();
         _fields.Clear();
+        _rex.Clear();
+        _rexOrder.Clear();
+        _outputs = null;
         _next = 0;
+        _generated = 0;
+        _rexCount = 0;
         _current = options;
 
         var caseId = options.CaseId;
@@ -115,23 +168,109 @@ public sealed class Transpiler
         _parameters.Add(new QueryParameter("from", "DateTime64(3)", Fmt(from)));
         _parameters.Add(new QueryParameter("to", "DateTime64(3)", Fmt(to)));
 
+        var pipeline = Arrange(query.Commands);
         var where = new StringBuilder("case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}");
         if (query.Search is not null && query.Search is not AndNode { Terms.Length: 0 })
         {
             where.Append(" AND (").Append(Expression(query.Search)).Append(')');
         }
 
-        StatsCountNode? stats = null;
+        // rex and where before the aggregation, in the order written: a where sees the groups of the rex before it.
+        foreach (var command in pipeline.Before)
+        {
+            if (command is RexNode rex)
+            {
+                DefineRex(rex);
+            }
+            else
+            {
+                where.Append(" AND (").Append(Expression(((WhereNode)command).Expression)).Append(')');
+            }
+        }
+
+        var built = pipeline.Timechart is not null ? BuildTimechart(pipeline, where, from, to)
+            : pipeline.Stats is not null ? BuildStats(pipeline, where)
+            : BuildListing(pipeline, where);
+        // A column that table left out takes its parameters with it: only what the text names is bound.
+        _parameters.RemoveAll(p => !built.Sql.Contains("{" + p.Name + ":", StringComparison.Ordinal));
+        return new TranspileResult(built.Sql, [.. _parameters], [.. _warnings], [.. _fields.Values], built.Kind != ResultKind.Events, caseId, from, to)
+        {
+            Columns = [.. built.Columns],
+            Kind = built.Kind,
+            ValuesColumns = [.. built.ValuesColumns],
+            Timechart = built.Timechart,
+        };
+    }
+
+    // ---- the pipeline -------------------------------------------------------------------------------------------
+
+    private sealed record Pipeline(
+        List<CommandNode> Before,
+        StatsNode? Stats,
+        TimechartNode? Timechart,
+        List<WhereNode> After,
+        TableNode? Table,
+        SortNode? Sort,
+        HeadNode? Head);
+
+    private sealed record Built(string Sql, ResultKind Kind, List<string> Columns, List<int> ValuesColumns, TimechartShape? Timechart = null);
+
+    /// <summary>
+    /// Which verb may follow which: <c>search, (rex | where)*, [stats | timechart], where*, [table], [sort], [head]</c>,
+    /// with <c>where</c>, <c>table</c> and <c>sort</c> free to trade places where the result is the same. Every refusal
+    /// names both verbs.
+    /// </summary>
+    private static Pipeline Arrange(ImmutableArray<CommandNode> commands)
+    {
+        var before = new List<CommandNode>();
+        var after = new List<WhereNode>();
+        StatsNode? stats = null;
+        TimechartNode? timechart = null;
+        TableNode? table = null;
         SortNode? sort = null;
         HeadNode? head = null;
-        foreach (var command in query.Commands)
+        foreach (var command in commands)
         {
+            if (timechart is not null)
+            {
+                throw new QueryException(command.Span, $"{Verb(command)} after timechart is not supported in v1: timechart is the last verb");
+            }
+
             switch (command)
             {
-                case StatsCountNode s:
+                case RexNode rex:
+                    if (stats is not null || table is not null || head is not null)
+                    {
+                        throw new QueryException(rex.Span, $"rex must come before {(stats is not null ? "stats" : table is not null ? "table" : "head")}");
+                    }
+
+                    before.Add(rex);
+                    break;
+                case WhereNode w:
+                    if (head is not null)
+                    {
+                        throw new QueryException(w.Span, "where must come before head");
+                    }
+
+                    if (stats is not null)
+                    {
+                        after.Add(w);
+                    }
+                    else
+                    {
+                        before.Add(w);
+                    }
+
+                    break;
+                case StatsNode s:
                     if (stats is not null)
                     {
                         throw new QueryException(s.Span, "a second stats is not supported in v1");
+                    }
+
+                    if (table is not null)
+                    {
+                        throw new QueryException(s.Span, "stats must come before table");
                     }
 
                     if (sort is not null || head is not null)
@@ -140,6 +279,27 @@ public sealed class Transpiler
                     }
 
                     stats = s;
+                    break;
+                case TimechartNode t:
+                    if (stats is not null)
+                    {
+                        throw new QueryException(t.Span, "timechart after stats is not supported in v1: use one or the other");
+                    }
+
+                    if (table is not null || sort is not null || head is not null)
+                    {
+                        throw new QueryException(t.Span, $"timechart must come before {(table is not null ? "table" : sort is not null ? "sort" : "head")}");
+                    }
+
+                    timechart = t;
+                    break;
+                case TableNode t:
+                    if (table is not null)
+                    {
+                        throw new QueryException(t.Span, "table given twice");
+                    }
+
+                    table = t;
                     break;
                 case SortNode s:
                     if (head is not null)
@@ -157,98 +317,513 @@ public sealed class Transpiler
             }
         }
 
-        var sql = new StringBuilder();
-        var columns = new List<string>();
-        if (stats is null)
+        return new Pipeline(before, stats, timechart, after, table, sort, head);
+    }
+
+    private static string Verb(CommandNode command) => command switch
+    {
+        RexNode => "rex",
+        WhereNode => "where",
+        StatsNode => "stats",
+        TimechartNode => "timechart",
+        TableNode => "table",
+        SortNode => "sort",
+        _ => "head",
+    };
+
+    // ---- operands -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Something a comparison, a by clause or an aggregate reads: a catalog field, an extras key, a rex group, or
+    /// after an aggregation a column of its result. <see cref="Expression"/> is SQL the transpiler wrote.
+    /// </summary>
+    private sealed record Operand(string Name, string Expression, FieldType Type, FieldDef? Field = null, bool IsRex = false, bool IsArray = false);
+
+    /// <summary>A column of an aggregation's result, which later verbs name by <see cref="Name"/>.</summary>
+    private sealed class Output(string name, string alias, string expression, FieldType type)
+    {
+        public string Name { get; } = name;
+
+        public string Alias { get; } = alias;
+
+        public string Expression { get; } = expression;
+
+        public FieldType Type { get; } = type;
+
+        public bool IsArray { get; init; }
+
+        /// <summary>The canonical name of the by field this column is, so an alias of the field finds it.</summary>
+        public string? ByField { get; init; }
+
+        /// <summary>False for an aggregate written without <c>as</c> (other than a bare count): it has no name to refer to.</summary>
+        public bool CanBeNamed { get; init; } = true;
+
+        public bool IsCount { get; init; }
+
+        public bool Selected { get; set; } = true;
+
+        /// <summary>How HAVING and ORDER BY read the column: by its alias when it is selected, else by its expression.</summary>
+        public string Reference => Selected ? Alias : Expression;
+    }
+
+    /// <summary>Resolves a name where it stands: a result column after an aggregation, else a rex group, else the catalog.</summary>
+    private Operand Resolve(string name, TextSpan span)
+    {
+        if (name.Length == 0 || name.Contains('`') || name.Any(char.IsControl))
         {
+            throw new QueryException(span, $"'{name}' is not a field name");
+        }
+
+        if (_outputs is not null)
+        {
+            var output = FindOutput(name, span);
+            return new Operand(output.Name, output.Reference, output.Type, IsArray: output.IsArray);
+        }
+
+        if (_rex.TryGetValue(name, out var group))
+        {
+            return group;
+        }
+
+        var field = _catalog.Resolve(name);
+        if (field.IsUnknown)
+        {
+            Warn("unknown_field", span, $"'{name}' is not in the catalog: searched as extras['{name}']");
+        }
+
+        _fields.TryAdd(field.Name, field);
+        return new Operand(field.Name, field.Expression(field.Column is null ? Add("String", field.ExtraKey!) : null), field.Type, field);
+    }
+
+    private Output FindOutput(string name, TextSpan span)
+    {
+        var outputs = _outputs!;
+        var byName = outputs.FirstOrDefault(o => o.CanBeNamed && o.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (byName is not null)
+        {
+            return byName;
+        }
+
+        if (_catalog.Contains(name))
+        {
+            var canonical = _catalog.Resolve(name).Name;
+            if (outputs.FirstOrDefault(o => o.ByField == canonical) is { } byField)
+            {
+                return byField;
+            }
+        }
+
+        // A count named with "as" still answers to "count" when nothing else is called that.
+        if (name.Equals("count", StringComparison.OrdinalIgnoreCase) && outputs.FirstOrDefault(o => o.IsCount) is { } count)
+        {
+            return count;
+        }
+
+        var unnamed = outputs.Where(o => !o.CanBeNamed).Select(o => o.Name).ToList();
+        var hint = unnamed.Count == 0 ? "" : $" ({unnamed[0]} has no name: write it as {unnamed[0]} as n)";
+        throw new QueryException(span, $"'{name}' is not a column of the result: {string.Join(", ", outputs.Where(o => o.CanBeNamed).Select(o => o.Name))}{hint}");
+    }
+
+    /// <summary>
+    /// The test for "this row has a value in the field", or null when every row has one. A string is a value
+    /// unless empty, an address unless <c>::</c>, a number unless it is 0 in a column the catalog marks
+    /// (<see cref="FieldDef.ZeroIsAbsent"/>); the columns are not nullable, so a source without the field stores
+    /// exactly those.
+    /// </summary>
+    private string? HasValue(Operand operand) => operand.Type switch
+    {
+        FieldType.Keyword or FieldType.Verbatim or FieldType.Text or FieldType.Extra => $"notEmpty({operand.Expression})",
+        FieldType.Ip => $"{operand.Expression} != toIPv6({{{Add("String", "::")}:String}})",
+        FieldType.Number when operand.Field?.ZeroIsAbsent == true => $"{operand.Expression} != 0",
+        _ => null,
+    };
+
+    private string NextAlias() => Quote(Names.Generated(_generated++));
+
+    // ---- rex ----------------------------------------------------------------------------------------------------
+
+    private void DefineRex(RexNode rex)
+    {
+        if (++_rexCount > MaxRex)
+        {
+            throw new QueryException(rex.Span, $"more than {MaxRex} rex in one query");
+        }
+
+        var source = Resolve(rex.Field, rex.FieldSpan);
+        if (source.Type is not (FieldType.Keyword or FieldType.Verbatim or FieldType.Text or FieldType.Extra))
+        {
+            throw new QueryException(rex.FieldSpan, $"rex reads text: {source.Name} is {Describe(source.Type)}");
+        }
+
+        var pattern = Add("String", rex.Pattern);
+        foreach (var group in rex.Groups)
+        {
+            if (_rex.ContainsKey(group.Name))
+            {
+                throw new QueryException(group.Span, $"the group name '{group.Name}' is used by an earlier rex");
+            }
+
+            if (_fields.Values.Any(f => f.IsUnknown && f.Name.Equals(group.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new QueryException(group.Span, $"'{group.Name}' is read earlier in the query, before this rex defines it: put the rex first");
+            }
+
+            if (_catalog.Contains(group.Name))
+            {
+                throw new QueryException(group.Span, $"'{group.Name}' is a field already ({_catalog.Resolve(group.Name).Name}): give the group another name");
+            }
+
+            var operand = new Operand(
+                group.Name,
+                $"extractGroups({source.Expression}, {{{pattern}:String}})[{group.Index.ToString(CultureInfo.InvariantCulture)}]",
+                FieldType.Verbatim,
+                IsRex: true);
+            _rex.Add(group.Name, operand);
+            _rexOrder.Add(operand);
+        }
+    }
+
+    // ---- event listings -----------------------------------------------------------------------------------------
+
+    private Built BuildListing(Pipeline pipeline, StringBuilder where)
+    {
+        var columns = new List<string>();
+        var sql = new StringBuilder("SELECT ");
+        if (pipeline.Table is null)
+        {
+            sql.Append(DefaultColumns);
             columns.AddRange(DefaultColumnNames);
-            sql.Append("SELECT ").Append(DefaultColumns).Append(" FROM events_v WHERE ").Append(where);
-            sql.Append(" ORDER BY ");
-            if (sort is null)
+            foreach (var group in _rexOrder)
             {
-                sql.Append("ts DESC");
+                sql.Append(", ").Append(group.Expression).Append(" AS ").Append(NextAlias());
+                columns.Add(group.Name);
             }
-            else
-            {
-                var keys = new List<string>();
-                foreach (var (name, descending, span) in sort.Keys)
-                {
-                    var field = Resolve(name, span);
-                    keys.Add(field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null) + (descending ? " DESC" : " ASC"));
-                }
-
-                sql.Append(string.Join(", ", keys));
-            }
-
-            _parameters.Add(new QueryParameter("limit", "UInt64", (head?.Count ?? Parser.DefaultHead).ToString(CultureInfo.InvariantCulture)));
-            sql.Append(" LIMIT {limit:UInt64}");
         }
         else
         {
-            // An output column is named in the SQL by a catalog field name or by a generated alias, never by text
-            // from the query: the analyst's names (an alias, a field the catalog does not list) label the result
-            // beside it, in Columns.
-            var generated = 0;
-            var groups = new List<(string Name, string Alias, string Expression)>();
-            foreach (var (name, span) in stats.By)
+            var items = new List<string>();
+            foreach (var (name, span) in pipeline.Table.Fields)
             {
-                var field = Resolve(name, span);
-                var alias = field.IsUnknown ? Names.Generated(generated++) : field.Name;
-                groups.Add((field.Name, Quote(alias), field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null)));
-                columns.Add(field.Name);
-            }
-
-            var countAlias = Quote(Names.Generated(generated));
-            columns.Add(stats.Alias);
-            sql.Append("SELECT ");
-            foreach (var (_, alias, expression) in groups)
-            {
-                sql.Append(expression).Append(" AS ").Append(alias).Append(", ");
-            }
-
-            sql.Append("count() AS ").Append(countAlias).Append(" FROM events_v WHERE ").Append(where);
-            if (groups.Count > 0)
-            {
-                sql.Append(" GROUP BY ").Append(string.Join(", ", groups.Select(g => g.Expression)));
-            }
-
-            if (sort is not null)
-            {
-                var keys = new List<string>();
-                foreach (var (name, descending, span) in sort.Keys)
+                var operand = Resolve(name, span);
+                if (columns.Contains(operand.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    string alias;
-                    if (name.Equals(stats.Alias, StringComparison.OrdinalIgnoreCase) || name.Equals("count", StringComparison.OrdinalIgnoreCase))
-                    {
-                        alias = countAlias;
-                    }
-                    else
-                    {
-                        var field = Resolve(name, span);
-                        var match = groups.FindIndex(g => g.Name == field.Name);
-                        if (match < 0)
-                        {
-                            throw new QueryException(span, $"sort after stats: '{name}' is neither {stats.Alias} nor a by field");
-                        }
-
-                        alias = groups[match].Alias;
-                    }
-
-                    keys.Add(alias + (descending ? " DESC" : " ASC"));
+                    throw new QueryException(span, $"table: {operand.Name} is listed twice");
                 }
 
-                sql.Append(" ORDER BY ").Append(string.Join(", ", keys));
+                // A catalog field keeps its name; anything the analyst named gets a generated alias.
+                var alias = operand.Field is { IsUnknown: false } ? Quote(operand.Name) : NextAlias();
+                items.Add($"{operand.Expression} AS {alias}");
+                columns.Add(operand.Name);
             }
 
-            if (head is not null)
+            sql.Append(string.Join(", ", items));
+        }
+
+        sql.Append(" FROM events_v WHERE ").Append(where).Append(" ORDER BY ");
+        if (pipeline.Sort is null)
+        {
+            sql.Append("ts DESC");
+        }
+        else
+        {
+            sql.Append(string.Join(", ", pipeline.Sort.Keys.Select(k => Resolve(k.Field, k.Span).Expression + (k.Descending ? " DESC" : " ASC"))));
+        }
+
+        _parameters.Add(new QueryParameter("limit", "UInt64", (pipeline.Head?.Count ?? Parser.DefaultHead).ToString(CultureInfo.InvariantCulture)));
+        sql.Append(" LIMIT {limit:UInt64}");
+        return new Built(sql.ToString(), ResultKind.Events, columns, []);
+    }
+
+    // ---- stats --------------------------------------------------------------------------------------------------
+
+    private Built BuildStats(Pipeline pipeline, StringBuilder where)
+    {
+        var stats = pipeline.Stats!;
+        var outputs = new List<Output>();
+        var groupBy = new List<string>();
+
+        // Generated aliases are handed out to the by fields first, then to the aggregates, in the order written.
+        var byOperands = stats.By.Select(b => (Operand: Resolve(b.Field, b.Span), b.Span)).ToList();
+        foreach (var (operand, span) in byOperands)
+        {
+            if (outputs.Any(o => o.Name.Equals(operand.Name, StringComparison.OrdinalIgnoreCase)))
             {
-                _parameters.Add(new QueryParameter("limit", "UInt64", head.Count.ToString(CultureInfo.InvariantCulture)));
-                sql.Append(" LIMIT {limit:UInt64}");
+                throw new QueryException(span, $"stats: {operand.Name} is listed twice after by");
+            }
+
+            // A row without a value in a by field belongs to no group.
+            if (HasValue(operand) is { } has)
+            {
+                where.Append(" AND ").Append(has);
+            }
+
+            var alias = operand.Field is { IsUnknown: false } ? Quote(operand.Name) : NextAlias();
+            outputs.Add(new Output(operand.Name, alias, operand.Expression, ResultType(operand.Type)) { ByField = operand.Field?.Name });
+            groupBy.Add(operand.Expression);
+        }
+
+        foreach (var call in stats.Aggregates)
+        {
+            var (expression, type, isArray) = Aggregate(call, "stats");
+            if (call.Alias is not null && _catalog.Contains(call.Alias))
+            {
+                throw new QueryException(call.Span, $"'{call.Alias}' is a field ({_catalog.Resolve(call.Alias).Name}): give the aggregate another name");
+            }
+
+            if (outputs.Any(o => o.Name.Equals(call.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new QueryException(call.Span, $"stats: two columns would be called {call.Name}: name one of them with as");
+            }
+
+            outputs.Add(new Output(call.Name, NextAlias(), expression, type)
+            {
+                IsArray = isArray,
+                CanBeNamed = call.CanBeNamed,
+                IsCount = call.Function == AggregateFunction.Count,
+            });
+        }
+
+        // From here on a name is a column of the result.
+        _outputs = outputs;
+        var selected = outputs;
+        if (pipeline.Table is not null)
+        {
+            selected = [];
+            foreach (var (name, span) in pipeline.Table.Fields)
+            {
+                var output = FindOutput(name, span);
+                if (selected.Contains(output))
+                {
+                    throw new QueryException(span, $"table: {output.Name} is listed twice");
+                }
+
+                selected.Add(output);
+            }
+
+            foreach (var output in outputs)
+            {
+                output.Selected = selected.Contains(output);
             }
         }
 
-        return new TranspileResult(sql.ToString(), [.. _parameters], [.. _warnings], [.. _fields.Values], stats is not null, caseId, from, to) { Columns = [.. columns] };
+        var sql = new StringBuilder("SELECT ");
+        sql.Append(string.Join(", ", selected.Select(o => $"{o.Expression} AS {o.Alias}")));
+        var having = pipeline.After.Select(w => "(" + Expression(w.Expression) + ")").ToList();
+        sql.Append(" FROM events_v WHERE ").Append(where);
+        if (groupBy.Count > 0)
+        {
+            sql.Append(" GROUP BY ").Append(string.Join(", ", groupBy));
+        }
+
+        if (having.Count > 0)
+        {
+            sql.Append(" HAVING ").Append(string.Join(" AND ", having));
+        }
+
+        if (pipeline.Sort is not null)
+        {
+            sql.Append(" ORDER BY ").Append(string.Join(", ", pipeline.Sort.Keys.Select(k => FindOutput(k.Field, k.Span).Reference + (k.Descending ? " DESC" : " ASC"))));
+        }
+
+        if (pipeline.Head is not null)
+        {
+            _parameters.Add(new QueryParameter("limit", "UInt64", pipeline.Head.Count.ToString(CultureInfo.InvariantCulture)));
+            sql.Append(" LIMIT {limit:UInt64}");
+        }
+
+        var values = Enumerable.Range(0, selected.Count).Where(i => selected[i].IsArray).ToList();
+        return new Built(sql.ToString(), ResultKind.Stats, [.. selected.Select(o => o.Name)], values);
     }
+
+    /// <summary>The SQL of one aggregate and the type of its result. An aggregate over a field reads only the rows that have a value in it.</summary>
+    private (string Expression, FieldType Type, bool IsArray) Aggregate(AggregateCall call, string verb)
+    {
+        if (call.Function == AggregateFunction.Count)
+        {
+            return ("count()", FieldType.Number, false);
+        }
+
+        var fn = AggregateCall.FunctionName(call.Function);
+        var operand = Resolve(call.Field!, call.FieldSpan);
+        var e = operand.Expression;
+        var has = HasValue(operand);
+        var stringLike = operand.Type is FieldType.Extra || operand.IsRex;
+        string If(string function, string arguments) => has is null ? $"{function}({arguments})" : $"{function}If({arguments}, {has})";
+        string Numeric(string function)
+        {
+            // An extras value and a rex group are text: read as a number where they are one, skipped where not.
+            Warn("unindexed", call.FieldSpan, $"{fn}({operand.Name}) reads {operand.Name} as a number; values that are not numbers are skipped");
+            return $"{function}(toFloat64OrNull({e}))";
+        }
+
+        switch (call.Function)
+        {
+            case AggregateFunction.Dc:
+                return (If("uniqExact", e), FieldType.Number, false);
+            case AggregateFunction.Values:
+                return (has is null
+                    ? $"groupUniqArray({ValuesRequested})({e})"
+                    : $"groupUniqArrayIf({ValuesRequested})({e}, {has})", ResultType(operand.Type), true);
+            case AggregateFunction.Earliest or AggregateFunction.Latest:
+            {
+                var earliest = call.Function == AggregateFunction.Earliest;
+                return operand.Type == FieldType.Time
+                    ? ($"{(earliest ? "min" : "max")}({e})", FieldType.Time, false)
+                    : (If(earliest ? "argMin" : "argMax", $"{e}, ts"), ResultType(operand.Type), false);
+            }
+
+            case AggregateFunction.Sum when operand.Type == FieldType.Number:
+                return ($"sum({e})", FieldType.Number, false);
+            case AggregateFunction.Avg when operand.Type == FieldType.Number:
+                return (If("avg", e), FieldType.Real, false);
+            case AggregateFunction.Min or AggregateFunction.Max when operand.Type == FieldType.Number:
+                return (If(fn, e), FieldType.Number, false);
+            case AggregateFunction.Min or AggregateFunction.Max when operand.Type == FieldType.Time:
+                return ($"{fn}({e})", FieldType.Time, false);
+            case AggregateFunction.Sum or AggregateFunction.Avg or AggregateFunction.Min or AggregateFunction.Max when stringLike:
+                return (Numeric(fn), FieldType.Real, false);
+            default:
+                throw new QueryException(call.Span, $"{verb}: {fn}({operand.Name}) needs a number: {operand.Name} is {Describe(operand.Type)}");
+        }
+    }
+
+    private const int ValuesRequested = ValuesCap + 1;
+
+    /// <summary>How a result column compares: an extras value and a text column are plain strings there.</summary>
+    private static FieldType ResultType(FieldType type) => type is FieldType.Extra or FieldType.Text ? FieldType.Verbatim : type;
+
+    private static string Describe(FieldType type) => type switch
+    {
+        FieldType.Number or FieldType.Real => "a number",
+        FieldType.Ip => "an address",
+        FieldType.Time => "a time",
+        _ => "text",
+    };
+
+    // ---- timechart ----------------------------------------------------------------------------------------------
+
+    private Built BuildTimechart(Pipeline pipeline, StringBuilder where, DateTimeOffset from, DateTimeOffset to)
+    {
+        var chart = pipeline.Timechart!;
+        if (chart.Aggregate.Function is AggregateFunction.Values or AggregateFunction.Earliest or AggregateFunction.Latest)
+        {
+            var name = AggregateCall.FunctionName(chart.Aggregate.Function);
+            throw new QueryException(chart.Aggregate.Span, $"timechart: {name}(...) is not a number to chart: use count, dc, sum, avg, min or max");
+        }
+
+        var bucket = Bucket(chart, from, to);
+        var (aggregate, type, _) = Aggregate(chart.Aggregate, "timechart");
+        if (type == FieldType.Time)
+        {
+            throw new QueryException(chart.Aggregate.Span, "timechart: a time is not a number to chart");
+        }
+
+        if (chart.By is not { } by)
+        {
+            var value = NextAlias();
+            return new Built(
+                $"SELECT {bucket} AS `_time`, {aggregate} AS {value} FROM events_v WHERE {where} GROUP BY `_time` ORDER BY `_time` ASC",
+                ResultKind.Timechart,
+                ["_time", chart.Aggregate.Name],
+                [],
+                new TimechartShape(0, 1, null, null));
+        }
+
+        var series = Resolve(by.Field, by.Span);
+        if (HasValue(series) is { } has)
+        {
+            where.Append(" AND ").Append(has);
+        }
+
+        // The ten series with the largest aggregate over the whole range keep their rows; every other series is
+        // folded into one, whose key is the type's empty value and whose flag is 0. The aliases are generated: a
+        // field's own name here would shadow its column in WHERE.
+        _parameters.Add(new QueryParameter("top", "UInt64", TopSeries.ToString(CultureInfo.InvariantCulture)));
+        var inTop = NextAlias();
+        var seriesAlias = NextAlias();
+        var valueAlias = NextAlias();
+        var sql = $"WITH top AS (SELECT {series.Expression} AS s FROM events_v WHERE {where} GROUP BY s ORDER BY {aggregate} DESC, s ASC LIMIT {{top:UInt64}}) "
+            + $"SELECT {bucket} AS `_time`, {series.Expression} IN top AS {inTop}, if({inTop}, {series.Expression}, defaultValueOfArgumentType({series.Expression})) AS {seriesAlias}, {aggregate} AS {valueAlias} "
+            + $"FROM events_v WHERE {where} GROUP BY `_time`, {inTop}, {seriesAlias} ORDER BY `_time` ASC, {inTop} DESC, {seriesAlias} ASC";
+        return new Built(sql, ResultKind.Timechart, ["_time", "in_top", series.Name, chart.Aggregate.Name], [], new TimechartShape(0, 3, 1, 2));
+    }
+
+    /// <summary>
+    /// The start of the bucket a row falls in, as a UTC instant. Under a day the buckets are cut in UTC from the
+    /// epoch. A day or more is cut on the display zone's calendar: a day there is 23 or 25 hours long when the
+    /// clocks change, and starts at the first instant that exists after local midnight.
+    /// </summary>
+    private string Bucket(TimechartNode chart, DateTimeOffset from, DateTimeOffset to)
+    {
+        var seconds = chart.SpanCount * (long)(chart.SpanUnit switch { 's' => 1, 'm' => 60, 'h' => 3600, 'd' => 86_400, _ => 604_800 });
+        var buckets = ((long)(to - from).TotalSeconds + seconds - 1) / seconds;
+        if (buckets > MaxBuckets)
+        {
+            throw new QueryException(chart.SpanSpan, $"timechart: this span cuts the range into {buckets:N0} buckets, more than {MaxBuckets:N0}: use a longer span or a shorter range");
+        }
+
+        _parameters.Add(new QueryParameter("span", "UInt32", chart.SpanCount.ToString(CultureInfo.InvariantCulture)));
+        const string Span = "{span:UInt32}";
+        switch (chart.SpanUnit)
+        {
+            case 's':
+                return $"toStartOfInterval(ts, toIntervalSecond({Span}))";
+            case 'm':
+                return $"toStartOfInterval(ts, toIntervalMinute({Span}))";
+            case 'h':
+                return $"toStartOfInterval(ts, toIntervalHour({Span}))";
+        }
+
+        var zone = _current!.DisplayZone;
+        var week = chart.SpanUnit == 'w';
+        var interval = week ? $"toIntervalWeek({Span})" : $"toIntervalDay({Span})";
+        _parameters.Add(new QueryParameter("utc", "String", "UTC"));
+        if (FixedOffset(zone) is { } offset)
+        {
+            // The server loads IANA zones only: an offset is applied by hand around the cut.
+            _parameters.Add(new QueryParameter("shift", "Int64", ((long)offset.TotalSeconds).ToString(CultureInfo.InvariantCulture)));
+            var shifted = $"toStartOfInterval(addSeconds(ts, {{shift:Int64}}), {interval}, {{utc:String}})";
+            return $"subtractSeconds({(week ? $"toDateTime({shifted}, {{utc:String}})" : shifted)}, {{shift:Int64}})";
+        }
+
+        if ((zone.Equals(TimeZoneInfo.Utc) ? "UTC" : IanaId(zone)) is not { } iana)
+        {
+            throw new QueryException(chart.SpanSpan, $"timechart: a span of a day or more is cut in the display timezone, and '{zone.Id}' is neither an IANA zone (Europe/Bucharest) nor an offset (+02:00)");
+        }
+
+        _parameters.Add(new QueryParameter("tz", "String", iana));
+        var local = $"toStartOfInterval(ts, {interval}, {{tz:String}})";
+        return $"toTimeZone({(week ? $"toDateTime({local}, {{tz:String}})" : local)}, {{utc:String}})";
+    }
+
+    /// <summary>The offset of a zone <see cref="TimeZones.Find"/> built from one (<c>+02:00</c>); null for UTC and for a real zone.</summary>
+    private static TimeSpan? FixedOffset(TimeZoneInfo zone) =>
+        !zone.Equals(TimeZoneInfo.Utc) && !zone.SupportsDaylightSavingTime && zone.Id.StartsWith("UTC", StringComparison.Ordinal) && zone.GetAdjustmentRules().Length == 0 && zone.BaseUtcOffset != TimeSpan.Zero
+            ? zone.BaseUtcOffset
+            : null;
+
+    /// <summary>
+    /// The zone's IANA id, which is what the server loads. A runtime without the zone database cannot say whether
+    /// an id is one, so an id of the IANA form (Area/Location) is passed on and the server decides.
+    /// </summary>
+    private static string? IanaId(TimeZoneInfo zone)
+    {
+        if (zone.HasIanaId)
+        {
+            return zone.Id;
+        }
+
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana))
+        {
+            return iana;
+        }
+
+        var id = zone.Id;
+        var slash = id.IndexOf('/', StringComparison.Ordinal);
+        return slash > 0 && slash < id.Length - 1 && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '/' or '_' or '-' or '+') ? id : null;
+    }
+
+    // ---- the filter grammar -------------------------------------------------------------------------------------
 
     private string Expression(SearchNode node)
     {
@@ -279,6 +854,24 @@ public sealed class Transpiler
         var value = c.Value;
         var hasWildcard = !c.Quoted && value.AsSpan().ContainsAny(Wildcards);
         var ordering = c.Op is CompareOp.Lt or CompareOp.Gt or CompareOp.Le or CompareOp.Ge;
+        if (field.IsArray)
+        {
+            if (ordering || hasWildcard)
+            {
+                throw new QueryException(c.Span, $"{field.Name} is a list of values: use = or != with one exact value");
+            }
+
+            var contains = $"has({field.Expression}, {Element(field, value, c.ValueSpan)})";
+            return c.Op == CompareOp.Ne ? "NOT " + contains : contains;
+        }
+
+        // field=* asks whether the row has a value in the field at all, whatever its type.
+        if (!c.Quoted && value == "*" && !ordering)
+        {
+            var has = HasValue(field) ?? $"isNotNull({field.Expression})";
+            return c.Op == CompareOp.Ne ? $"NOT ({has})" : has;
+        }
+
         switch (field.Type)
         {
             case FieldType.Number:
@@ -290,16 +883,19 @@ public sealed class Transpiler
                         throw new QueryException(c.ValueSpan, $"{field.Name} expects an unsigned integer, got '{value}'");
                     }
 
-                    return $"{field.Column} {Sql(c.Op)} {{{Add("UInt64", value)}:UInt64}}";
+                    return $"{field.Expression} {Sql(c.Op)} {{{Add("UInt64", value)}:UInt64}}";
                 }
 
                 throw new QueryException(c.ValueSpan, $"{field.Name} is numeric: wildcards do not apply");
             }
 
+            case FieldType.Real:
+                return $"{field.Expression} {Sql(c.Op)} {{{Add("Float64", Float(field, value, c.ValueSpan))}:Float64}}";
+
             case FieldType.Time:
             {
                 var instant = ParseTimeValue(value, c.ValueSpan);
-                return $"{field.Column} {Sql(c.Op)} {{{Add("DateTime64(3)", Fmt(instant))}:DateTime64(3)}}";
+                return $"{field.Expression} {Sql(c.Op)} {{{Add("DateTime64(3)", Fmt(instant))}:DateTime64(3)}}";
             }
 
             case FieldType.Ip:
@@ -312,7 +908,7 @@ public sealed class Transpiler
                 if (value.Contains('/'))
                 {
                     var cidr = Cidr(value, c.ValueSpan);
-                    var test = $"isIPAddressInRange(IPv6NumToString({field.Column}), {{{Add("String", cidr)}:String}})";
+                    var test = $"isIPAddressInRange(IPv6NumToString({field.Expression}), {{{Add("String", cidr)}:String}})";
                     return c.Op == CompareOp.Ne ? "NOT " + test : test;
                 }
 
@@ -326,7 +922,7 @@ public sealed class Transpiler
                     throw new QueryException(c.ValueSpan, $"'{value}' is not an IP address");
                 }
 
-                return $"{field.Column} {Sql(c.Op)} toIPv6({{{Add("String", value)}:String}})";
+                return $"{field.Expression} {Sql(c.Op)} toIPv6({{{Add("String", value)}:String}})";
             }
 
             case FieldType.Keyword:
@@ -339,11 +935,15 @@ public sealed class Transpiler
                     throw new QueryException(c.Span, $"{field.Name} is a string: <, >, <= and >= need a numeric or time field");
                 }
 
-                var column = field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null);
+                var column = field.Expression;
                 var text = field.Type == FieldType.Keyword ? AsciiLower(value) : value;
                 if (field.Type is FieldType.Text or FieldType.Extra)
                 {
                     Warn("unindexed", c.Span, field.Type == FieldType.Text ? $"{field.Name}= compares the whole field; a bare term uses the index" : $"{field.Name} lives in extras: compared without an index");
+                }
+                else if (field.IsRex)
+                {
+                    Warn("unindexed", c.Span, $"{field.Name} is extracted by rex for every row the search leaves: compared without an index");
                 }
 
                 if (!hasWildcard)
@@ -354,7 +954,7 @@ public sealed class Transpiler
                 var pattern = LikePattern(text);
                 var prefixOnly = text.IndexOfAny(['*', '?']) == text.Length - 1 && text[^1] == '*' && text.Length > 1;
                 var like = field.Type is FieldType.Verbatim or FieldType.Text or FieldType.Extra && !prefixOnly ? "ILIKE" : "LIKE";
-                if (!prefixOnly && field.Type is FieldType.Keyword or FieldType.Verbatim)
+                if (!prefixOnly && field.Type is FieldType.Keyword or FieldType.Verbatim && !field.IsRex && _outputs is null)
                 {
                     Warn("unindexed", c.Span, $"a leading wildcard on {field.Name} scans every row");
                 }
@@ -368,9 +968,50 @@ public sealed class Transpiler
         }
     }
 
+    private static string Float(Operand field, string value, TextSpan span)
+    {
+        if (!double.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number) || !double.IsFinite(number))
+        {
+            throw new QueryException(span, $"{field.Name} expects a number, got '{value}'");
+        }
+
+        return number.ToString("R", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>One value as an element of a <c>values(f)</c> list of the field's type.</summary>
+    private string Element(Operand field, string value, TextSpan span)
+    {
+        switch (field.Type)
+        {
+            case FieldType.Number:
+                if (!ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+                {
+                    throw new QueryException(span, $"{field.Name} expects an unsigned integer, got '{value}'");
+                }
+
+                return $"{{{Add("UInt64", value)}:UInt64}}";
+            case FieldType.Time:
+                return $"{{{Add("DateTime64(3)", Fmt(ParseTimeValue(value, span)))}:DateTime64(3)}}";
+            case FieldType.Ip:
+                if (value.Contains('/') || !IPAddress.TryParse(value, out _))
+                {
+                    throw new QueryException(span, $"'{value}' is not an IP address");
+                }
+
+                return $"toIPv6({{{Add("String", value)}:String}})";
+            default:
+                return $"{{{Add("String", field.Type == FieldType.Keyword ? AsciiLower(value) : value)}:String}}";
+        }
+    }
+
     private string In(InNode node)
     {
         var field = Resolve(node.Field, node.FieldSpan);
+        if (field.IsArray)
+        {
+            throw new QueryException(node.Span, $"{field.Name} is a list of values: use = with one exact value");
+        }
+
         var items = new List<string>();
         foreach (var (value, quoted, span) in node.Values)
         {
@@ -389,6 +1030,9 @@ public sealed class Transpiler
 
                     items.Add($"{{{Add("UInt64", value)}:UInt64}}");
                     break;
+                case FieldType.Real:
+                    items.Add($"{{{Add("Float64", Float(field, value, span))}:Float64}}");
+                    break;
                 case FieldType.Time:
                     items.Add($"{{{Add("DateTime64(3)", Fmt(ParseTimeValue(value, span)))}:DateTime64(3)}}");
                     break;
@@ -406,18 +1050,22 @@ public sealed class Transpiler
             }
         }
 
-        if (field.Type is FieldType.Text or FieldType.Extra)
+        if (field.Type is FieldType.Text or FieldType.Extra || field.IsRex)
         {
             Warn("unindexed", node.Span, $"{field.Name} IN (...) is compared without an index");
         }
 
-        var column = field.Expression(field.Column is null ? KeyParameter(field.ExtraKey!) : null);
-        return $"{column} IN ({string.Join(", ", items)})";
+        return $"{field.Expression} IN ({string.Join(", ", items)})";
     }
 
     /// <summary>A bare term or a quoted phrase against <c>message</c>: tokens through the text index, the exact text confirmed by <c>position</c> when the term is more than one token.</summary>
     private string Term(string text, TextSpan span, bool isPhrase)
     {
+        if (_outputs is not null)
+        {
+            throw new QueryException(span, "after stats, where compares the columns of the result (count>10, host=web-01): a search term has no event to search, so put it before stats");
+        }
+
         var lower = AsciiLower(text);
         if (!isPhrase && lower.AsSpan().ContainsAny(Wildcards))
         {
@@ -459,6 +1107,7 @@ public sealed class Transpiler
     /// <summary>The tokens the <c>splitByNonAlpha</c> tokenizer would cut: runs of characters that are not ASCII punctuation or whitespace.</summary>
     public static List<string> Tokens(string text)
     {
+        ArgumentNullException.ThrowIfNull(text);
         var tokens = new List<string>();
         var start = -1;
         for (var i = 0; i <= text.Length; i++)
@@ -554,25 +1203,6 @@ public sealed class Transpiler
     }
 
     private DateTimeOffset ParseTimeValue(string text, TextSpan span) => ParseTime(text, span, _current ?? throw new InvalidOperationException("Transpile sets the options"));
-
-    private FieldDef Resolve(string name, TextSpan span)
-    {
-        if (name.Length == 0 || name.Contains('`') || name.Any(char.IsControl))
-        {
-            throw new QueryException(span, $"'{name}' is not a field name");
-        }
-
-        var field = _catalog.Resolve(name);
-        if (field.IsUnknown)
-        {
-            Warn("unknown_field", span, $"'{name}' is not in the catalog: searched as extras['{name}']");
-        }
-
-        _fields.TryAdd(field.Name, field);
-        return field;
-    }
-
-    private string KeyParameter(string key) => Add("String", key);
 
     private string Add(string type, string value)
     {

@@ -49,8 +49,62 @@ public sealed record PhraseNode(string Text, TextSpan Span) : SearchNode(Span);
 /// <summary>Pipeline commands (verbs) after the search.</summary>
 public abstract record CommandNode(TextSpan Span);
 
-/// <summary><c>stats count [as alias] [by f1, f2, ...]</c>: the only stats form in this slice.</summary>
-public sealed record StatsCountNode(string Alias, ImmutableArray<(string Field, TextSpan Span)> By, TextSpan Span) : CommandNode(Span);
+public enum AggregateFunction
+{
+    Count,
+    Dc,
+    Sum,
+    Avg,
+    Min,
+    Max,
+    Values,
+    Earliest,
+    Latest,
+}
+
+/// <summary>
+/// One aggregate of <c>stats</c> or <c>timechart</c>: <c>count</c>, or <c>fn(field)</c>, with the name after
+/// <c>as</c> when there is one. <see cref="Name"/> is the result column's header: the alias, <c>count</c>, or the
+/// call as written (<c>dc(user.name)</c>), which later verbs cannot refer to.
+/// </summary>
+public sealed record AggregateCall(AggregateFunction Function, string? Field, TextSpan FieldSpan, string? Alias, TextSpan Span)
+{
+    public string Name => Alias ?? (Function == AggregateFunction.Count ? "count" : $"{FunctionName(Function)}({Field})");
+
+    /// <summary>True when a later <c>where</c>, <c>sort</c> or <c>table</c> can name this aggregate.</summary>
+    public bool CanBeNamed => Alias is not null || Function == AggregateFunction.Count;
+
+    public static string FunctionName(AggregateFunction function) => function switch
+    {
+        AggregateFunction.Count => "count",
+        AggregateFunction.Dc => "dc",
+        AggregateFunction.Sum => "sum",
+        AggregateFunction.Avg => "avg",
+        AggregateFunction.Min => "min",
+        AggregateFunction.Max => "max",
+        AggregateFunction.Values => "values",
+        AggregateFunction.Earliest => "earliest",
+        _ => "latest",
+    };
+}
+
+/// <summary><c>stats agg [as a], ... [by f1, f2, ...]</c>.</summary>
+public sealed record StatsNode(ImmutableArray<AggregateCall> Aggregates, ImmutableArray<(string Field, TextSpan Span)> By, TextSpan Span) : CommandNode(Span);
+
+/// <summary><c>where expr</c>: the filter grammar; after an aggregate it compares the result's columns.</summary>
+public sealed record WhereNode(SearchNode Expression, TextSpan Span) : CommandNode(Span);
+
+/// <summary><c>table f1 f2 ...</c>: the columns of the result, in this order.</summary>
+public sealed record TableNode(ImmutableArray<(string Field, TextSpan Span)> Fields, TextSpan Span) : CommandNode(Span);
+
+/// <summary>A named group of a <c>rex</c> pattern: its name, its capture index (from 1) and where the name stands in the query.</summary>
+public sealed record RexGroup(string Name, int Index, TextSpan Span);
+
+/// <summary><c>rex field=f "pattern"</c>: each named group is a column for the rest of the query.</summary>
+public sealed record RexNode(string Field, TextSpan FieldSpan, string Pattern, TextSpan PatternSpan, ImmutableArray<RexGroup> Groups, TextSpan Span) : CommandNode(Span);
+
+/// <summary><c>timechart span=N(s|m|h|d|w) agg [by f]</c>, the span before the aggregate or after the by clause.</summary>
+public sealed record TimechartNode(int SpanCount, char SpanUnit, TextSpan SpanSpan, AggregateCall Aggregate, (string Field, TextSpan Span)? By, TextSpan Span) : CommandNode(Span);
 
 public sealed record SortNode(ImmutableArray<(string Field, bool Descending, TextSpan Span)> Keys, TextSpan Span) : CommandNode(Span);
 

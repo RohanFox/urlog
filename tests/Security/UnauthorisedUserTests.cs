@@ -22,6 +22,16 @@ public sealed class UnauthorisedUserTests(ClickHouseFixture ch, ITestOutputHelpe
         { "program=nginx | head 5", 5 },
         { "GET | stats count", ClickHouseFixture.RowsPerCase },
         { "host=web-02 earliest=2026-02-01T00:00:00Z latest=2026-02-02T00:00:00Z", 50 },
+
+        // One query per verb after the first slice; an aggregate's count is its last column.
+        { "| where host=web-01 | stats count", ClickHouseFixture.RowsPerCase / 2 },
+        { "| stats dc(host) as hosts, values(host) as names, count", ClickHouseFixture.RowsPerCase },
+        { "| stats count by host | where count>1", ClickHouseFixture.RowsPerCase },
+        { "| table host, raw | head 7", 7 },
+        { "| rex field=raw \"^(?<verb>[A-Z]+)\" | stats count by verb", ClickHouseFixture.RowsPerCase },
+        { "| rex field=raw \"^(?<verb>[A-Z]+)\" | where verb=GET | head 9", 9 },
+        { "| timechart span=1d count", ClickHouseFixture.RowsPerCase },
+        { "| timechart span=1d count by host", ClickHouseFixture.RowsPerCase },
     };
 
     [Theory]

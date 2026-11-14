@@ -1,0 +1,548 @@
+[
+  {
+    "name": "stats-every-numeric-aggregate",
+    "spl": "program=sshd | stats count, dc(user) as users, sum(bytes) as total, avg(bytes) as mean, min(status) as lo, max(status) as hi by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0`, uniqExactIf(user_name, notEmpty(user_name)) AS `c1`, sum(http_response_body_bytes) AS `c2`, avg(http_response_body_bytes) AS `c3`, minIf(http_status, http_status != 0) AS `c4`, maxIf(http_status, http_status != 0) AS `c5` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (program = {p0:String}) AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:sshd"
+      },
+      "warnings": [],
+      "fields": [
+        "program",
+        "host.name",
+        "user.name",
+        "http.response.body.bytes",
+        "http.response.status_code"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count",
+        "users",
+        "total",
+        "mean",
+        "lo",
+        "hi"
+      ]
+    }
+  },
+  {
+    "name": "stats-values-asks-for-one-more-than-the-cap",
+    "spl": "| stats values(src_ip) as ips by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(source_ip, source_ip != toIPv6({p0:String})) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "ips"
+      ]
+    }
+  },
+  {
+    "name": "stats-values-of-a-field-that-always-has-a-value",
+    "spl": "| stats values(bytes) as sizes by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, groupUniqArray(101)(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "sizes"
+      ]
+    }
+  },
+  {
+    "name": "stats-earliest-latest",
+    "spl": "| stats earliest(_time) as first, latest(_time) as last, latest(raw) as sample by src_ip",
+    "expect": {
+      "sql": "SELECT source_ip AS `source.ip`, min(ts) AS `c0`, max(ts) AS `c1`, argMaxIf(raw, ts, notEmpty(raw)) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip",
+        "_time",
+        "raw"
+      ],
+      "aggregate": true,
+      "columns": [
+        "source.ip",
+        "first",
+        "last",
+        "sample"
+      ]
+    }
+  },
+  {
+    "name": "stats-earliest-of-a-field",
+    "spl": "| stats earliest(user) by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, argMinIf(user_name, ts, notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "earliest(user)"
+      ]
+    }
+  },
+  {
+    "name": "stats-unnamed-aggregates-keep-the-call-as-header",
+    "spl": "| stats dc(user), max(bytes) by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, uniqExactIf(user_name, notEmpty(user_name)) AS `c0`, max(http_response_body_bytes) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name",
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "dc(user)",
+        "max(bytes)"
+      ]
+    }
+  },
+  {
+    "name": "stats-numbers-from-extras",
+    "spl": "| stats sum(upstream.response_time) as t, avg(nokey) as a, max(request_length) as m by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, sum(toFloat64OrNull(extras[{p0:String}])) AS `c0`, avg(toFloat64OrNull(extras[{p1:String}])) AS `c1`, max(toFloat64OrNull(extras[{p2:String}])) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:upstream.response_time",
+        "p1": "String:nokey",
+        "p2": "String:http.request.bytes"
+      },
+      "warnings": [
+        "unindexed@12+22",
+        "unknown_field@46+5",
+        "unindexed@46+5",
+        "unindexed@63+14"
+      ],
+      "fields": [
+        "host.name",
+        "upstream.response_time",
+        "nokey",
+        "http.request.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "t",
+        "a",
+        "m"
+      ]
+    }
+  },
+  {
+    "name": "stats-min-max-time",
+    "spl": "| stats min(_time) as a, max(_time) as b",
+    "expect": {
+      "sql": "SELECT min(ts) AS `c0`, max(ts) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "_time"
+      ],
+      "aggregate": true,
+      "columns": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "stats-space-separated",
+    "spl": "| stats count dc(user) as u by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0`, uniqExactIf(user_name, notEmpty(user_name)) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count",
+        "u"
+      ]
+    }
+  },
+  {
+    "name": "stats-sort-by-alias-and-field",
+    "spl": "| stats dc(src_ip) as ips by url.path | sort -ips, url.path | head 10",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, uniqExactIf(source_ip, source_ip != toIPv6({p0:String})) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(url_path) GROUP BY url_path ORDER BY `c0` DESC, `url.path` ASC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "limit": "UInt64:10"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path",
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "ips"
+      ]
+    }
+  },
+  {
+    "name": "stats-sort-by-an-alias-of-the-by-field",
+    "spl": "| stats count by src_ip | sort src",
+    "expect": {
+      "sql": "SELECT source_ip AS `source.ip`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip ORDER BY `source.ip` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "source.ip",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "stats-by-number-where-zero-is-absent",
+    "spl": "| stats count by status",
+    "expect": {
+      "sql": "SELECT http_status AS `http.response.status_code`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND http_status != 0 GROUP BY http_status",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": true,
+      "columns": [
+        "http.response.status_code",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "stats-by-number-that-always-has-a-value",
+    "spl": "| stats count by bytes",
+    "expect": {
+      "sql": "SELECT http_response_body_bytes AS `http.response.body.bytes`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY http_response_body_bytes",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "http.response.body.bytes",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "stats-by-address",
+    "spl": "| stats count by src_ip, dest_ip",
+    "expect": {
+      "sql": "SELECT source_ip AS `source.ip`, destination_ip AS `destination.ip`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) AND destination_ip != toIPv6({p1:String}) GROUP BY source_ip, destination_ip",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "p1": "String:::"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip",
+        "destination.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "source.ip",
+        "destination.ip",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "stats-average-skips-absent",
+    "spl": "| stats avg(status) as s, avg(bytes) as b, min(pid) as p",
+    "expect": {
+      "sql": "SELECT avgIf(http_status, http_status != 0) AS `c0`, avg(http_response_body_bytes) AS `c1`, minIf(process_pid, process_pid != 0) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "http.response.body.bytes",
+        "process.pid"
+      ],
+      "aggregate": true,
+      "columns": [
+        "s",
+        "b",
+        "p"
+      ]
+    }
+  },
+  {
+    "name": "stats-count-named-still-answers-to-count",
+    "spl": "| stats count as n by host | sort -count",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host ORDER BY `c0` DESC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "stats-distinct-count",
+    "spl": "| stats distinct_count(user)",
+    "error": {
+      "offset": 8,
+      "length": 14,
+      "message": "not supported in v1: stats distinct_count(...) (use dc)"
+    }
+  },
+  {
+    "name": "stats-median",
+    "spl": "| stats median(bytes) by host",
+    "error": {
+      "offset": 8,
+      "length": 6,
+      "message": "not supported in v1: stats median(...)"
+    }
+  },
+  {
+    "name": "stats-first",
+    "spl": "| stats first(user) by host",
+    "error": {
+      "offset": 8,
+      "length": 5,
+      "message": "not supported in v1: stats first(...) (use earliest)"
+    }
+  },
+  {
+    "name": "stats-missing-paren",
+    "spl": "| stats dc(user by host",
+    "error": {
+      "offset": 10,
+      "length": 1,
+      "message": "missing ')'"
+    }
+  },
+  {
+    "name": "stats-empty-call",
+    "spl": "| stats dc() by host",
+    "error": {
+      "offset": 11,
+      "length": 1,
+      "message": "stats: expected a field name inside dc(...)"
+    }
+  },
+  {
+    "name": "stats-function-without-a-field",
+    "spl": "| stats dc by host",
+    "error": {
+      "offset": 8,
+      "length": 2,
+      "message": "stats: dc needs a field: dc(<field>)"
+    }
+  },
+  {
+    "name": "stats-sum-of-a-keyword",
+    "spl": "| stats sum(host)",
+    "error": {
+      "offset": 8,
+      "length": 9,
+      "message": "stats: sum(host.name) needs a number: host.name is text"
+    }
+  },
+  {
+    "name": "stats-avg-of-an-address",
+    "spl": "| stats avg(src_ip) by host",
+    "error": {
+      "offset": 8,
+      "length": 11,
+      "message": "stats: avg(source.ip) needs a number: source.ip is an address"
+    }
+  },
+  {
+    "name": "stats-max-of-text",
+    "spl": "| stats max(user) by host",
+    "error": {
+      "offset": 8,
+      "length": 9,
+      "message": "stats: max(user.name) needs a number: user.name is text"
+    }
+  },
+  {
+    "name": "stats-alias-is-a-field",
+    "spl": "| stats count as host by program",
+    "error": {
+      "offset": 8,
+      "length": 13,
+      "message": "'host' is a field (host.name): give the aggregate another name"
+    }
+  },
+  {
+    "name": "stats-alias-is-a-field-alias",
+    "spl": "| stats dc(user) as src_ip",
+    "error": {
+      "offset": 8,
+      "length": 18,
+      "message": "'src_ip' is a field (source.ip): give the aggregate another name"
+    }
+  },
+  {
+    "name": "stats-two-columns-with-one-name",
+    "spl": "| stats count as n, dc(user) as n",
+    "error": {
+      "offset": 20,
+      "length": 13,
+      "message": "stats: two columns would be called n: name one of them with as"
+    }
+  },
+  {
+    "name": "stats-two-bare-counts",
+    "spl": "| stats count, count by host",
+    "error": {
+      "offset": 15,
+      "length": 5,
+      "message": "stats: two columns would be called count: name one of them with as"
+    }
+  },
+  {
+    "name": "stats-by-field-twice",
+    "spl": "| stats count by host, host.name",
+    "error": {
+      "offset": 23,
+      "length": 9,
+      "message": "stats: host.name is listed twice after by"
+    }
+  },
+  {
+    "name": "stats-count-of-a-field-with-the-rewrite",
+    "spl": "| stats count(user) by host",
+    "error": {
+      "offset": 8,
+      "length": 11,
+      "message": "not supported in v1: stats count(user) (use user=* | stats count)"
+    }
+  },
+  {
+    "name": "stats-comma-before-by",
+    "spl": "| stats count, by host",
+    "error": {
+      "offset": 15,
+      "length": 2,
+      "message": "stats: expected an aggregate: count, dc(f), sum(f), avg(f), min(f), max(f), values(f), earliest(f), latest(f)"
+    }
+  },
+  {
+    "name": "stats-sort-by-an-unnamed-aggregate",
+    "spl": "| stats dc(user) by host | sort -dc(user)",
+    "error": {
+      "offset": 32,
+      "length": 3,
+      "message": "dc(...) has no name here: name it in stats, like stats dc(<field>) as n, then use n"
+    }
+  },
+  {
+    "name": "stats-sort-by-something-else",
+    "spl": "| stats dc(user) by host | sort -users",
+    "error": {
+      "offset": 32,
+      "length": 6,
+      "message": "'users' is not a column of the result: host.name (dc(user) has no name: write it as dc(user) as n)"
+    }
+  }
+]

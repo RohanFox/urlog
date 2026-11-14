@@ -1,0 +1,306 @@
+[
+  {
+    "name": "chain-where-stats-where-sort-head",
+    "spl": "host=web-01 | where status>=400 | stats count as n by url.path | where n>10 | sort -n | head 5",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) AND (http_status >= {p1:UInt64}) AND notEmpty(url_path) GROUP BY url_path HAVING (`c0` > {p2:UInt64}) ORDER BY `c0` DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "p1": "UInt64:400",
+        "p2": "UInt64:10",
+        "limit": "UInt64:5"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.status_code",
+        "url.path"
+      ],
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "chain-rex-where-stats-where-table",
+    "spl": "| rex field=message \"from (?<peer>\\S+)\" | where peer=10.* | stats count by peer | where count>1 | table peer count",
+    "expect": {
+      "sql": "SELECT extractGroups(message, {p0:String})[1] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extractGroups(message, {p0:String})[1] LIKE {p1:String}) AND notEmpty(extractGroups(message, {p0:String})[1]) GROUP BY extractGroups(message, {p0:String})[1] HAVING (`c1` > {p2:UInt64})",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:from (?<peer>\\S+)",
+        "p1": "String:10.%",
+        "p2": "UInt64:1"
+      },
+      "warnings": [
+        "unindexed@48+9"
+      ],
+      "fields": [
+        "message"
+      ],
+      "aggregate": true,
+      "columns": [
+        "peer",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "chain-table-after-sort",
+    "spl": "| sort host | table host, program",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, program AS `program` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY host ASC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "program"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "program"
+      ]
+    }
+  },
+  {
+    "name": "chain-where-after-table",
+    "spl": "| table host | where status=404",
+    "expect": {
+      "sql": "SELECT host AS `host.name` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status = {p0:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "host.name"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name"
+      ]
+    }
+  },
+  {
+    "name": "chain-table-after-head",
+    "spl": "| head 5 | table host",
+    "expect": {
+      "sql": "SELECT host AS `host.name` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:5"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name"
+      ]
+    }
+  },
+  {
+    "name": "chain-where-between-two-rex",
+    "spl": "| rex field=raw \"^(?<a>\\S+)\" | where a=x | rex field=raw \"(?<b>\\S+)$\" | where b=y",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0`, extractGroups(raw, {p2:String})[1] AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extractGroups(raw, {p0:String})[1] = {p1:String}) AND (extractGroups(raw, {p2:String})[1] = {p3:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:^(?<a>\\S+)",
+        "p1": "String:x",
+        "p2": "String:(?<b>\\S+)$",
+        "p3": "String:y",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@37+3",
+        "unindexed@78+3"
+      ],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "chain-sort-then-where-then-head-after-stats",
+    "spl": "| stats count by host | sort host | where count>1 | head 3",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`c0` > {p0:UInt64}) ORDER BY `host.name` ASC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:1",
+        "limit": "UInt64:3"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "chain-rex-after-table",
+    "spl": "| table host | rex field=raw \"(?<a>x)\"",
+    "error": {
+      "offset": 15,
+      "length": 23,
+      "message": "rex must come before table"
+    }
+  },
+  {
+    "name": "chain-rex-after-head",
+    "spl": "| head 3 | rex field=raw \"(?<a>x)\"",
+    "error": {
+      "offset": 11,
+      "length": 23,
+      "message": "rex must come before head"
+    }
+  },
+  {
+    "name": "chain-where-uses-a-later-rex",
+    "spl": "| where a=x | rex field=raw \"(?<a>\\S+)\"",
+    "error": {
+      "offset": 32,
+      "length": 1,
+      "message": "'a' is read earlier in the query, before this rex defines it: put the rex first"
+    }
+  },
+  {
+    "name": "chain-where-after-timechart",
+    "spl": "| timechart span=1h count | where count>1",
+    "error": {
+      "offset": 28,
+      "length": 13,
+      "message": "where after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-head-after-timechart",
+    "spl": "| timechart span=1h count | head 5",
+    "error": {
+      "offset": 28,
+      "length": 6,
+      "message": "head after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-sort-after-timechart",
+    "spl": "| timechart span=1h count by host | sort -count",
+    "error": {
+      "offset": 36,
+      "length": 11,
+      "message": "sort after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-table-after-timechart",
+    "spl": "| timechart span=1h count | table _time",
+    "error": {
+      "offset": 28,
+      "length": 11,
+      "message": "table after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-stats-after-timechart",
+    "spl": "| timechart span=1h count | stats count",
+    "error": {
+      "offset": 28,
+      "length": 11,
+      "message": "stats after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-timechart-twice",
+    "spl": "| timechart span=1h count | timechart span=1h count",
+    "error": {
+      "offset": 28,
+      "length": 23,
+      "message": "timechart after timechart is not supported in v1: timechart is the last verb"
+    }
+  },
+  {
+    "name": "chain-timechart-after-stats",
+    "spl": "| stats count by host | timechart span=1h count",
+    "error": {
+      "offset": 24,
+      "length": 23,
+      "message": "timechart after stats is not supported in v1: use one or the other"
+    }
+  },
+  {
+    "name": "chain-timechart-after-sort",
+    "spl": "| sort host | timechart span=1h count",
+    "error": {
+      "offset": 14,
+      "length": 23,
+      "message": "timechart must come before sort"
+    }
+  },
+  {
+    "name": "chain-timechart-after-table",
+    "spl": "| table host | timechart span=1h count",
+    "error": {
+      "offset": 15,
+      "length": 23,
+      "message": "timechart must come before table"
+    }
+  },
+  {
+    "name": "chain-timechart-after-head",
+    "spl": "| head 5 | timechart span=1h count",
+    "error": {
+      "offset": 11,
+      "length": 23,
+      "message": "timechart must come before head"
+    }
+  },
+  {
+    "name": "chain-sort-after-head-after-stats",
+    "spl": "| stats count by host | head 5 | sort -count",
+    "error": {
+      "offset": 33,
+      "length": 11,
+      "message": "sort must come before head"
+    }
+  }
+]

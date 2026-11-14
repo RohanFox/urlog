@@ -7,6 +7,8 @@
 #   keyword  a LowCardinality column, lowercased at ingest: field=value compares the lowercased value, exact
 #   string   a String column stored as logged: field=value is exact and case-sensitive; field=*v* is ILIKE
 #   int      an unsigned integer column: numeric compare and ranges
+#            zero_is_absent: true marks a column where 0 is what a source without the field stores, so 0
+#            reads as "no value" (field=*, by groups, aggregates). Without it 0 is a value like any other.
 #   ip       an IPv6 column (IPv4 mapped): equality on the address, CIDR with field=10.0.0.0/8
 #   text     message (the logical column: an alias over raw) and raw: bare terms search message through the
 #            text index; field=value is a substring compare and is flagged unindexed
@@ -39,6 +41,7 @@ fields:
   - name: event.code
     column: event_code
     type: int
+    zero_is_absent: true
     description: Numeric event code (EVTX EventID; the HTTP status for nginx)
     aliases: [EventID, event_id, EventCode]
   - name: event.action
@@ -79,6 +82,7 @@ fields:
   - name: http.response.status_code
     column: http_status
     type: int
+    zero_is_absent: true
     description: HTTP status
     aliases: [status, http_status, status_code, sc-status]
   - name: message
@@ -129,6 +133,7 @@ fields:
   - name: process.pid
     column: process_pid
     type: int
+    zero_is_absent: true
     description: Process id ([pid] in syslog, numeric PROCID)
     aliases: [pid, procid, process_pid, ProcessId]
   - name: file.id

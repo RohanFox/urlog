@@ -82,7 +82,11 @@
             <result_overflow_mode>break</result_overflow_mode>
             <!-- 1-3 analysts, a search is at most three server queries in flight; the API answers 429 above it. -->
             <max_concurrent_queries_for_user>4</max_concurrent_queries_for_user>
+            <!-- A query whose client has closed the connection (a cancelled request, a closed tab) is stopped
+                 instead of running to max_execution_time. Off by default on the server. -->
+            <cancel_http_readonly_queries_on_client_close>1</cancel_http_readonly_queries_on_client_close>
             <constraints>
+                <cancel_http_readonly_queries_on_client_close><readonly/></cancel_http_readonly_queries_on_client_close>
                 <max_concurrent_queries_for_user><readonly/></max_concurrent_queries_for_user>
                 <!-- A query cannot raise its own limits (query-security). -->
                 <max_execution_time><readonly/></max_execution_time>

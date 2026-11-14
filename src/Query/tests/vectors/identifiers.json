@@ -41,7 +41,7 @@
     "error": {
       "offset": 19,
       "length": 1,
-      "message": "stats: unexpected 'b'"
+      "message": "stats: 'b' is not an aggregate: count, dc(f), sum(f), avg(f), min(f), max(f), values(f), earliest(f), latest(f)"
     }
   },
   {
@@ -75,7 +75,7 @@
     "name": "identifier-by-field-backslash",
     "spl": "| stats count by a\\b",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -108,7 +108,7 @@
     "name": "identifier-by-field-single-quote",
     "spl": "| stats count by a'b",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -141,7 +141,7 @@
     "name": "identifier-by-field-newline",
     "spl": "| stats count by a\nb",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, extras[{p1:String}] AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}], extras[{p1:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, extras[{p1:String}] AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) AND notEmpty(extras[{p1:String}]) GROUP BY extras[{p0:String}], extras[{p1:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -178,7 +178,7 @@
     "name": "identifier-by-field-non-ascii",
     "spl": "| stats count by aéb",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -202,7 +202,7 @@
     "name": "identifier-by-field-trailing-backslash",
     "spl": "| stats count by u\\",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}]",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}]",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -226,7 +226,7 @@
     "name": "identifier-by-field-and-sort-backslash",
     "spl": "| stats count by a\\b | sort -a\\b",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -234,8 +234,7 @@
         "p0": "String:a\\b"
       },
       "warnings": [
-        "unknown_field@17+3",
-        "unknown_field@28+4"
+        "unknown_field@17+3"
       ],
       "fields": [
         "a\\b"
@@ -260,7 +259,7 @@
     "name": "identifier-by-field-and-sort-single-quote",
     "spl": "| stats count by a'b | sort -a'b",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -268,8 +267,7 @@
         "p0": "String:a'b"
       },
       "warnings": [
-        "unknown_field@17+3",
-        "unknown_field@28+4"
+        "unknown_field@17+3"
       ],
       "fields": [
         "a'b"
@@ -294,7 +292,7 @@
     "name": "identifier-by-field-and-sort-newline",
     "spl": "| stats count by a\nb | sort -a\nb",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, extras[{p1:String}] AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}], extras[{p1:String}] ORDER BY `c0` DESC, `c1` ASC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, extras[{p1:String}] AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) AND notEmpty(extras[{p1:String}]) GROUP BY extras[{p0:String}], extras[{p1:String}] ORDER BY `c0` DESC, `c1` ASC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -304,9 +302,7 @@
       },
       "warnings": [
         "unknown_field@17+1",
-        "unknown_field@19+1",
-        "unknown_field@28+2",
-        "unknown_field@31+1"
+        "unknown_field@19+1"
       ],
       "fields": [
         "a",
@@ -333,7 +329,7 @@
     "name": "identifier-by-field-and-sort-non-ascii",
     "spl": "| stats count by aéb | sort -aéb",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -341,8 +337,7 @@
         "p0": "String:aéb"
       },
       "warnings": [
-        "unknown_field@17+3",
-        "unknown_field@28+4"
+        "unknown_field@17+3"
       ],
       "fields": [
         "aéb"
@@ -358,7 +353,7 @@
     "name": "identifier-by-field-and-sort-trailing-backslash",
     "spl": "| stats count by u\\ | sort -u\\",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}] ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -366,8 +361,7 @@
         "p0": "String:u\\"
       },
       "warnings": [
-        "unknown_field@17+2",
-        "unknown_field@27+3"
+        "unknown_field@17+2"
       ],
       "fields": [
         "u\\"
@@ -679,7 +673,7 @@
     "name": "regression-backslash-by-field-with-a-plain-alias",
     "spl": "| stats count as n by u\\ | sort -n",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}] ORDER BY `c1` DESC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY extras[{p0:String}] ORDER BY `c1` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -703,7 +697,7 @@
     "name": "alias-strict-name-accepted",
     "spl": "| stats count as _n9 by host | sort -_n9",
     "expect": {
-      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY host ORDER BY `c0` DESC",
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host ORDER BY `c0` DESC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -769,7 +763,7 @@
     "name": "alias-of-the-generated-form",
     "spl": "| stats count as c0 by nokey, host | sort -c0, nokey",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `c0`, host AS `host.name`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}], host ORDER BY `c1` DESC, `c0` ASC",
+      "sql": "SELECT extras[{p0:String}] AS `c0`, host AS `host.name`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) AND notEmpty(host) GROUP BY extras[{p0:String}], host ORDER BY `c1` DESC, `c0` ASC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -777,8 +771,7 @@
         "p0": "String:nokey"
       },
       "warnings": [
-        "unknown_field@23+5",
-        "unknown_field@47+5"
+        "unknown_field@23+5"
       ],
       "fields": [
         "nokey",
@@ -796,7 +789,7 @@
     "name": "two-unknown-by-fields",
     "spl": "| stats count by x-forwarded-for, trace.id | sort trace.id",
     "expect": {
-      "sql": "SELECT extras[{p0:String}] AS `network.forwarded_ip`, extras[{p1:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} GROUP BY extras[{p0:String}], extras[{p1:String}] ORDER BY `c0` ASC",
+      "sql": "SELECT extras[{p0:String}] AS `network.forwarded_ip`, extras[{p1:String}] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) AND notEmpty(extras[{p1:String}]) GROUP BY extras[{p0:String}], extras[{p1:String}] ORDER BY `c0` ASC",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -805,8 +798,7 @@
         "p1": "String:trace.id"
       },
       "warnings": [
-        "unknown_field@34+8",
-        "unknown_field@50+8"
+        "unknown_field@34+8"
       ],
       "fields": [
         "network.forwarded_ip",
@@ -817,6 +809,523 @@
         "network.forwarded_ip",
         "trace.id",
         "count"
+      ]
+    }
+  },
+  {
+    "name": "identifier-rex-group-backslash",
+    "spl": "| rex field=raw \"(?<a\\\\b>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 4,
+      "message": "rex: 'a\\b' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-backquote",
+    "spl": "| rex field=raw \"(?<a`b>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'a`b' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-single-quote",
+    "spl": "| rex field=raw \"(?<a'b>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'a'b' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-double-quote",
+    "spl": "| rex field=raw \"(?<a\\\"b>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 4,
+      "message": "rex: 'a\"b' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-newline",
+    "spl": "| rex field=raw \"(?<a\nb>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'a\nb' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-nul",
+    "spl": "| rex field=raw \"(?<a\u0000b>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'a\u0000b' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-non-ascii",
+    "spl": "| rex field=raw \"(?<aéb>x)\" | stats count by host",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'aéb' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-rex-group-trailing-backslash",
+    "spl": "| rex field=raw \"(?<u\\\\>x)\"",
+    "error": {
+      "offset": 20,
+      "length": 3,
+      "message": "rex: 'u\\' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "identifier-table-field-backslash",
+    "spl": "| table host a\\b",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a\\b",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@13+3"
+      ],
+      "fields": [
+        "host.name",
+        "a\\b"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "a\\b"
+      ]
+    }
+  },
+  {
+    "name": "identifier-table-field-backquote",
+    "spl": "| table host a`b",
+    "error": {
+      "offset": 13,
+      "length": 3,
+      "message": "'a`b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-table-field-single-quote",
+    "spl": "| table host a'b",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a'b",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@13+3"
+      ],
+      "fields": [
+        "host.name",
+        "a'b"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "a'b"
+      ]
+    }
+  },
+  {
+    "name": "identifier-table-field-double-quote",
+    "spl": "| table host a\"b",
+    "error": {
+      "offset": 14,
+      "length": 2,
+      "message": "unterminated quoted string"
+    }
+  },
+  {
+    "name": "identifier-table-field-newline",
+    "spl": "| table host a\nb",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `c0`, extras[{p1:String}] AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a",
+        "p1": "String:b",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@13+1",
+        "unknown_field@15+1"
+      ],
+      "fields": [
+        "host.name",
+        "a",
+        "b"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "identifier-table-field-nul",
+    "spl": "| table host a\u0000b",
+    "error": {
+      "offset": 13,
+      "length": 3,
+      "message": "'a\u0000b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-table-field-non-ascii",
+    "spl": "| table host aéb",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, extras[{p0:String}] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:aéb",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@13+3"
+      ],
+      "fields": [
+        "host.name",
+        "aéb"
+      ],
+      "aggregate": false,
+      "columns": [
+        "host.name",
+        "aéb"
+      ]
+    }
+  },
+  {
+    "name": "identifier-table-field-trailing-backslash",
+    "spl": "| table u\\, host",
+    "expect": {
+      "sql": "SELECT extras[{p0:String}] AS `c0`, host AS `host.name` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:u\\",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@8+2"
+      ],
+      "fields": [
+        "u\\",
+        "host.name"
+      ],
+      "aggregate": false,
+      "columns": [
+        "u\\",
+        "host.name"
+      ]
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-backslash",
+    "spl": "| timechart span=1h count by a\\b",
+    "expect": {
+      "sql": "WITH top AS (SELECT extras[{p0:String}] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extras[{p0:String}] IN top AS `c0`, if(`c0`, extras[{p0:String}], defaultValueOfArgumentType(extras[{p0:String}])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:a\\b",
+        "top": "UInt64:10"
+      },
+      "warnings": [
+        "unknown_field@29+3"
+      ],
+      "fields": [
+        "a\\b"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "a\\b",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-backquote",
+    "spl": "| timechart span=1h count by a`b",
+    "error": {
+      "offset": 29,
+      "length": 3,
+      "message": "'a`b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-single-quote",
+    "spl": "| timechart span=1h count by a'b",
+    "expect": {
+      "sql": "WITH top AS (SELECT extras[{p0:String}] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extras[{p0:String}] IN top AS `c0`, if(`c0`, extras[{p0:String}], defaultValueOfArgumentType(extras[{p0:String}])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:a'b",
+        "top": "UInt64:10"
+      },
+      "warnings": [
+        "unknown_field@29+3"
+      ],
+      "fields": [
+        "a'b"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "a'b",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-double-quote",
+    "spl": "| timechart span=1h count by a\"b",
+    "error": {
+      "offset": 30,
+      "length": 2,
+      "message": "unterminated quoted string"
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-newline",
+    "spl": "| timechart span=1h count by a\nb",
+    "error": {
+      "offset": 31,
+      "length": 1,
+      "message": "timechart: one by field only; the series are its values"
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-nul",
+    "spl": "| timechart span=1h count by a\u0000b",
+    "error": {
+      "offset": 29,
+      "length": 3,
+      "message": "'a\u0000b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-non-ascii",
+    "spl": "| timechart span=1h count by aéb",
+    "expect": {
+      "sql": "WITH top AS (SELECT extras[{p0:String}] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extras[{p0:String}] IN top AS `c0`, if(`c0`, extras[{p0:String}], defaultValueOfArgumentType(extras[{p0:String}])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:aéb",
+        "top": "UInt64:10"
+      },
+      "warnings": [
+        "unknown_field@29+3"
+      ],
+      "fields": [
+        "aéb"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "aéb",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "identifier-timechart-by-field-trailing-backslash",
+    "spl": "| timechart span=1h count as n by u\\",
+    "expect": {
+      "sql": "WITH top AS (SELECT extras[{p0:String}] AS s FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY s ORDER BY count() DESC, s ASC LIMIT {top:UInt64}) SELECT toStartOfInterval(ts, toIntervalHour({span:UInt32})) AS `_time`, extras[{p0:String}] IN top AS `c0`, if(`c0`, extras[{p0:String}], defaultValueOfArgumentType(extras[{p0:String}])) AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extras[{p0:String}]) GROUP BY `_time`, `c0`, `c1` ORDER BY `_time` ASC, `c0` DESC, `c1` ASC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "span": "UInt32:1",
+        "p0": "String:u\\",
+        "top": "UInt64:10"
+      },
+      "warnings": [
+        "unknown_field@34+2"
+      ],
+      "fields": [
+        "u\\"
+      ],
+      "aggregate": true,
+      "columns": [
+        "_time",
+        "in_top",
+        "u\\",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-backslash",
+    "spl": "| stats dc(a\\b) as n by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, uniqExactIf(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a\\b"
+      },
+      "warnings": [
+        "unknown_field@11+3"
+      ],
+      "fields": [
+        "host.name",
+        "a\\b"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-backquote",
+    "spl": "| stats dc(a`b) as n by host",
+    "error": {
+      "offset": 11,
+      "length": 3,
+      "message": "'a`b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-single-quote",
+    "spl": "| stats dc(a'b) as n by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, uniqExactIf(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a'b"
+      },
+      "warnings": [
+        "unknown_field@11+3"
+      ],
+      "fields": [
+        "host.name",
+        "a'b"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-double-quote",
+    "spl": "| stats dc(a\"b) as n by host",
+    "error": {
+      "offset": 12,
+      "length": 16,
+      "message": "unterminated quoted string"
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-newline",
+    "spl": "| stats dc(a\nb) as n by host",
+    "error": {
+      "offset": 10,
+      "length": 1,
+      "message": "missing ')'"
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-nul",
+    "spl": "| stats dc(a\u0000b) as n by host",
+    "error": {
+      "offset": 11,
+      "length": 3,
+      "message": "'a\u0000b' is not a field name"
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-non-ascii",
+    "spl": "| stats dc(aéb) as n by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, uniqExactIf(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:aéb"
+      },
+      "warnings": [
+        "unknown_field@11+3"
+      ],
+      "fields": [
+        "host.name",
+        "aéb"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "identifier-aggregate-field-trailing-backslash",
+    "spl": "| stats values(u\\) by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:u\\"
+      },
+      "warnings": [
+        "unknown_field@15+2"
+      ],
+      "fields": [
+        "host.name",
+        "u\\"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "values(u\\)"
       ]
     }
   }

@@ -23,6 +23,9 @@ public sealed class VectorTests
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    /// <summary>The columns of a plain event listing, which a vector does not repeat.</summary>
+    private static readonly string[] DefaultListing = ["ts", "host", "program", "severity", "source_ip", "message"];
+
     public static TheoryData<string> Files()
     {
         var data = new TheoryData<string>();
@@ -92,12 +95,35 @@ public sealed class VectorTests
     }
 
     [Fact]
-    public void AtLeastFortyVectorsIncludingEveryErrorPath()
+    public void EveryVerbHasVectorsAndErrorPaths()
     {
-        var all = Directory.GetFiles(VectorDirectory, "*.json").SelectMany(f => JsonSerializer.Deserialize<List<Vector>>(File.ReadAllText(f), Json) ?? []).ToList();
-        Assert.True(all.Count >= 40, $"{all.Count} vectors");
-        Assert.True(all.Count(v => v.Error is not null) >= 15, "error vectors");
-        Assert.Contains(all, v => v.Error?.Message.StartsWith("not supported in v1:", StringComparison.Ordinal) == true);
+        var files = Directory.GetFiles(VectorDirectory, "*.json").ToDictionary(
+            f => Path.GetFileName(f),
+            f => JsonSerializer.Deserialize<List<Vector>>(File.ReadAllText(f), Json) ?? []);
+        var all = files.Values.SelectMany(v => v).ToList();
+        Assert.Equal(all.Count, all.Select(v => v.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.True(all.Count >= 400, $"{all.Count} vectors");
+        Assert.True(all.Count(v => v.Error is not null) >= 200, "error vectors");
+
+        // The five verbs after the first slice, their order rules and the unsupported verbs: each file holds
+        // accepted forms and refusals.
+        foreach (var (file, least, leastErrors) in new[] { ("where.json", 25, 10), ("stats.json", 30, 15), ("table.json", 15, 6), ("rex.json", 60, 40), ("timechart.json", 35, 15), ("chaining.json", 20, 12) })
+        {
+            Assert.True(files[file].Count >= least, $"{file}: {files[file].Count} vectors");
+            Assert.True(files[file].Count(v => v.Error is not null) >= leastErrors, $"{file}: error vectors");
+            Assert.True(files[file].Count(v => v.Expect is not null) >= 5, $"{file}: accepted vectors");
+        }
+
+        var unsupported = all.Where(v => v.Error?.Message.StartsWith("not supported in v1: ", StringComparison.Ordinal) == true).ToList();
+        foreach (var verb in new[] { "eval", "join", "transaction", "lookup", "append", "dedup", "rename", "fields", "top", "rare", "search", "regex", "chart", "bin", "bucket", "tail", "reverse" })
+        {
+            Assert.Contains(unsupported, v => v.Error!.Message.StartsWith($"not supported in v1: {verb}", StringComparison.Ordinal));
+        }
+
+        foreach (var verb in new[] { "dedup", "rename", "fields", "top", "rare", "search", "regex", "chart", "bin", "bucket", "tail", "reverse" })
+        {
+            Assert.Contains(unsupported, v => v.Error!.Message.StartsWith($"not supported in v1: {verb} (", StringComparison.Ordinal));
+        }
     }
 
     private static (Expectation? Expect, VectorError? Error) Run(Vector v)
@@ -122,7 +148,7 @@ public sealed class VectorTests
                 Warnings = [.. result.Warnings.Select(w => $"{w.Code}@{w.Span.Offset}+{w.Span.Length}")],
                 Fields = [.. result.Fields.Select(f => f.Name)],
                 Aggregate = result.IsAggregate,
-                Columns = result.IsAggregate ? [.. result.Columns] : null,
+                Columns = result.IsAggregate || !result.Columns.SequenceEqual(DefaultListing) ? [.. result.Columns] : null,
             }, null);
         }
         catch (QueryException e)
@@ -171,7 +197,7 @@ public sealed class VectorTests
 
         public bool Aggregate { get; set; }
 
-        /// <summary>The result's headers, for an aggregate: the SQL names such a column by a generated alias.</summary>
+        /// <summary>The result's headers, when they are not the default listing's: the SQL names an analyst's column by a generated alias.</summary>
         public string[]? Columns { get; set; }
     }
 

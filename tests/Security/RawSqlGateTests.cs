@@ -153,7 +153,7 @@ public sealed class RawSqlGateTests(ClickHouseFixture ch, ITestOutputHelper outp
         }
 
         output.WriteLine($"{checkedCount} vectors passed the gate");
-        Assert.True(checkedCount >= 40, $"{checkedCount} vectors");
+        Assert.True(checkedCount >= 180, $"{checkedCount} vectors");
     }
 
     [Fact]

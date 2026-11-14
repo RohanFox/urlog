@@ -1,0 +1,502 @@
+[
+  {
+    "name": "where-before-stats",
+    "spl": "status>=500 | where url.path=/admin*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (http_status >= {p0:UInt64}) AND (url_path LIKE {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500",
+        "p1": "String:/admin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-twice",
+    "spl": "| where host=web-01 | where status=404",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) AND (http_status = {p1:UInt64}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "p1": "UInt64:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-or-not",
+    "spl": "| where status=404 OR NOT method=GET",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_status = {p0:UInt64} OR NOT (http_method = {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:404",
+        "p1": "String:get",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "http.response.status_code",
+        "http.request.method"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-quoted-phrase",
+    "spl": "| where \"failed password\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:failed",
+        "p1": "String:password",
+        "p2": "String:failed password",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-has-value-and-has-none",
+    "spl": "| where user=* status!=* bytes=*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((notEmpty(user_name) AND NOT (http_status != 0) AND isNotNull(http_response_body_bytes))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "user.name",
+        "http.response.status_code",
+        "http.response.body.bytes"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-has-value-ip-and-time",
+    "spl": "src_ip=* _time=* nokey=*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((source_ip != toIPv6({p0:String}) AND isNotNull(ts) AND notEmpty(extras[{p1:String}]))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "p1": "String:nokey",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@17+5"
+      ],
+      "fields": [
+        "source.ip",
+        "_time",
+        "nokey"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "where-then-stats",
+    "spl": "host=web-01 | where status>=400 | stats count by url.path",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (host = {p0:String}) AND (http_status >= {p1:UInt64}) AND notEmpty(url_path) GROUP BY url_path",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-01",
+        "p1": "UInt64:400"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.status_code",
+        "url.path"
+      ],
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-count",
+    "spl": "| stats count by host | where count>7341",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`c0` > {p0:UInt64})",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:7341"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-aliases",
+    "spl": "| stats count as hits, dc(src_ip) as ips by url.path | where hits>100 ips<3",
+    "expect": {
+      "sql": "SELECT url_path AS `url.path`, count() AS `c0`, uniqExactIf(source_ip, source_ip != toIPv6({p0:String})) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(url_path) GROUP BY url_path HAVING ((`c0` > {p1:UInt64} AND `c1` < {p2:UInt64}))",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "p1": "UInt64:100",
+        "p2": "UInt64:3"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path",
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "url.path",
+        "hits",
+        "ips"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-by-field-cidr",
+    "spl": "| stats count by src_ip | where src_ip=10.0.0.0/8",
+    "expect": {
+      "sql": "SELECT source_ip AS `source.ip`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip HAVING (isIPAddressInRange(IPv6NumToString(`source.ip`), {p1:String}))",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "p1": "String:::ffff:10.0.0.0/104"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip"
+      ],
+      "aggregate": true,
+      "columns": [
+        "source.ip",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-by-field-alias-of-the-field",
+    "spl": "| stats count by host | where Computer=web-0*",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`host.name` LIKE {p0:String})",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:web-0%"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-avg-is-a-fraction",
+    "spl": "| stats avg(bytes) as mean by host | where mean>=1024.5",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, avg(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`c0` >= {p0:Float64})",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "Float64:1024.5"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.body.bytes"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "mean"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-values-holds",
+    "spl": "| stats values(user) as users by host | where users=root",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(user_name, notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (has(`c0`, {p0:String}))",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:root"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "user.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "users"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-values-holds-not",
+    "spl": "| stats values(status) as codes by host | where codes!=500",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(http_status, http_status != 0) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (NOT has(`c0`, {p0:UInt64}))",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:500"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name",
+        "http.response.status_code"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "codes"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-in",
+    "spl": "| stats count as n by host | where n IN (1, 2, 3)",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`c0` IN ({p0:UInt64}, {p1:UInt64}, {p2:UInt64}))",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:1",
+        "p1": "UInt64:2",
+        "p2": "UInt64:3"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "n"
+      ]
+    }
+  },
+  {
+    "name": "where-after-stats-earliest-time",
+    "spl": "| stats earliest(_time) as first by src_ip | where first>=2026-03-10T00:00:00Z",
+    "expect": {
+      "sql": "SELECT source_ip AS `source.ip`, min(ts) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip HAVING (`c0` >= {p1:DateTime64(3)})",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:::",
+        "p1": "DateTime64(3):2026-03-10 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "source.ip",
+        "_time"
+      ],
+      "aggregate": true,
+      "columns": [
+        "source.ip",
+        "first"
+      ]
+    }
+  },
+  {
+    "name": "where-after-sort",
+    "spl": "| stats count by host | sort -count | where count>5",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (`c0` > {p0:UInt64}) ORDER BY `c0` DESC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:5"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "where-scope-word",
+    "spl": "| where index=7",
+    "error": {
+      "offset": 8,
+      "length": 7,
+      "message": "index= sets the scope of the whole search: write it before the first '|', not in where"
+    }
+  },
+  {
+    "name": "where-scope-word-earliest",
+    "spl": "| where earliest=-1d",
+    "error": {
+      "offset": 8,
+      "length": 12,
+      "message": "earliest= sets the scope of the whole search: write it before the first '|', not in where"
+    }
+  },
+  {
+    "name": "where-term-after-stats",
+    "spl": "| stats count by host | where error",
+    "error": {
+      "offset": 30,
+      "length": 5,
+      "message": "after stats, where compares the columns of the result (count>10, host=web-01): a search term has no event to search, so put it before stats"
+    }
+  },
+  {
+    "name": "where-phrase-after-stats",
+    "spl": "| stats count by host | where \"disk full\"",
+    "error": {
+      "offset": 30,
+      "length": 11,
+      "message": "after stats, where compares the columns of the result (count>10, host=web-01): a search term has no event to search, so put it before stats"
+    }
+  },
+  {
+    "name": "where-unnamed-aggregate-after-stats",
+    "spl": "| stats dc(user) by host | where dc>5",
+    "error": {
+      "offset": 33,
+      "length": 2,
+      "message": "'dc' is not a column of the result: host.name (dc(user) has no name: write it as dc(user) as n)"
+    }
+  },
+  {
+    "name": "where-aggregate-call-after-stats",
+    "spl": "| stats dc(user) by host | where dc(user)>5",
+    "error": {
+      "offset": 33,
+      "length": 2,
+      "message": "dc(...) has no name here: name it in stats, like stats dc(<field>) as n, then use n"
+    }
+  },
+  {
+    "name": "where-ordering-on-a-text-result",
+    "spl": "| stats latest(user) as last by host | where last>5",
+    "error": {
+      "offset": 45,
+      "length": 6,
+      "message": "last is a string: <, >, <= and >= need a numeric or time field"
+    }
+  },
+  {
+    "name": "where-fraction-on-a-count",
+    "spl": "| stats count as n by host | where n>2.5",
+    "error": {
+      "offset": 37,
+      "length": 3,
+      "message": "n expects an unsigned integer, got '2.5'"
+    }
+  },
+  {
+    "name": "where-not-a-number-on-an-average",
+    "spl": "| stats avg(bytes) as mean | where mean>lots",
+    "error": {
+      "offset": 40,
+      "length": 4,
+      "message": "mean expects a number, got 'lots'"
+    }
+  },
+  {
+    "name": "where-values-with-a-wildcard",
+    "spl": "| stats values(user) as users by host | where users=ro*",
+    "error": {
+      "offset": 46,
+      "length": 9,
+      "message": "users is a list of values: use = or != with one exact value"
+    }
+  },
+  {
+    "name": "where-after-head",
+    "spl": "| head 5 | where status=404",
+    "error": {
+      "offset": 11,
+      "length": 16,
+      "message": "where must come before head"
+    }
+  },
+  {
+    "name": "where-empty",
+    "spl": "| where",
+    "error": {
+      "offset": 2,
+      "length": 5,
+      "message": "where: expected an expression, like where status>=500"
+    }
+  },
+  {
+    "name": "where-unmatched-paren",
+    "spl": "| where status=404)",
+    "error": {
+      "offset": 18,
+      "length": 1,
+      "message": "unmatched ')'"
+    }
+  }
+]

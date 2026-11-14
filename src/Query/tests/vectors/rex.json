@@ -1,0 +1,980 @@
+[
+  {
+    "name": "rex-two-groups-then-stats",
+    "spl": "program=sshd | rex field=message \"for (?<target>\\S+) from (?<peer>\\S+)\" | stats count by target, peer | sort -count | head 20",
+    "expect": {
+      "sql": "SELECT extractGroups(message, {p1:String})[1] AS `c0`, extractGroups(message, {p1:String})[2] AS `c1`, count() AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (program = {p0:String}) AND notEmpty(extractGroups(message, {p1:String})[1]) AND notEmpty(extractGroups(message, {p1:String})[2]) GROUP BY extractGroups(message, {p1:String})[1], extractGroups(message, {p1:String})[2] ORDER BY `c2` DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:sshd",
+        "p1": "String:for (?<target>\\S+) from (?<peer>\\S+)",
+        "limit": "UInt64:20"
+      },
+      "warnings": [],
+      "fields": [
+        "program",
+        "message"
+      ],
+      "aggregate": true,
+      "columns": [
+        "target",
+        "peer",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "rex-p-form-of-a-named-group",
+    "spl": "| rex field=raw \"(?P<verb>[A-Z]+) \"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?P<verb>[A-Z]+) ",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "verb"
+      ]
+    }
+  },
+  {
+    "name": "rex-where-on-a-group",
+    "spl": "| rex field=message \"port (?<port>\\d+)\" | where port=22",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(message, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extractGroups(message, {p0:String})[1] = {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:port (?<port>\\d+)",
+        "p1": "String:22",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@48+7"
+      ],
+      "fields": [
+        "message"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "port"
+      ]
+    }
+  },
+  {
+    "name": "rex-unnamed-group-moves-the-index",
+    "spl": "| rex field=raw \"(GET|POST) (?<reqpath>\\S+)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[2] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(GET|POST) (?<reqpath>\\S+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "reqpath"
+      ]
+    }
+  },
+  {
+    "name": "rex-non-capturing-group-does-not",
+    "spl": "| rex field=raw \"(?:GET|POST) (?<reqpath>\\S+)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?:GET|POST) (?<reqpath>\\S+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "reqpath"
+      ]
+    }
+  },
+  {
+    "name": "rex-on-an-extras-field",
+    "spl": "| rex field=request_uri \"\\?id=(?<id>\\d+)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(extras[{p0:String}], {p1:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url.original",
+        "p1": "String:\\?id=(?<id>\\d+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.original"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "id"
+      ]
+    }
+  },
+  {
+    "name": "rex-on-an-unknown-field",
+    "spl": "| rex field=payload \"sid=(?<sid>[0-9a-f]{32})\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(extras[{p0:String}], {p1:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:payload",
+        "p1": "String:sid=(?<sid>[0-9a-f]{32})",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unknown_field@12+7"
+      ],
+      "fields": [
+        "payload"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "sid"
+      ]
+    }
+  },
+  {
+    "name": "rex-quotes-inside-the-pattern",
+    "spl": "| rex field=raw \"\\\"(?<agent>[^\\\"]*)\\\"$\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:\"(?<agent>[^\"]*)\"$",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "agent"
+      ]
+    }
+  },
+  {
+    "name": "rex-backslash-pair-is-one-backslash",
+    "spl": "| rex field=raw \"C:\\\\\\\\Users\\\\\\\\(?<winuser>[^\\\\\\\\]+)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:C:\\\\Users\\\\(?<winuser>[^\\\\]+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "winuser"
+      ]
+    }
+  },
+  {
+    "name": "rex-two-rex",
+    "spl": "| rex field=message \"from (?<peer>\\S+)\" | rex field=message \"port (?<port>\\d+)\" | stats dc(port) as ports by peer",
+    "expect": {
+      "sql": "SELECT extractGroups(message, {p0:String})[1] AS `c0`, uniqExactIf(extractGroups(message, {p1:String})[1], notEmpty(extractGroups(message, {p1:String})[1])) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(extractGroups(message, {p0:String})[1]) GROUP BY extractGroups(message, {p0:String})[1]",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:from (?<peer>\\S+)",
+        "p1": "String:port (?<port>\\d+)"
+      },
+      "warnings": [],
+      "fields": [
+        "message"
+      ],
+      "aggregate": true,
+      "columns": [
+        "peer",
+        "ports"
+      ]
+    }
+  },
+  {
+    "name": "rex-group-as-a-number",
+    "spl": "| rex field=message \"took (?<ms>\\d+)ms\" | stats avg(ms) as mean, max(ms) as worst by host",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, avg(toFloat64OrNull(extractGroups(message, {p0:String})[1])) AS `c0`, max(toFloat64OrNull(extractGroups(message, {p0:String})[1])) AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:took (?<ms>\\d+)ms"
+      },
+      "warnings": [
+        "unindexed@52+2",
+        "unindexed@69+2"
+      ],
+      "fields": [
+        "message",
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "mean",
+        "worst"
+      ]
+    }
+  },
+  {
+    "name": "rex-flags-and-classes",
+    "spl": "| rex field=message \"(?i)user[[:space:]]+(?<u>[^\\s,;]{1,32})\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(message, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?i)user[[:space:]]+(?<u>[^\\s,;]{1,32})",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "message"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "u"
+      ]
+    }
+  },
+  {
+    "name": "rex-wildcard-on-a-group",
+    "spl": "| rex field=url.path \"^/(?<top>[^/]+)\" | where top=adm*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(url_path, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extractGroups(url_path, {p0:String})[1] LIKE {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:^/(?<top>[^/]+)",
+        "p1": "String:adm%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@47+8"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "top"
+      ]
+    }
+  },
+  {
+    "name": "rex-group-has-a-value",
+    "spl": "| rex field=message \"session (?<sid>\\w+)\" | where sid=* | stats count by sid",
+    "expect": {
+      "sql": "SELECT extractGroups(message, {p0:String})[1] AS `c0`, count() AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (notEmpty(extractGroups(message, {p0:String})[1])) AND notEmpty(extractGroups(message, {p0:String})[1]) GROUP BY extractGroups(message, {p0:String})[1]",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:session (?<sid>\\w+)"
+      },
+      "warnings": [],
+      "fields": [
+        "message"
+      ],
+      "aggregate": true,
+      "columns": [
+        "sid",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "rex-listing-sorted-by-a-group",
+    "spl": "| rex field=message \"took (?<ms>\\d+)ms\" | sort -ms | head 5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(message, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY extractGroups(message, {p0:String})[1] DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:took (?<ms>\\d+)ms",
+        "limit": "UInt64:5"
+      },
+      "warnings": [],
+      "fields": [
+        "message"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "ms"
+      ]
+    }
+  },
+  {
+    "name": "rex-of-a-rex-group",
+    "spl": "| rex field=raw \"\\\"(?<reqline>[^\\\"]*)\\\"\" | rex field=reqline \"^(?<verb>\\S+)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0`, extractGroups(extractGroups(raw, {p0:String})[1], {p1:String})[1] AS `c1` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:\"(?<reqline>[^\"]*)\"",
+        "p1": "String:^(?<verb>\\S+)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "reqline",
+        "verb"
+      ]
+    }
+  },
+  {
+    "name": "rex-lazy-alternation-escapes",
+    "spl": "| rex field=raw \"^(?<a>.*?)\\s(?:x|y\\.z)\\x41\\x{1F600}\\pL\\p{Greek}[\\d\\-\\]]\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:^(?<a>.*?)\\s(?:x|y\\.z)\\x41\\x{1F600}\\pL\\p{Greek}[\\d\\-\\]]",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "a"
+      ]
+    }
+  },
+  {
+    "name": "rex-lookahead",
+    "spl": "| rex field=raw \"(?<a>x)(?=y)\"",
+    "error": {
+      "offset": 24,
+      "length": 3,
+      "message": "rex: lookahead is not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-negative-lookahead",
+    "spl": "| rex field=raw \"(?!x)(?<a>y)\"",
+    "error": {
+      "offset": 17,
+      "length": 3,
+      "message": "rex: lookahead is not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-lookbehind",
+    "spl": "| rex field=raw \"(?<=x)(?<a>y)\"",
+    "error": {
+      "offset": 17,
+      "length": 4,
+      "message": "rex: lookbehind is not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-negative-lookbehind",
+    "spl": "| rex field=raw \"(?<!x)(?<a>y)\"",
+    "error": {
+      "offset": 17,
+      "length": 4,
+      "message": "rex: lookbehind is not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-backreference",
+    "spl": "| rex field=raw \"(?<a>x)\\1\"",
+    "error": {
+      "offset": 24,
+      "length": 2,
+      "message": "rex: backreferences are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-named-backreference",
+    "spl": "| rex field=raw \"(?<a>x)\\k<a>\"",
+    "error": {
+      "offset": 24,
+      "length": 2,
+      "message": "rex: backreferences are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-atomic-group",
+    "spl": "| rex field=raw \"(?>x)(?<a>y)\"",
+    "error": {
+      "offset": 17,
+      "length": 3,
+      "message": "rex: atomic groups are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-possessive",
+    "spl": "| rex field=raw \"(?<a>x*+)\"",
+    "error": {
+      "offset": 23,
+      "length": 2,
+      "message": "rex: possessive quantifiers are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-conditional",
+    "spl": "| rex field=raw \"(?<a>x)(?(1)y|z)\"",
+    "error": {
+      "offset": 24,
+      "length": 3,
+      "message": "rex: conditionals are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-comment",
+    "spl": "| rex field=raw \"(?#note)(?<a>x)\"",
+    "error": {
+      "offset": 17,
+      "length": 3,
+      "message": "rex: comments are not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-unknown-escape",
+    "spl": "| rex field=raw \"(?<a>\\Gx)\"",
+    "error": {
+      "offset": 22,
+      "length": 2,
+      "message": "rex: '\\G' is not an RE2 escape"
+    }
+  },
+  {
+    "name": "rex-octal-escape",
+    "spl": "| rex field=raw \"(?<a>\\07)\"",
+    "error": {
+      "offset": 22,
+      "length": 2,
+      "message": "rex: octal escapes are not accepted: write \\x00"
+    }
+  },
+  {
+    "name": "rex-nothing-to-repeat",
+    "spl": "| rex field=raw \"(?<a>*x)\"",
+    "error": {
+      "offset": 22,
+      "length": 1,
+      "message": "rex: '*' has nothing to repeat"
+    }
+  },
+  {
+    "name": "rex-two-repetitions",
+    "spl": "| rex field=raw \"(?<a>x**)\"",
+    "error": {
+      "offset": 24,
+      "length": 1,
+      "message": "rex: a second repetition operator: put the first in a group"
+    }
+  },
+  {
+    "name": "rex-no-named-group",
+    "spl": "| rex field=raw \"(\\d+)\"",
+    "error": {
+      "offset": 16,
+      "length": 7,
+      "message": "rex: the pattern needs a named group, like (?<user>\\w+): each one becomes a field"
+    }
+  },
+  {
+    "name": "rex-missing-close",
+    "spl": "| rex field=raw \"(?<a>x\"",
+    "error": {
+      "offset": 17,
+      "length": 1,
+      "message": "rex: missing ')'"
+    }
+  },
+  {
+    "name": "rex-unmatched-close",
+    "spl": "| rex field=raw \"(?<a>x))\"",
+    "error": {
+      "offset": 24,
+      "length": 1,
+      "message": "rex: unmatched ')'"
+    }
+  },
+  {
+    "name": "rex-missing-bracket",
+    "spl": "| rex field=raw \"(?<a>[xy)\"",
+    "error": {
+      "offset": 22,
+      "length": 1,
+      "message": "rex: missing ']'"
+    }
+  },
+  {
+    "name": "rex-reversed-range",
+    "spl": "| rex field=raw \"(?<a>[z-a])\"",
+    "error": {
+      "offset": 23,
+      "length": 3,
+      "message": "rex: this character range is not valid: the first character must not come after the second"
+    }
+  },
+  {
+    "name": "rex-bad-class-name",
+    "spl": "| rex field=raw \"(?<a>[[:letters:]])\"",
+    "error": {
+      "offset": 23,
+      "length": 11,
+      "message": "rex: this is not a character class name: [[:alpha:]], [[:digit:]], ..."
+    }
+  },
+  {
+    "name": "rex-repetition-over-the-limit",
+    "spl": "| rex field=raw \"(?<a>x{101})\"",
+    "error": {
+      "offset": 23,
+      "length": 5,
+      "message": "rex: a repetition count is at most 100"
+    }
+  },
+  {
+    "name": "rex-repetition-bounds-reversed",
+    "spl": "| rex field=raw \"(?<a>x{5,2})\"",
+    "error": {
+      "offset": 23,
+      "length": 5,
+      "message": "rex: the repetition's upper bound is below its lower bound"
+    }
+  },
+  {
+    "name": "rex-counted-repetition-nested",
+    "spl": "| rex field=raw \"(?<a>(?:x{3}y){3})\"",
+    "error": {
+      "offset": 22,
+      "length": 12,
+      "message": "rex: a counted repetition inside another counted repetition is not allowed"
+    }
+  },
+  {
+    "name": "rex-group-name-twice",
+    "spl": "| rex field=raw \"(?<a>x)(?<a>y)\"",
+    "error": {
+      "offset": 27,
+      "length": 1,
+      "message": "rex: the group name 'a' is used twice"
+    }
+  },
+  {
+    "name": "rex-group-name-used-by-an-earlier-rex",
+    "spl": "| rex field=raw \"(?<a>x)\" | rex field=raw \"(?<A>y)\"",
+    "error": {
+      "offset": 46,
+      "length": 1,
+      "message": "the group name 'A' is used by an earlier rex"
+    }
+  },
+  {
+    "name": "rex-group-name-is-a-field",
+    "spl": "| rex field=raw \"(?<host>\\S+)\"",
+    "error": {
+      "offset": 20,
+      "length": 4,
+      "message": "'host' is a field already (host.name): give the group another name"
+    }
+  },
+  {
+    "name": "rex-group-name-is-a-field-alias",
+    "spl": "| rex field=raw \"(?<src_ip>\\S+)\"",
+    "error": {
+      "offset": 20,
+      "length": 6,
+      "message": "'src_ip' is a field already (source.ip): give the group another name"
+    }
+  },
+  {
+    "name": "rex-group-name-starts-with-a-digit",
+    "spl": "| rex field=raw \"(?<9a>x)\"",
+    "error": {
+      "offset": 20,
+      "length": 2,
+      "message": "rex: '9a' is not a group name: use letters, digits and '_', starting with a letter or '_', at most 64 characters"
+    }
+  },
+  {
+    "name": "rex-group-name-not-closed",
+    "spl": "| rex field=raw \"(?<a x)\"",
+    "error": {
+      "offset": 17,
+      "length": 7,
+      "message": "rex: a group name needs a closing '>'"
+    }
+  },
+  {
+    "name": "rex-trailing-backslash",
+    "spl": "| rex field=raw \"(?<a>x)\\\\\"",
+    "error": {
+      "offset": 24,
+      "length": 2,
+      "message": "rex: a backslash at the end of the pattern escapes nothing"
+    }
+  },
+  {
+    "name": "rex-empty-pattern",
+    "spl": "| rex field=raw \"\"",
+    "error": {
+      "offset": 17,
+      "length": 1,
+      "message": "rex: the pattern is empty"
+    }
+  },
+  {
+    "name": "rex-without-field",
+    "spl": "| rex \"(?<a>x)\"",
+    "error": {
+      "offset": 2,
+      "length": 3,
+      "message": "rex: field=<field> is required before the pattern (field=raw for the whole event)"
+    }
+  },
+  {
+    "name": "rex-without-pattern",
+    "spl": "| rex field=raw",
+    "error": {
+      "offset": 2,
+      "length": 3,
+      "message": "rex: expected rex field=<field> \"<pattern with (?<name>...) groups>\""
+    }
+  },
+  {
+    "name": "rex-field-twice",
+    "spl": "| rex field=raw field=message \"(?<a>x)\"",
+    "error": {
+      "offset": 16,
+      "length": 5,
+      "message": "rex: field= given twice"
+    }
+  },
+  {
+    "name": "rex-on-a-number",
+    "spl": "| rex field=status \"(?<a>\\d)\"",
+    "error": {
+      "offset": 12,
+      "length": 6,
+      "message": "rex reads text: http.response.status_code is a number"
+    }
+  },
+  {
+    "name": "rex-on-an-address",
+    "spl": "| rex field=src_ip \"(?<a>\\d+)\"",
+    "error": {
+      "offset": 12,
+      "length": 6,
+      "message": "rex reads text: source.ip is an address"
+    }
+  },
+  {
+    "name": "rex-max-match",
+    "spl": "| rex field=raw max_match=3 \"(?<a>x)\"",
+    "error": {
+      "offset": 16,
+      "length": 11,
+      "message": "not supported in v1: rex max_match= (only rex field=<field> \"<pattern with (?<name>...) groups>\")"
+    }
+  },
+  {
+    "name": "rex-mode-sed",
+    "spl": "| rex field=raw mode=sed \"s/x/y/\"",
+    "error": {
+      "offset": 16,
+      "length": 8,
+      "message": "not supported in v1: rex mode= (only rex field=<field> \"<pattern with (?<name>...) groups>\")"
+    }
+  },
+  {
+    "name": "rex-after-stats",
+    "spl": "| stats count by host | rex field=host \"(?<a>x)\"",
+    "error": {
+      "offset": 24,
+      "length": 24,
+      "message": "rex must come before stats"
+    }
+  },
+  {
+    "name": "rex-five-in-one-query",
+    "spl": "| rex field=raw \"(?<a>x)\" | rex field=raw \"(?<b>x)\" | rex field=raw \"(?<c>x)\" | rex field=raw \"(?<d>x)\" | rex field=raw \"(?<e>x)\"",
+    "error": {
+      "offset": 106,
+      "length": 23,
+      "message": "more than 4 rex in one query"
+    }
+  },
+  {
+    "name": "rex-error-offset-after-an-escaped-quote",
+    "spl": "| rex field=raw \"\\\"(?<a>x)\\\" (?=y)\"",
+    "error": {
+      "offset": 29,
+      "length": 3,
+      "message": "rex: lookahead is not RE2 syntax"
+    }
+  },
+  {
+    "name": "rex-sixteen-groups",
+    "spl": "| rex field=raw \"(?<g0>x)(?<g1>x)(?<g2>x)(?<g3>x)(?<g4>x)(?<g5>x)(?<g6>x)(?<g7>x)(?<g8>x)(?<g9>x)(?<g10>x)(?<g11>x)(?<g12>x)(?<g13>x)(?<g14>x)(?<g15>x)\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0`, extractGroups(raw, {p0:String})[2] AS `c1`, extractGroups(raw, {p0:String})[3] AS `c2`, extractGroups(raw, {p0:String})[4] AS `c3`, extractGroups(raw, {p0:String})[5] AS `c4`, extractGroups(raw, {p0:String})[6] AS `c5`, extractGroups(raw, {p0:String})[7] AS `c6`, extractGroups(raw, {p0:String})[8] AS `c7`, extractGroups(raw, {p0:String})[9] AS `c8`, extractGroups(raw, {p0:String})[10] AS `c9`, extractGroups(raw, {p0:String})[11] AS `c10`, extractGroups(raw, {p0:String})[12] AS `c11`, extractGroups(raw, {p0:String})[13] AS `c12`, extractGroups(raw, {p0:String})[14] AS `c13`, extractGroups(raw, {p0:String})[15] AS `c14`, extractGroups(raw, {p0:String})[16] AS `c15` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?<g0>x)(?<g1>x)(?<g2>x)(?<g3>x)(?<g4>x)(?<g5>x)(?<g6>x)(?<g7>x)(?<g8>x)(?<g9>x)(?<g10>x)(?<g11>x)(?<g12>x)(?<g13>x)(?<g14>x)(?<g15>x)",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "g0",
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "g9",
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15"
+      ]
+    }
+  },
+  {
+    "name": "rex-seventeen-groups",
+    "spl": "| rex field=raw \"(?<g0>x)(?<g1>x)(?<g2>x)(?<g3>x)(?<g4>x)(?<g5>x)(?<g6>x)(?<g7>x)(?<g8>x)(?<g9>x)(?<g10>x)(?<g11>x)(?<g12>x)(?<g13>x)(?<g14>x)(?<g15>x)(y)\"",
+    "error": {
+      "offset": 151,
+      "length": 1,
+      "message": "rex: more than 16 capture groups: make the ones you do not need non-capturing, (?:...)"
+    }
+  },
+  {
+    "name": "rex-pattern-of-1000-bytes",
+    "spl": "| rex field=raw \"(?<a>x)yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?<a>x)yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "a"
+      ]
+    }
+  },
+  {
+    "name": "rex-pattern-of-1001-bytes",
+    "spl": "| rex field=raw \"(?<a>x)yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"",
+    "error": {
+      "offset": 17,
+      "length": 1001,
+      "message": "rex: the pattern is longer than 1000 bytes"
+    }
+  },
+  {
+    "name": "rex-pattern-of-1001-bytes-in-fewer-characters",
+    "spl": "| rex field=raw \"(?<a>x)ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\"",
+    "error": {
+      "offset": 17,
+      "length": 504,
+      "message": "rex: the pattern is longer than 1000 bytes"
+    }
+  },
+  {
+    "name": "rex-nested-ten-deep",
+    "spl": "| rex field=raw \"(?:(?:(?:(?:(?:(?:(?:(?:(?:(?<a>x))))))))))\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?:(?:(?:(?:(?:(?:(?:(?:(?:(?<a>x))))))))))",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "a"
+      ]
+    }
+  },
+  {
+    "name": "rex-nested-eleven-deep",
+    "spl": "| rex field=raw \"(?:(?:(?:(?:(?:(?:(?:(?:(?:(?:(?<a>x)))))))))))\"",
+    "error": {
+      "offset": 47,
+      "length": 1,
+      "message": "rex: groups are nested more than 10 deep"
+    }
+  }
+]

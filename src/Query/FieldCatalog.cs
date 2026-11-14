@@ -28,6 +28,9 @@ public enum FieldType
 
     /// <summary>An extras key: <c>extras[key]</c>, string compare, unindexed.</summary>
     Extra,
+
+    /// <summary>A Float64 the query computes (an average, a sum over an extras key). Never a catalog type.</summary>
+    Real,
 }
 
 /// <summary>One catalog entry. <see cref="Column"/> is the <c>events_v</c> column, or null for an extras-backed field (<see cref="ExtraKey"/>).</summary>
@@ -35,6 +38,12 @@ public sealed record FieldDef(string Name, string? Column, string? ExtraKey, Fie
 {
     /// <summary>True for a field the catalog does not list: it resolves to <c>extras[name]</c>.</summary>
     public bool IsUnknown { get; init; }
+
+    /// <summary>
+    /// For an integer column: 0 is what a source that does not supply the field stores, so 0 reads as "no value"
+    /// (YAML <c>zero_is_absent: true</c>). Without it every stored number is a value, 0 included.
+    /// </summary>
+    public bool ZeroIsAbsent { get; init; }
 
     /// <summary>The SQL expression that reads the field from <c>events_v</c> (an extras lookup takes a parameter name for the key).</summary>
     public string Expression(string? keyParameter = null) =>
@@ -131,7 +140,12 @@ public sealed class FieldCatalog
                 throw new InvalidDataException($"field catalog: {e.Name}: extras-backed fields have type extra and column-backed fields do not");
             }
 
-            fields.Add(new FieldDef(e.Name, hasColumn ? e.Column : null, hasExtra ? e.Extra : null, type, e.Description ?? "", [.. e.Aliases ?? []]));
+            if (e.ZeroIsAbsent && type != FieldType.Number)
+            {
+                throw new InvalidDataException($"field catalog: {e.Name}: zero_is_absent applies to int fields only");
+            }
+
+            fields.Add(new FieldDef(e.Name, hasColumn ? e.Column : null, hasExtra ? e.Extra : null, type, e.Description ?? "", [.. e.Aliases ?? []]) { ZeroIsAbsent = e.ZeroIsAbsent });
         }
 
         return new FieldCatalog(fields);
@@ -173,6 +187,8 @@ public sealed class FieldCatalog
         public string? Type { get; set; }
 
         public string? Description { get; set; }
+
+        public bool ZeroIsAbsent { get; set; }
 
         public List<string>? Aliases { get; set; }
     }
