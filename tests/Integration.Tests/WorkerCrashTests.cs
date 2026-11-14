@@ -1,7 +1,6 @@
 using Urlog.Bench.Fixtures;
 using Urlog.Core.Audit;
 using Urlog.Core.Metadata;
-using Microsoft.Data.Sqlite;
 
 namespace Urlog.Integration.Tests;
 
@@ -20,8 +19,6 @@ namespace Urlog.Integration.Tests;
 /// </summary>
 public sealed class WorkerCrashTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
 {
-    private const string CommitWaiting = "commit is waiting for the metadata lock";
-
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
@@ -36,48 +33,50 @@ public sealed class WorkerCrashTests(ClickHouseFixture ch, ITestOutputHelper out
         var @case = await h.AddCaseAsync("crash " + point);
         var (file, job) = await h.AddFileAsync(@case.Id, fixture.Path, fixture.Sha256);
 
+        // The worker is killed from outside at a moment the test picks by what the job row shows. So that the
+        // worker cannot be past that moment when the test looks, one write of its own is held from before it
+        // starts (PausePoint): the first progress write that would make the wanted state untrue, or the commit.
+        var lines = fixture.Lines.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var when = point switch
+        {
+            // While reading: no acknowledged row is ever recorded.
+            "reading" => "NEW.rows > 0",
+            // Between acknowledgements: the last row is never recorded, and neither is the commit.
+            "inserting" => $"NEW.rows >= {lines} OR NEW.state = 'done'",
+            // Every row acknowledged and the hash compared: the commit itself.
+            _ => "NEW.state = 'done' AND OLD.state = 'parsing'",
+        };
+        var pause = await PausePoint.ArmAsync(h.Store.Path, "jobs", when, Ct);
         var first = h.StartWorker("--progress-interval", "50", "--commit-timeout", "300");
         Job seen;
         switch (point)
         {
             case "reading":
-                await WorkerHarness.EventuallyAsync(async () => (await h.JobAsync(job.Id)).ChunksRead >= 1, "the first chunk read", pollMilliseconds: 5);
+                await WorkerHarness.EventuallyAsync(async () => (await h.JobAsync(job.Id)).ChunksRead >= 1 || first.Process.HasExited, "the first chunk read", pollMilliseconds: 5);
                 seen = await h.JobAsync(job.Id);
+                Assert.False(first.Process.HasExited, "the worker ended before the kill: " + first.Output);
                 await first.KillAsync();
                 Assert.True(seen.Rows == 0 && seen.ChunksRead < chunks, $"the kill was meant to land while reading: {seen.ChunksRead} of {chunks} chunks read, {seen.Rows} rows acknowledged");
                 break;
 
             case "inserting":
-                await WorkerHarness.EventuallyAsync(async () => (await h.JobAsync(job.Id)).Rows > 0, "the first acknowledged INSERT", pollMilliseconds: 5);
+                await WorkerHarness.EventuallyAsync(async () => (await h.JobAsync(job.Id)).Rows > 0 || first.Process.HasExited, "the first acknowledged INSERT", pollMilliseconds: 5);
                 seen = await h.JobAsync(job.Id);
+                Assert.False(first.Process.HasExited, "the worker ended before the kill: " + first.Output);
                 await first.KillAsync();
                 Assert.True(seen.Rows > 0 && seen.Rows < fixture.Lines, $"the kill was meant to land between acknowledgements: {seen.Rows} of {fixture.Lines} rows acknowledged");
                 break;
 
             default:
-                await WorkerHarness.EventuallyAsync(async () => (await h.JobAsync(job.Id)).ChunksRead >= chunks, "the last chunk read", pollMilliseconds: 5);
-                await using (var blocker = new SqliteConnection(MetadataStore.ConnectionString(h.Store.Path)))
-                {
-                    await blocker.OpenAsync(Ct);
-                    await using (var begin = blocker.CreateCommand())
-                    {
-                        begin.CommandText = "BEGIN IMMEDIATE";
-                        await begin.ExecuteNonQueryAsync(Ct);
-                    }
-
-                    // The worker cannot commit now. It says so once every INSERT is acknowledged and the hash agrees.
-                    await WorkerHarness.EventuallyAsync(() => Task.FromResult(first.Printed(CommitWaiting) || first.Process.HasExited), "the worker waiting in its commit", seconds: 280);
-                    Assert.False(first.Process.HasExited, "the worker ended before its commit: " + first.Output);
-                    Assert.Equal(fixture.Lines, await h.StoredRowsAsync(@case.Id)); // every row is in the table
-                    await first.KillAsync();
-                    await using var rollback = blocker.CreateCommand();
-                    rollback.CommandText = "ROLLBACK";
-                    await rollback.ExecuteNonQueryAsync(Ct);
-                }
-
+                // The commit is written once every INSERT is acknowledged and the hash agrees, and it is held.
+                await pause.HeldAsync(first.Process, "its commit", Ct);
+                Assert.Equal(fixture.Lines, await h.StoredRowsAsync(@case.Id)); // every row is in the table
                 seen = await h.JobAsync(job.Id);
+                await first.KillAsync();
                 break;
         }
+
+        await pause.DisarmAsync(Ct);
 
         // What the kill left: the job still in parsing, rows in the table, none of them visible.
         var left = await h.JobAsync(job.Id);

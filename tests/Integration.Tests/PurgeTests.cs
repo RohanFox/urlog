@@ -5,7 +5,6 @@ using Urlog.Core.Audit;
 using Urlog.Core.Ingest;
 using Urlog.Core.Lifecycle;
 using Urlog.Core.Metadata;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Urlog.Integration.Tests;
@@ -133,50 +132,49 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
         // For the kill after the file step the directory holds enough files that removing them takes a while.
         var extra = point == "files-done" ? 4000 : 0;
         var scene = await Scene.BuildAsync(h, extraFiles: extra);
-        var purge = h.StartCli("case", "purge", "--db", h.Store.Path, "--case", Text(scene.Purged), "--evidence-root", scene.Evidence);
-
-        // The command writes its step to the task row before it starts the step. A write lock taken by the test
-        // then holds it at its next write to the metadata file, wherever in the step that is; the kill lands there.
-        await using var blocker = new SqliteConnection(MetadataStore.ConnectionString(h.Store.Path));
-        await blocker.OpenAsync(Ct);
-        async Task LockAsync(string sql)
+        // Where the command is to be killed is one write of its own, held from before the command starts
+        // (PausePoint): what the step did is done, the write is not committed, and the command cannot pass it.
+        var (table, when, held) = point switch
         {
-            await using var command = blocker.CreateCommand();
-            command.CommandText = sql;
-            await command.ExecuteNonQueryAsync(Ct);
+            // The backup is written; the mark is not.
+            "backup" => ("cases", "NEW.state = 'purging' AND OLD.state <> 'purging'", true),
+            // Marked: killed as soon as the mark shows, wherever in the store step that is. The write of the next
+            // step is held so that a slow test finds the command alive.
+            "store-start" => ("case_tasks", "NEW.step = 'files' AND OLD.step IS NOT 'files'", false),
+            // The partitions and the generation rows are gone; the files step has not begun.
+            "store-done" => ("case_tasks", "NEW.step = 'files' AND OLD.step IS NOT 'files'", true),
+            // The case directory is removed; the metadata step has not begun.
+            _ => ("case_tasks", "NEW.step = 'metadata' AND OLD.step IS NOT 'metadata'", true),
+        };
+        var pause = await PausePoint.ArmAsync(h.Store.Path, table, when, Ct);
+        var purge = h.StartCli("case", "purge", "--db", h.Store.Path, "--case", Text(scene.Purged), "--evidence-root", scene.Evidence);
+        if (held)
+        {
+            await pause.HeldAsync(purge.Process, point, Ct);
+        }
+        else
+        {
+            await WorkerHarness.EventuallyAsync(async () => await scene.StateAsync() == CaseState.Purging || purge.Process.HasExited, "the mark", pollMilliseconds: 1);
         }
 
+        // What the step before the held write left.
         switch (point)
         {
             case "backup":
-                await WorkerHarness.EventuallyAsync(async () => (await scene.TaskAsync())?.Step == "backup" || purge.Process.HasExited, "the backup step", pollMilliseconds: 2);
-                await LockAsync("BEGIN IMMEDIATE");
-                await WorkerHarness.EventuallyAsync(() => Task.FromResult(Directory.Exists(scene.Backups) && Directory.EnumerateFiles(scene.Backups, "*.sqlite").Any()), "the backup file written", pollMilliseconds: 5);
-                await Task.Delay(300, Ct);
-                break;
-            case "store-start":
-                await WorkerHarness.EventuallyAsync(async () => await scene.StateAsync() == CaseState.Purging || purge.Process.HasExited, "the mark", pollMilliseconds: 1);
+                Assert.True(Directory.Exists(scene.Backups) && Directory.EnumerateFiles(scene.Backups, "*.sqlite").Any(), "the backup file written");
                 break;
             case "store-done":
-                await WorkerHarness.EventuallyAsync(async () => await scene.StateAsync() == CaseState.Purging || purge.Process.HasExited, "the mark", pollMilliseconds: 1);
-                await LockAsync("BEGIN IMMEDIATE");
-                await WorkerHarness.EventuallyAsync(async () => (await scene.PartitionsAsync(scene.Purged)).Count == 0 && await scene.GenerationRowsAsync() == 0, "the store step finished");
-                await Task.Delay(300, Ct);
+                Assert.Empty(await scene.PartitionsAsync(scene.Purged));
+                Assert.Equal(0, await scene.GenerationRowsAsync());
                 break;
-            default:
-                await WorkerHarness.EventuallyAsync(async () => (await scene.TaskAsync())?.Step is "files" or "metadata" || purge.Process.HasExited, "the files step", pollMilliseconds: 1);
-                await LockAsync("BEGIN IMMEDIATE");
-                await WorkerHarness.EventuallyAsync(() => Task.FromResult(!Directory.Exists(scene.CaseDirectory)), "the case directory removed");
-                await Task.Delay(300, Ct);
+            case "files-done":
+                Assert.False(Directory.Exists(scene.CaseDirectory), "the case directory removed");
                 break;
         }
 
         Assert.False(purge.Process.HasExited, "the command ended before the kill: " + purge.Output);
         await purge.KillAsync();
-        if (point != "store-start")
-        {
-            await LockAsync("ROLLBACK");
-        }
+        await pause.DisarmAsync(Ct);
 
         // What the kill left behind.
         var state = await scene.StateAsync();

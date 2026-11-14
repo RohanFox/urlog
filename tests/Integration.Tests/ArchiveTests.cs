@@ -6,7 +6,6 @@ using Urlog.Core.Audit;
 using Urlog.Core.Ingest;
 using Urlog.Core.Lifecycle;
 using Urlog.Core.Metadata;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Urlog.Integration.Tests;
@@ -164,73 +163,65 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
 
         var archives = CaseFolders.CaseDirectory(scene.Archives, scene.CaseId);
         var staging = Path.Combine(scene.CaseDirectory, LifecycleExecutor.StagingFolder);
-        var command = h.StartCli("case", reimport ? "reimport" : "archive", "--db", h.Store.Path, "--case", scene.Case, "--evidence-root", scene.Evidence, "--archive-root", scene.Archives);
-
-        // The command writes its step to the task row before the step. A write lock taken by the test holds it at
-        // its next write to the metadata file; the kill lands while it waits there.
-        await using var blocker = new SqliteConnection(MetadataStore.ConnectionString(h.Store.Path));
-        await blocker.OpenAsync(Ct);
-        var locked = false;
-        async Task LockAsync()
+        // Where the command is to be killed is one write of its own, and that write is held from before the
+        // command starts (PausePoint): everything the step did is on disk and in the store, the write is not
+        // committed, and the command cannot get past it however long the test takes to look.
+        var (table, when, held) = point switch
         {
-            await using var begin = blocker.CreateCommand();
-            begin.CommandText = "BEGIN IMMEDIATE";
-            await begin.ExecuteNonQueryAsync(Ct);
-            locked = true;
+            // The build is written; the verify step has not begun.
+            "archive-built" => ("case_tasks", "NEW.step = 'verify' AND OLD.step IS NOT 'verify'", true),
+            // Verified and renamed; the commit is not written.
+            "archive-commit" => ("cases", "NEW.state = 'archived' AND OLD.state <> 'archived'", true),
+            // Committed: killed as soon as the commit shows, wherever in the store step that is. The write of the
+            // next step is held so that a slow test finds the command alive.
+            "archive-committed" => ("case_tasks", "NEW.step = 'files' AND OLD.step IS NOT 'files'", false),
+            // The partitions are dropped; the files step has not begun.
+            "archive-store-done" => ("case_tasks", "NEW.step = 'files' AND OLD.step IS NOT 'files'", true),
+            // The files are removed; the completion is not written.
+            "archive-files-done" => ("case_tasks", "NEW.state = 'done' AND OLD.state <> 'done'", true),
+            // Every file is verified into the staging folder; the place step has not begun.
+            "reimport-verified" => ("case_tasks", "NEW.step = 'place' AND OLD.step IS NOT 'place'", true),
+            // Every file is back in place; the parses are not queued.
+            _ => ("case_tasks", "NEW.step = 'parse' AND OLD.step IS NOT 'parse'", true),
+        };
+        var pause = await PausePoint.ArmAsync(h.Store.Path, table, when, Ct);
+        var command = h.StartCli("case", reimport ? "reimport" : "archive", "--db", h.Store.Path, "--case", scene.Case, "--evidence-root", scene.Evidence, "--archive-root", scene.Archives);
+        if (held)
+        {
+            await pause.HeldAsync(command.Process, point, Ct);
+        }
+        else
+        {
+            await WorkerHarness.EventuallyAsync(async () => await scene.StateAsync() == CaseState.Archived || command.Process.HasExited, "the commit", pollMilliseconds: 1);
         }
 
-        Task UntilAsync(Func<Task<bool>> condition, string what) => WorkerHarness.EventuallyAsync(async () => await condition() || command.Process.HasExited, what, pollMilliseconds: 1);
+        // What the step before the held write left, now a fact and not something to wait for.
         switch (point)
         {
             case "archive-built":
-                await UntilAsync(() => Task.FromResult(Directory.Exists(archives) && Directory.EnumerateDirectories(archives, "*.partial").Any()), "the build under way");
-                await LockAsync();
-                await UntilAsync(() => Task.FromResult(Directory.EnumerateFiles(archives, ArchiveManifest.ManifestName, SearchOption.AllDirectories).Any()), "the build written");
+                Assert.True(Directory.EnumerateDirectories(archives, "*.partial").Any(), "the build still under its partial name");
+                Assert.True(Directory.EnumerateFiles(archives, ArchiveManifest.ManifestName, SearchOption.AllDirectories).Any(), "the build written");
                 break;
             case "archive-commit":
-                await UntilAsync(async () => (await scene.TaskAsync())?.Step == ArchiveOperations.StepVerify, "the verify step");
-                await LockAsync();
-                await UntilAsync(() => Task.FromResult(Directory.Exists(archives) && Directory.EnumerateDirectories(archives).Any(d => !d.EndsWith(".partial", StringComparison.Ordinal))), "the archive verified and renamed");
-                break;
-            case "archive-committed":
-                await UntilAsync(async () => await scene.StateAsync() == CaseState.Archived, "the commit");
+                Assert.True(Directory.EnumerateDirectories(archives).Any(d => !d.EndsWith(".partial", StringComparison.Ordinal)), "the archive verified and renamed");
                 break;
             case "archive-store-done":
-                await UntilAsync(async () => await scene.StateAsync() == CaseState.Archived, "the commit");
-                await LockAsync();
-                await UntilAsync(async () => (await scene.PartitionsAsync(scene.CaseId)).Count == 0, "the partitions dropped");
+                Assert.Empty(await scene.PartitionsAsync(scene.CaseId));
                 break;
             case "archive-files-done":
-                await UntilAsync(async () => (await scene.TaskAsync())?.Step == ArchiveOperations.StepFiles, "the files step");
-                await LockAsync();
-                await UntilAsync(() => Task.FromResult(!Directory.EnumerateFileSystemEntries(scene.CaseDirectory).Any()), "the case directory emptied");
+                Assert.Empty(Directory.EnumerateFileSystemEntries(scene.CaseDirectory));
                 break;
             case "reimport-verified":
-                await UntilAsync(async () => (await scene.TaskAsync())?.Step == ArchiveOperations.StepVerify, "the verify step");
-                await LockAsync();
-                await UntilAsync(() => Task.FromResult(Directory.Exists(staging) && Directory.EnumerateFiles(staging).Count() == 6), "every file in the staging folder");
+                Assert.Equal(6, Directory.EnumerateFiles(staging).Count());
                 break;
-            default:
-                await UntilAsync(async () => (await scene.TaskAsync())?.Step == ArchiveOperations.StepPlace, "the place step");
-                await LockAsync();
-                await UntilAsync(() => Task.FromResult(!Directory.Exists(staging) && File.Exists(Path.Combine(scene.CaseDirectory, "big.log"))), "the files placed");
+            case "reimport-placed":
+                Assert.True(!Directory.Exists(staging) && File.Exists(Path.Combine(scene.CaseDirectory, "big.log")), "the files placed");
                 break;
-        }
-
-        if (locked)
-        {
-            // Long enough for the command to reach the write it now waits at.
-            await Task.Delay(400, Ct);
         }
 
         Assert.False(command.Process.HasExited, "the command ended before the kill: " + command.Output);
         await command.KillAsync();
-        if (locked)
-        {
-            await using var rollback = blocker.CreateCommand();
-            rollback.CommandText = "ROLLBACK";
-            await rollback.ExecuteNonQueryAsync(Ct);
-        }
+        await pause.DisarmAsync(Ct);
 
         // What the kill left behind.
         var state = await scene.StateAsync();

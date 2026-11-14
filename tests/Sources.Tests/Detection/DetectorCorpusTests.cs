@@ -132,7 +132,11 @@ public sealed class DetectorCorpusTests
         Assert.Contains("nginx", result.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
+    // The two budgets below are durations, which measure the machine as much as the detector: they are explicit
+    // and run alone from tools/timing-tests.ps1. What the detector answers for every file of the corpus is
+    // asserted in the default run by the tests above, and its cost is a BenchmarkDotNet entry (DetectFormat).
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
     public void TheWholeCorpusIsDetectedInUnderTwoSeconds()
     {
         var rows = Rows().ToList();
@@ -152,7 +156,8 @@ public sealed class DetectorCorpusTests
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"{rows.Count} files took {watch.Elapsed.TotalMilliseconds:F0} ms");
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
     public void NoFileTakesMoreThanFiftyMilliseconds()
     {
         // The budget of the design record: detection runs on every upload and every dropped file. Samples are read

@@ -10,8 +10,24 @@ public sealed class MigrationTests(ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// How long that takes. A duration measures the machine as much as the code, so this is explicit and runs
+    /// alone from tools/timing-tests.ps1; the default run migrates the same file and asserts what it then holds.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
+    public async Task MigratingAnEmptyFileTakesUnderTwoSeconds()
+    {
+        await using var temp = TempDb.CreateUnmigrated();
+        var clock = Stopwatch.StartNew();
+        await temp.Store.MigrateAsync(Ct);
+        clock.Stop();
+        output.WriteLine($"migrate on an empty file: {clock.Elapsed.TotalMilliseconds:F0} ms");
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"migrate took {clock.Elapsed.TotalSeconds:F2} s");
+    }
+
     [Fact]
-    public async Task MigratesAnEmptyFileInUnderTwoSeconds()
+    public async Task MigratesAnEmptyFile()
     {
         await using var temp = TempDb.CreateUnmigrated();
         var clock = Stopwatch.StartNew();
@@ -22,8 +38,6 @@ public sealed class MigrationTests(ITestOutputHelper output)
         {
             await File.AppendAllTextAsync(timingPath + ".timing", $"migrate on an empty file: {clock.Elapsed.TotalMilliseconds:F0} ms\n", Ct);
         }
-
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"migrate took {clock.Elapsed.TotalSeconds:F2} s");
 
         await using var db = temp.Open();
         var pending = await db.Database.GetPendingMigrationsAsync(Ct);

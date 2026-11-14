@@ -6,8 +6,8 @@ namespace Urlog.Core.Tests;
 
 /// <summary>
 /// The hasher is pinned by two outside answers (RFC 9106 §5.3 and the reference implementation's test.c), so a library
-/// bump that moves the output fails here, not at a login. The timing floor: a verify at the pinned
-/// parameters must cost at least 50 ms on the dev box.
+/// bump that moves the output fails here, not at a login. The cost of a verify is held by its parameters, which
+/// are asserted as numbers; the wall-clock check of that cost is explicit and runs from tools/timing-tests.ps1.
 /// </summary>
 public sealed class PasswordHasherTests
 {
@@ -102,6 +102,51 @@ public sealed class PasswordHasherTests
     }
 
     [Fact]
+    public void TheParametersArePinnedAndAStoredHashCarriesThem()
+    {
+        // What makes a verify expensive is these five numbers, so they are asserted as numbers: a weaker setting
+        // fails here on any machine, however fast or busy. 64 MiB, three passes, one lane (design record,
+        // "Passwords"); a 16-byte salt and a 32-byte tag; Argon2id version 0x13.
+        Assert.Equal(65536, PasswordHasher.MemoryKiB);
+        Assert.Equal(3, PasswordHasher.Iterations);
+        Assert.Equal(1, PasswordHasher.Parallelism);
+        Assert.Equal(16, PasswordHasher.SaltBytes);
+        Assert.Equal(32, PasswordHasher.TagBytes);
+        Assert.Equal(19, PasswordHasher.Version);
+        Assert.Equal(new Argon2Parameters(65536, 3, 1), PasswordHasher.Pinned);
+
+        // A hash as it is stored, and the dummy an unknown name is verified against, say the same in their text.
+        foreach (var stored in new[] { PasswordHasher.Hash("correct horse battery staple"), PasswordHasher.DummyHash })
+        {
+            var fields = stored.Split('$');
+            Assert.Equal(["", "argon2id", "v=19", "m=65536,t=3,p=1"], fields[..4]);
+            Assert.Equal(6, fields.Length);
+            Assert.Equal(22, fields[4].Length); // 16 bytes in unpadded base64
+            Assert.Equal(43, fields[5].Length); // 32 bytes
+            Assert.True(PasswordHasher.TryParse(stored, out var parsed));
+            Assert.Equal(PasswordHasher.Pinned, parsed.Parameters);
+            Assert.Equal(16, parsed.Salt.Length);
+            Assert.Equal(32, parsed.Tag.Length);
+            Assert.False(PasswordHasher.NeedsRehash(stored));
+        }
+
+        // Each number on its own: a hash made with less of any of them is due for a re-hash.
+        var salt = Encoding.ASCII.GetBytes("sixteen byte salt")[..16];
+        Assert.True(PasswordHasher.NeedsRehash(PasswordHasher.Hash("x", salt, new Argon2Parameters(32768, 3, 1))));
+        Assert.True(PasswordHasher.NeedsRehash(PasswordHasher.Hash("x", salt, new Argon2Parameters(65536, 2, 1))));
+        Assert.True(PasswordHasher.NeedsRehash(PasswordHasher.Hash("x", salt, new Argon2Parameters(65536, 3, 2))));
+        Assert.True(PasswordHasher.NeedsRehash(PasswordHasher.Hash("x", salt[..8], PasswordHasher.Pinned)));
+        Assert.False(PasswordHasher.NeedsRehash(PasswordHasher.Hash("x", salt, PasswordHasher.Pinned)));
+    }
+
+    /// <summary>
+    /// What those parameters cost on this machine. A duration says as much about the machine and what else it is
+    /// doing as about the code, so this is explicit: the default run and the gates skip it and assert the
+    /// parameters themselves (above). Run it alone on a quiet box with <c>tools/timing-tests.ps1</c> after a change
+    /// to the hasher or its library.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
     public void AVerifyCostsAtLeast50MsAndAtMostASecond()
     {
         var encoded = PasswordHasher.Hash("correct horse battery staple");

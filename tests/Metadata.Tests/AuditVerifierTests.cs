@@ -168,8 +168,24 @@ public sealed class AuditVerifierTests(ITestOutputHelper output)
         Assert.EndsWith(""","ok":false,"reason":"gap","rows":3}""", broken.ToJson(), StringComparison.Ordinal);
     }
 
-    [Fact]
+    /// <summary>
+    /// The budget for that walk. A duration measures the machine as much as the code, so the ceiling is explicit
+    /// and runs alone from tools/timing-tests.ps1; the default run walks the same million rows and asserts the result.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
     public async Task OneMillionRowsVerifyInUnderTenSeconds()
+    {
+        await using var temp = await TempDb.CreateAsync();
+        await AuditRows.AppendAsync(temp.Path, 1_000_000, withTriggers: false);
+        var result = await AuditVerifier.VerifyAsync(temp.Path, Ct);
+        Assert.True(result.Ok, result.Detail);
+        output.WriteLine($"verify-audit over {result.Rows:N0} rows: {result.Elapsed.TotalSeconds:F2} s");
+        Assert.True(result.Elapsed < TimeSpan.FromSeconds(10), $"verify took {result.Elapsed.TotalSeconds:F1} s");
+    }
+
+    [Fact]
+    public async Task OneMillionRowsVerify()
     {
         await using var temp = await TempDb.CreateAsync();
         var fill = Stopwatch.StartNew();
@@ -179,6 +195,5 @@ public sealed class AuditVerifierTests(ITestOutputHelper output)
         Assert.True(result.Ok, result.Detail);
         Assert.Equal(1_000_001, result.Rows);
         await Timing.RecordAsync(output, $"verify-audit over {result.Rows:N0} rows: {result.Elapsed.TotalSeconds:F2} s ({result.Rows / result.Elapsed.TotalSeconds:N0} rows/s); filling them through one prepared INSERT with the triggers off: {fill.Elapsed.TotalSeconds:F2} s");
-        Assert.True(result.Elapsed < TimeSpan.FromSeconds(10), $"verify took {result.Elapsed.TotalSeconds:F1} s");
     }
 }
