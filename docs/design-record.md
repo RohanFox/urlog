@@ -583,9 +583,9 @@ Parser fixtures prove parsing; scenario tests prove the tool finds things. Both 
 
 Scenario results ("finds X in dataset Y in Z seconds") double as demo material and release notes.
 
-## Milestone 0 and cut list
+## Throughput proof and cut list
 
-**Milestone 0 (four weeks)** proves throughput before any UI exists. No auth, web UI or watcher.
+**The throughput proof (four weeks)** comes before any UI exists. No auth, web UI or watcher.
 
 - [x] BenchmarkDotNet harness with fixed-seed 1 GB nginx and 1 GB syslog fixtures, disk read rate reported separately (`DiskRead`: 214 to 505 ms for the 1 GiB fixture on the dev box, depending on the page cache; reported, not gated)
 - [x] C# nginx and syslog tokenisers at ≥ 50 MB/s per core (nginx 1,273 MB/s; syslog 1,390 MB/s, both 0 B/row on the dev box)

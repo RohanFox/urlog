@@ -14,7 +14,7 @@ namespace Urlog.Bench.Benches;
 
 /// <summary>
 /// The real chunk pipeline on the 1 GiB nginx fixture with the stub source: pooled 64 MB chunks from disk, line framing,
-/// up to 8 parser threads, 100k-row <c>EventBatch</c>es. Two sinks, reported side by side (ungated; numbers go in the ticket):
+/// up to 8 parser threads, 100k-row <c>EventBatch</c>es. Two sinks, reported side by side (ungated; the numbers go in the description of the change):
 /// <list type="bullet">
 /// <item><see cref="PipelineNginx1G"/>: batches land in a <see cref="CountingBatchSink"/>. The pipeline's own cost and
 /// allocation; the pipeline's bound is ≤ 50 B/row here.</item>

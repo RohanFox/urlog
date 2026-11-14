@@ -1,4 +1,4 @@
-# Local development stack: ClickHouse only (backend and Caddy join in milestone 1).
+# Local development stack: ClickHouse only (backend and Caddy join later).
 #   docker compose -f compose.dev.yml up -d
 #   docker compose -f compose.dev.yml down -v     # also drops the data volume
 # Ports are bound to 127.0.0.1 only. Credentials here are development stubs, never production values.

@@ -54,7 +54,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         Assert.DoesNotContain("AUTOINCREMENT", all, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("WITHOUT ROWID", all, StringComparison.OrdinalIgnoreCase);
 
-        // The schema listing for the ticket: URLOG_SCHEMA_DUMP=<path> writes it; the output helper always shows it.
+        // The schema listing: URLOG_SCHEMA_DUMP=<path> writes it; the output helper always shows it.
         var listing = string.Join("\n", ddl.Select(d => d.Sql + ";"));
         output.WriteLine(listing);
         if (Environment.GetEnvironmentVariable("URLOG_SCHEMA_DUMP") is { Length: > 0 } path)

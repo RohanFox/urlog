@@ -6,7 +6,7 @@ namespace Urlog.Core.Tests;
 
 /// <summary>
 /// The hasher is pinned by two outside answers (RFC 9106 §5.3 and the reference implementation's test.c), so a library
-/// bump that moves the output fails here, not at a login. The timing floor is the ticket's: a verify at the pinned
+/// bump that moves the output fails here, not at a login. The timing floor: a verify at the pinned
 /// parameters must cost at least 50 ms on the dev box.
 /// </summary>
 public sealed class PasswordHasherTests

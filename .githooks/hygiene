@@ -1,0 +1,44 @@
+#!/bin/sh
+# Hygiene of the lines a commit adds. Usage: hygiene <file with a unified diff>.
+# Called by pre-commit with the staged diff; tools/pre-merge.ps1 tests it against lines it must refuse and
+# lines it must pass.
+#
+# Refused in an added line of any tracked file outside fixtures/:
+#   - a work-item id: a capital T and two digits with no letter or digit on either side (an underscore
+#     does not hide it, so a test name is covered), or a branch name that starts with one (t, two digits,
+#     a hyphen)
+#   - the name of a project stage: an M, a digit and an optional a or b standing alone, or the word for a
+#     stage of a project plan
+# Code, comments, docs and test names describe the thing itself; where the work was planned is not part of it.
+# The T64 codec of the event store is not an id. A removed line is not looked at.
+diff=$1
+if [ -z "$diff" ] || [ ! -f "$diff" ]; then
+  echo "hygiene: usage: hygiene <file with a unified diff>" >&2
+  exit 2
+fi
+
+# The word is put together from two pieces, so that this file passes its own check.
+hits=$(awk '
+  BEGIN { stage = "mile" "stone" }
+  /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
+  /^\+/ {
+    if (file ~ /^fixtures\//) next
+    line = substr($0, 2)
+    probe = line
+    gsub(/T64/, "", probe)
+    lower = tolower(probe)
+    if (probe ~ /(^|[^A-Za-z0-9])T[0-9][0-9]([^A-Za-z0-9]|$)/ ||
+        probe ~ /(^|[^A-Za-z0-9_])t[0-9][0-9]-[a-z]/ ||
+        probe ~ /(^|[^A-Za-z0-9_])M[0-9][ab]([^A-Za-z0-9_]|$)/ ||
+        index(lower, stage) > 0) {
+      print "  " file ": " line
+    }
+  }' "$diff")
+
+if [ -n "$hits" ]; then
+  echo "pre-commit: a work-item id or the name of a project stage in an added line:" >&2
+  printf '%s\n' "$hits" >&2
+  echo "           Describe the thing itself; see .githooks/hygiene for what is refused." >&2
+  exit 1
+fi
+exit 0

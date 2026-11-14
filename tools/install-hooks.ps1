@@ -8,11 +8,11 @@ $root = (& git rev-parse --show-toplevel).Trim()
 if (-not $root) { throw 'not inside a git repository' }
 & git -C $root config core.hooksPath .githooks
 if ($LASTEXITCODE -ne 0) { throw 'git config failed' }
-foreach ($name in 'pre-commit', 'commit-msg') {
+foreach ($name in 'pre-commit', 'commit-msg', 'hygiene') {
   $hook = Join-Path $root ".githooks/$name"
   if (-not (Test-Path $hook)) { throw "missing $hook" }
 }
 Write-Host "hooks installed: core.hooksPath=.githooks"
-Write-Host "  pre-commit -> build -warnaserror, unit tests, Tokenise bench for touched sources"
+Write-Host "  pre-commit -> hygiene of the added lines, build -warnaserror, unit tests, Tokenise bench for touched sources"
 Write-Host "  commit-msg -> subject form and length"
 Write-Host "  full gate  -> powershell -File tools/pre-merge.ps1"

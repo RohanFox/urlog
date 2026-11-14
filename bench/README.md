@@ -85,7 +85,7 @@ single-threaded `Tokenise*` benches are unaffected. `-Slo` writes to `bench/Benc
 so the two runs never mix. The gate reads the unpinned folder; point it at the other one with
 `-ResultsDir bench/BenchmarkDotNet.Artifacts-slo/results` when you want to compare pinned numbers.
 When ClickHouse runs in Docker on the same machine it shares the CPU with the client during `Insert` and
-`EndToEnd`; the affinity mask only constrains the client. Record both numbers in the ticket.
+`EndToEnd`; the affinity mask only constrains the client. Record both numbers in the description of the change.
 
 ## Reading results
 
@@ -146,7 +146,7 @@ ClickHouse in the loop); the 6-writer cells are `ungated` and reported for the c
 | Stage | What runs | Job |
 |---|---|---|
 | `git commit` (pre-commit hook, `.githooks/pre-commit`) | `dotnet build -warnaserror`, unit tests; if the commit touches `src/Sources/<Name>/`, the `*Tokenise<Name>*` benches only, then the gate in `-Partial` mode | `--job short` |
-| `tools/pre-merge.ps1` (run before merging a ticket branch) | build, unit tests, integration tests (Testcontainers), gate self-test, **all** `DiskRead`, `Tokenise*`, `DetectFormat` and `Insert*` benches, gate in full mode | default (full) |
+| `tools/pre-merge.ps1` (run before merging a branch) | build, unit tests, integration tests (Testcontainers), gate self-test, **all** `DiskRead`, `Tokenise*`, `DetectFormat` and `Insert*` benches, gate in full mode | default (full) |
 
 Install the hook once per clone: `powershell -File tools/install-hooks.ps1`. Integration tests, `Insert*`
 and `EndToEnd` need Docker and are never part of pre-commit.
@@ -169,7 +169,7 @@ URLOG_BASELINE_UPDATE=1 git commit -m "bench: baseline for <reason>"
 ```
 
 The pre-commit hook refuses a staged `bench/baseline.json` unless `URLOG_BASELINE_UPDATE=1` is set; that is
-the local stand-in for the "labelled PR" in the ticket. Say in the commit message why the numbers moved.
+the local stand-in for a labelled pull request. Say in the commit message why the numbers moved.
 
 ## Baseline format
 

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Full gate before merging a ticket branch. Requires Docker (integration tests, Insert benches).
+  Full gate before merging a branch. Requires Docker (integration tests, Insert benches).
 
 .DESCRIPTION
   0. quiet precheck: warns when free RAM < 8 GB or when the ClickHouse container is above 20 % CPU before
@@ -25,7 +25,8 @@
      are fewer than the three groups expect.
      A failing project prints the names of its failing tests, and the whole test output of the run is kept
      in test-logs/pre-merge.log (untracked, overwritten by the next run).
-  3. bench/check-regression.ps1 -SelfTest, then the commit-msg hook against accepted and rejected messages
+  3. bench/check-regression.ps1 -SelfTest, then the commit-msg hook against accepted and rejected messages,
+     then the hygiene check of the pre-commit hook against added lines it must refuse and lines it must pass
   4. DiskRead, Tokenise*, DetectFormat and Insert* benches, full BenchmarkDotNet job
   5. bench/check-regression.ps1 in full mode: every baseline entry must be measured and within 10 %
   After recreating the dev database, run one throwaway 1 GiB ingest before this script (bench/README.md,
@@ -56,7 +57,7 @@ function Test-CommitMsgHook {
     @{ ok = $true;  name = 'type: subject';          text = "docs: fix a typo`n" },
     @{ ok = $true;  name = 'comment lines skipped';  text = "# a comment`nfix(core): handle an empty chunk`n# another`n" },
     @{ ok = $true;  name = '72 characters';          text = ($long.Substring(0, 72) + "`n") },
-    @{ ok = $true;  name = 'Merge subject';          text = ("Merge branch 't00-example': " + ('x' * 80) + "`n") },
+    @{ ok = $true;  name = 'Merge subject';          text = ("Merge branch 'topic-example': " + ('x' * 80) + "`n") },
     @{ ok = $true;  name = 'Revert subject';         text = "Revert `"feat(api): add the export endpoint`"`n`nThis reverts commit 0123abc.`n" },
     @{ ok = $true;  name = 'fixup! subject';         text = "fixup! feat(api): add the export endpoint`n" },
     @{ ok = $true;  name = 'squash! subject';        text = "squash! not a conventional subject`n" },
@@ -86,6 +87,54 @@ function Test-CommitMsgHook {
   }
   finally { Remove-Item -Force -ErrorAction SilentlyContinue $file }
   Write-Host ("commit-msg self-test: {0} cases, {1} failed" -f $cases.Count, $failed)
+  if ($failed -gt 0) { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
+}
+
+# The hygiene check of the pre-commit hook (.githooks/hygiene) against added lines it must refuse and added
+# lines it must let through. The ids are put together here from two pieces, so that this file passes the check
+# it tests.
+function Test-HygieneCheck {
+  $t = 'T'; $m = 'M'; $mile = 'mile' + 'stone'
+  $cases = @(
+    @{ ok = $false; name = 'work-item id in a comment';      path = 'src/Core/A.cs';        line = ("    // {0}07 (a): chosen by measurement" -f $t) },
+    @{ ok = $false; name = 'work-item id in a doc';          path = 'docs/design-record.md'; line = ("Decided in {0}19." -f $t) },
+    @{ ok = $false; name = 'work-item id in a test name';    path = 'tests/X/Y.cs';         line = ("    public void {0}14_RequeuesTheJob()" -f $t) },
+    @{ ok = $false; name = 'id range';                       path = 'docs/a.md';            line = ("({0}09-{0}17)" -f $t) },
+    @{ ok = $false; name = 'id beside the codec';            path = 'src/Core/A.cs';        line = ("// {0}07: {0}64 on the small integers" -f $t) },
+    @{ ok = $false; name = 'branch name with an id';         path = 'tools/a.ps1';          line = ("git merge --squash t{0}-case-lifecycle" -f 19) },
+    @{ ok = $false; name = 'named stage with a letter';      path = 'docs/a.md';            line = ("Planned for {0}1a." -f $m) },
+    @{ ok = $false; name = 'named stage by number';          path = 'compose.dev.yml';      line = ("# joins in {0} 1" -f $mile) },
+    @{ ok = $false; name = 'named stage, capitalised';       path = 'docs/a.md';            line = ("## {0} 0 and cut list" -f ($mile.Substring(0, 1).ToUpper() + $mile.Substring(1))) },
+    @{ ok = $true;  name = 'the codec alone';                path = 'src/Core/A.cs';        line = ("    event_code UInt32 CODEC({0}64, ZSTD(1))," -f $t) },
+    @{ ok = $true;  name = 'ISO timestamp';                  path = 'tests/X/Y.cs';         line = 'var at = "2026-11-14T10:00:00Z";' },
+    @{ ok = $true;  name = 'timestamp format';               path = 'src/Core/A.cs';        line = "ToString(`"yyyyMMdd'T'HHmmss'Z'`")" },
+    @{ ok = $true;  name = 'generic type parameter';         path = 'src/Core/A.cs';        line = 'public static T Parse<T>(string text) where T : struct' },
+    @{ ok = $true;  name = 'longer identifier';              path = 'src/Core/A.cs';        line = 'var INT64 = 1; var UTF16 = 2; var T640 = 3; var XT07 = 4;' },
+    @{ ok = $true;  name = 'megabytes and millions';         path = 'docs/a.md';            line = '1 M rows/s at 64 MiB, 100 MB/s' },
+    @{ ok = $true;  name = 'the analyst''s own ticket';      path = 'docs/a.md';            line = 'record the head outside this machine (case notebook, ticket)' },
+    @{ ok = $true;  name = 'a fixture line is never read';   path = 'fixtures/nginx/sample.log'; line = ("GET /{0}19/{1} HTTP/1.1" -f $t, $mile) },
+    @{ ok = $true;  name = 'a removed line is not an added one'; path = 'src/Core/A.cs';    line = $null; removed = ("    // {0}07 (a): chosen by measurement" -f $t) }
+  )
+  $file = Join-Path ([System.IO.Path]::GetTempPath()) ("urlog-hygiene-{0}.diff" -f $PID)
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  $failed = 0
+  try {
+    foreach ($c in $cases) {
+      $body = if ($null -ne $c.line) { "+" + $c.line } else { "-" + $c.removed }
+      $text = "diff --git a/{0} b/{0}`n--- a/{0}`n+++ b/{0}`n@@ -1,0 +1 @@`n{1}`n" -f $c.path, $body
+      [System.IO.File]::WriteAllText($file, $text, $utf8)
+      $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      & git -c core.hooksPath=.githooks hook run hygiene -- $file 2>$null | Out-Null
+      $accepted = ($LASTEXITCODE -eq 0)
+      $ErrorActionPreference = $old
+      if ($accepted -ne $c.ok) {
+        $failed++
+        Write-Host ("  FAIL {0}: expected {1}" -f $c.name, $(if ($c.ok) { 'accepted' } else { 'refused' }))
+      }
+    }
+  }
+  finally { Remove-Item -Force -ErrorAction SilentlyContinue $file }
+  Write-Host ("hygiene self-test: {0} cases, {1} failed" -f $cases.Count, $failed)
   if ($failed -gt 0) { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
 }
 
@@ -181,6 +230,7 @@ foreach ($p in ($unitProjects + $containerProjects)) {
 Write-Host ("tests: {0} projects run one after another ({1} unit, then Integration.Tests, then Security)" -f $allProjects.Count, $unitProjects.Count)
 Invoke-Step 'gate self-test'               { & powershell -NoProfile -ExecutionPolicy Bypass -File bench/check-regression.ps1 -SelfTest }
 Invoke-Step 'commit-msg hook self-test'    { Test-CommitMsgHook }
+Invoke-Step 'hygiene check self-test'      { Test-HygieneCheck }
 Invoke-Step 'bench: DiskRead + Tokenise* + DetectFormat + Insert* (full job)' {
   if (Test-Path 'bench/BenchmarkDotNet.Artifacts/results') { Remove-Item -Recurse -Force 'bench/BenchmarkDotNet.Artifacts/results' }
   dotnet run -c Release --project bench --no-build -- --filter '*DiskRead*' '*Tokenise*' '*DetectFormat*' '*Insert*'

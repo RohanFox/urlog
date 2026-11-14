@@ -277,7 +277,7 @@ public sealed class AuditChainTests(ITestOutputHelper output)
     }
 }
 
-/// <summary>The numbers the ticket quotes: always on the output helper; appended to the file URLOG_AUDIT_TIMING names when set.</summary>
+/// <summary>The timing figures: always on the output helper; appended to the file URLOG_AUDIT_TIMING names when set.</summary>
 internal static class Timing
 {
     public static async Task RecordAsync(ITestOutputHelper output, string line)

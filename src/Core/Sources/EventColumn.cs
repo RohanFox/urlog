@@ -94,7 +94,7 @@ public static class EventColumns
         "String", "String", "LowCardinality(String)", "UInt32",
     ];
 
-    // T07 (a): ZSTD(1) on every String, IPv6 and the Map; Delta on file_offset; T64 on the small integers; ts keeps Delta.
+    // From the per-column measurement: ZSTD(1) on every String, IPv6 and the Map; Delta on file_offset; T64 on the small integers; ts keeps Delta.
     private static readonly string[] Codecs =
     [
         "", "", "", "CODEC(Delta, ZSTD(1))", "", "CODEC(Delta, ZSTD)", "", "", "",

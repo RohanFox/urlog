@@ -147,7 +147,7 @@ function Compare-Benchmarks($baseline, $results, [double]$tol, [bool]$partial) {
     $nowVal = $r.meanNs
     if ($stat -eq 'min') { $nowVal = $r.minNs }
     if (Test-Ungated $name $ungated) {
-      # Reported, never gated: EndToEnd is run by hand and its numbers go in the ticket, not the baseline.
+      # Reported, never gated: EndToEnd is run by hand and its numbers go in the description of the change, not the baseline.
       $rows.Add([pscustomobject]@{ Bench = $name; Stat = $stat; Baseline = '-'; Now = ('{0:N1} ns' -f $nowVal); Delta = '-'; Alloc = (Format-Alloc $r.allocatedBytes); Status = 'ungated' })
       continue
     }

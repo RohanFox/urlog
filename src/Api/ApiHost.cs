@@ -158,7 +158,7 @@ public static class ApiHost
         app.UseMiddleware<StoreGateMiddleware>();
         if (Directory.Exists(app.Environment.WebRootPath))
         {
-            // web/ builds into wwwroot (milestone 2); until it exists there is nothing to serve and nothing to warn about.
+            // web/ builds into wwwroot; until it exists there is nothing to serve and nothing to warn about.
             app.UseStaticFiles();
         }
 
@@ -179,7 +179,7 @@ public static class ApiHost
         CaseEndpoints.Map(api);
         AdminCaseEndpoints.Map(api);
 
-        // The SPA placeholder: web/ builds into wwwroot (milestone 2); until then there is nothing to fall back to.
+        // The SPA placeholder: web/ builds into wwwroot; until then there is nothing to fall back to.
         if (File.Exists(Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html")))
         {
             app.MapFallbackToFile("index.html").AllowAnonymous();

@@ -22,7 +22,15 @@ if printf '%s\n' "$staged" | grep -qx 'bench/baseline.json'; then
   echo "pre-commit: baseline update allowed by URLOG_BASELINE_UPDATE=1"
 fi
 
-# 2. Build with warnings as errors and run the unit tests when anything buildable changed.
+# 2. No work-item id and no name of a project stage in what this commit adds (.githooks/hygiene).
+diff=$(git rev-parse --git-path urlog-hygiene.diff)
+git diff --cached -U0 --no-color --diff-filter=ACMR > "$diff"
+status=0
+sh .githooks/hygiene "$diff" || status=$?
+rm -f "$diff"
+[ "$status" -eq 0 ] || exit "$status"
+
+# 3. Build with warnings as errors and run the unit tests when anything buildable changed.
 if printf '%s\n' "$staged" | grep -Eq '\.(cs|csproj|props|targets|sln|slnx|editorconfig|resx)$|^global\.json$|^Directory\.'; then
   echo "pre-commit: dotnet build -warnaserror"
   dotnet build urlog.sln -warnaserror --nologo -v quiet
@@ -53,7 +61,7 @@ if printf '%s\n' "$staged" | grep -Eq '\.(cs|csproj|props|targets|sln|slnx|edito
   rm -f test-logs/step.tmp
 fi
 
-# 3. A touched source plugin runs its own Tokenise benches (short job) against the baseline.
+# 4. A touched source plugin runs its own Tokenise benches (short job) against the baseline.
 sources=$(printf '%s\n' "$staged" | sed -n 's#^src/Sources/\([A-Za-z0-9]*\)/.*#\1#p' | sort -u)
 if [ -n "$sources" ]; then
   if command -v pwsh >/dev/null 2>&1; then ps=pwsh; elif command -v powershell >/dev/null 2>&1; then ps=powershell; else
