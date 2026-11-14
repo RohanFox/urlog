@@ -46,7 +46,7 @@ public sealed class StartupReconciler(MetadataStore store, IJobEventStore events
             var committed = await JobOperations.CommittedGenerationAsync(db, job.FileId, cancellationToken).ConfigureAwait(false);
             await events.DeleteFileGenerationsExceptAsync((ulong)job.CaseId, (ulong)job.FileId, (uint)committed, cancellationToken).ConfigureAwait(false);
             var reason = $"queued again after an unclean stop of worker '{job.Worker}' during attempt {job.Attempt} (generation {job.Generation}); the attempt's rows were removed";
-            var outcome = await JobOperations.RequeueAsync(db, job.Id, reason, countAttempt: true, options.MaxAttempts, store.Clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
+            var outcome = await JobOperations.RequeueAsync(db, job.Id, reason, countAttempt: true, options.MaxAttempts, store.Clock, cancellationToken).ConfigureAwait(false);
             if (outcome == RequeueOutcome.Failed)
             {
                 failed++;

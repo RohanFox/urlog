@@ -44,7 +44,7 @@ internal static class ExpandCommand
         await using var db = store.CreateDbContext();
         try
         {
-            var job = await JobOperations.RequestExpandRerunAsync(db, store.Audit, new AuditActor(Environment.UserName), fileId, limits.ToJson(), limits.ToDetails(), store.Clock.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false);
+            var job = await JobOperations.RequestExpandRerunAsync(db, store.Audit, new AuditActor(Environment.UserName), fileId, limits.ToJson(), limits.ToDetails(), store.Clock, ct).ConfigureAwait(false);
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"queued    job {job.Id}: expand of file {fileId} with depth {limits.MaxDepth}, ratio {limits.MaxRatio}:1, total {limits.MaxTotalBytes:N0} bytes, {limits.MaxMembers:N0} members"));
         }

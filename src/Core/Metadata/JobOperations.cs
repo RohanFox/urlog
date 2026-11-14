@@ -40,6 +40,11 @@ public enum RequeueOutcome
 /// transaction, so two workers cannot act on the same row, and the ones that touch evidence state (a commit of a
 /// re-parse, a quarantine, a queue pause) write their audit row inside it. A terminal job never changes again: a
 /// retry or a re-parse is a new row.
+/// <para>
+/// Every time written to a job row (<c>created_at</c>, <c>started_at</c>, <c>finished_at</c>) is read from the clock
+/// after the operation holds the write lock. A time read before it would be the time of the call: an operation that
+/// waited for the lock behind another would then carry the earlier time and be recorded as if it had happened first.
+/// </para>
 /// </summary>
 public static class JobOperations
 {
@@ -58,12 +63,24 @@ public static class JobOperations
     /// </summary>
     /// <exception cref="CaseNotActiveException">The case is not <c>active</c>.</exception>
     /// <exception cref="JobRefusedException">No such file, a quarantined or artifact file, or a job already waiting or running.</exception>
-    public static async Task<Job> EnqueueAsync(MetadataDb db, long fileId, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task<Job> EnqueueAsync(MetadataDb db, long fileId, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return EnqueueCoreAsync(db, fileId, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task<Job> EnqueueAsync(MetadataDb db, long fileId, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        EnqueueCoreAsync(db, fileId, () => nowUtc, cancellationToken);
+
+    private static async Task<Job> EnqueueCoreAsync(MetadataDb db, long fileId, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var file = await db.Files.AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken).ConfigureAwait(false)
                 ?? throw new JobRefusedException($"file {fileId} does not exist");
             var @case = await db.Cases.AsNoTracking().FirstAsync(c => c.Id == file.CaseId, cancellationToken).ConfigureAwait(false);
@@ -103,13 +120,25 @@ public static class JobOperations
     /// file has used. Null when nothing can run. The write lock is taken at BEGIN, so two claimers never read the
     /// same row.
     /// </summary>
-    public static async Task<ClaimedJob?> ClaimAsync(MetadataDb db, string worker, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task<ClaimedJob?> ClaimAsync(MetadataDb db, string worker, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return ClaimCoreAsync(db, worker, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task<ClaimedJob?> ClaimAsync(MetadataDb db, string worker, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        ClaimCoreAsync(db, worker, () => nowUtc, cancellationToken);
+
+    private static async Task<ClaimedJob?> ClaimCoreAsync(MetadataDb db, string worker, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentException.ThrowIfNullOrWhiteSpace(worker);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await (
                 from j in db.Jobs
                 join c in db.Cases on j.CaseId equals c.Id
@@ -160,7 +189,17 @@ public static class JobOperations
     /// </para>
     /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
     /// <exception cref="ArgumentException"><paramref name="outcome"/> does not say how the input ended.</exception>
-    public static async Task CompleteAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, JobOutcome outcome, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task CompleteAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, JobOutcome outcome, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return CompleteCoreAsync(db, audit, jobId, worker, counts, outcome, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task CompleteAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, JobOutcome outcome, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        CompleteCoreAsync(db, audit, jobId, worker, counts, outcome, () => nowUtc, cancellationToken);
+
+    private static async Task CompleteCoreAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, JobCounts counts, JobOutcome outcome, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -173,6 +212,8 @@ public static class JobOperations
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
             var file = await db.Files.FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
             await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
@@ -246,13 +287,25 @@ public static class JobOperations
     /// <param name="members">Entries of the container that were looked at, for the job row.</param>
     /// <param name="truncated">The container itself ends before its end structure; null when it is whole.</param>
     /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
-    public static async Task CompleteExpandAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, long members, string summary, Urlog.Core.Pipeline.InputEnd? truncated, string? cachePath, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task CompleteExpandAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, long members, string summary, Urlog.Core.Pipeline.InputEnd? truncated, string? cachePath, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return CompleteExpandCoreAsync(db, audit, jobId, worker, members, summary, truncated, cachePath, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task CompleteExpandAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, long members, string summary, Urlog.Core.Pipeline.InputEnd? truncated, string? cachePath, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        CompleteExpandCoreAsync(db, audit, jobId, worker, members, summary, truncated, cachePath, () => nowUtc, cancellationToken);
+
+    private static async Task CompleteExpandCoreAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, long members, string summary, Urlog.Core.Pipeline.InputEnd? truncated, string? cachePath, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
             if (job.Kind != JobKind.Expand)
             {
@@ -306,7 +359,17 @@ public static class JobOperations
     /// </summary>
     /// <param name="limitsJson">The limits as <c>ArchiveLimits.ToJson</c> writes them.</param>
     /// <exception cref="JobRefusedException">No such file, not a container, not failed, or a job is already waiting or running.</exception>
-    public static async Task<Job> RequestExpandRerunAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long fileId, string limitsJson, IReadOnlyDictionary<string, object?> limits, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task<Job> RequestExpandRerunAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long fileId, string limitsJson, IReadOnlyDictionary<string, object?> limits, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return RequestExpandRerunCoreAsync(db, audit, actor, fileId, limitsJson, limits, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task<Job> RequestExpandRerunAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long fileId, string limitsJson, IReadOnlyDictionary<string, object?> limits, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        RequestExpandRerunCoreAsync(db, audit, actor, fileId, limitsJson, limits, () => nowUtc, cancellationToken);
+
+    private static async Task<Job> RequestExpandRerunCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long fileId, string limitsJson, IReadOnlyDictionary<string, object?> limits, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -315,6 +378,8 @@ public static class JobOperations
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var file = await db.Files.FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken).ConfigureAwait(false)
                 ?? throw new JobRefusedException($"file {fileId} does not exist");
             await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
@@ -361,12 +426,24 @@ public static class JobOperations
     /// The job is <c>failed</c> with <paramref name="message"/> verbatim. A file with nothing committed becomes
     /// <c>failed</c>; a file whose earlier parse is still the visible one stays <c>parsed</c>.
     /// </summary>
-    public static async Task FailAsync(MetadataDb db, long jobId, string worker, string message, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task FailAsync(MetadataDb db, long jobId, string worker, string message, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return FailCoreAsync(db, jobId, worker, message, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task FailAsync(MetadataDb db, long jobId, string worker, string message, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        FailCoreAsync(db, jobId, worker, message, () => nowUtc, cancellationToken);
+
+    private static async Task FailCoreAsync(MetadataDb db, long jobId, string worker, string message, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
             await MarkFailedAsync(db, job, message, nowUtc, cancellationToken).ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -383,7 +460,17 @@ public static class JobOperations
     /// The bytes read do not match the intake record: the job is <c>failed</c>, the file <c>quarantined</c> (never
     /// queued again) and <c>integrity_mismatch</c> is in the chain, in one transaction.
     /// </summary>
-    public static async Task QuarantineAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, IntegrityMismatch mismatch, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task QuarantineAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, IntegrityMismatch mismatch, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return QuarantineCoreAsync(db, audit, jobId, worker, mismatch, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task QuarantineAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, IntegrityMismatch mismatch, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        QuarantineCoreAsync(db, audit, jobId, worker, mismatch, () => nowUtc, cancellationToken);
+
+    private static async Task QuarantineCoreAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, IntegrityMismatch mismatch, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -391,6 +478,8 @@ public static class JobOperations
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
             var file = await db.Files.FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
             await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
@@ -417,12 +506,24 @@ public static class JobOperations
     /// pass (<paramref name="countAttempt"/>) raises the attempt and fails the job at <paramref name="maxAttempts"/>;
     /// a graceful stop leaves the attempt as it is. Any worker may requeue: the caller holds the runner lock.
     /// </summary>
-    public static async Task<RequeueOutcome> RequeueAsync(MetadataDb db, long jobId, string reason, bool countAttempt, int maxAttempts, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task<RequeueOutcome> RequeueAsync(MetadataDb db, long jobId, string reason, bool countAttempt, int maxAttempts, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return RequeueCoreAsync(db, jobId, reason, countAttempt, maxAttempts, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task<RequeueOutcome> RequeueAsync(MetadataDb db, long jobId, string reason, bool countAttempt, int maxAttempts, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        RequeueCoreAsync(db, jobId, reason, countAttempt, maxAttempts, () => nowUtc, cancellationToken);
+
+    private static async Task<RequeueOutcome> RequeueCoreAsync(MetadataDb db, long jobId, string reason, bool countAttempt, int maxAttempts, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await db.Jobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken).ConfigureAwait(false);
             if (job is not null)
             {
@@ -491,12 +592,24 @@ public static class JobOperations
 
     /// <summary>Cancels a queued job. A job that is running or finished is refused.</summary>
     /// <exception cref="JobStateException">The job is not <c>queued</c>.</exception>
-    public static async Task CancelAsync(MetadataDb db, long jobId, DateTime nowUtc, CancellationToken cancellationToken = default)
+    public static Task CancelAsync(MetadataDb db, long jobId, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return CancelCoreAsync(db, jobId, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
+    internal static Task CancelAsync(MetadataDb db, long jobId, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+        CancelCoreAsync(db, jobId, () => nowUtc, cancellationToken);
+
+    private static async Task CancelCoreAsync(MetadataDb db, long jobId, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         try
         {
             await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            // After the lock: the order of the times written is the order of the transactions.
+            var nowUtc = now();
             var job = await db.Jobs.FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken).ConfigureAwait(false) ?? throw new JobStateException($"job {jobId} does not exist");
             await db.Entry(job).ReloadAsync(cancellationToken).ConfigureAwait(false);
             if (job.State != JobState.Queued)

@@ -267,7 +267,7 @@ public sealed class JobRunner
                     try
                     {
                         await using var db = _store.CreateDbContext();
-                        claimed = await JobOperations.ClaimAsync(db, worker, _store.Clock.GetUtcNow().UtcDateTime, token).ConfigureAwait(false);
+                        claimed = await JobOperations.ClaimAsync(db, worker, _store.Clock, token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
@@ -430,7 +430,7 @@ public sealed class JobRunner
             {
                 await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
                 var mismatch = new IntegrityMismatch(sha256, hashedBytes);
-                await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, Now(), CancellationToken.None)).ConfigureAwait(false);
+                await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
                 JobLog.Quarantined(_logger, job.Id, file.Id, file.Sha256, sha256);
                 return;
             }
@@ -449,7 +449,7 @@ public sealed class JobRunner
             var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
             var spansDst = source.Info.NaiveTimestamps && tsMin is { } first && tsMax is { } last && IntakeHints.SpansTransition(zone, first, last);
             var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst);
-            await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, outcome, Now(), CancellationToken.None)).ConfigureAwait(false);
+            await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, outcome, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
             try
             {
                 await _events.CommitFileGenerationsAsync([new(fileId, generation)], CancellationToken.None).ConfigureAwait(false);
@@ -481,7 +481,7 @@ public sealed class JobRunner
             {
                 await _events.DeleteFileGenerationsExceptAsync(caseId, fileId, committed, CancellationToken.None).ConfigureAwait(false);
                 await using var db = _store.CreateDbContext();
-                await JobOperations.RequeueAsync(db, job.Id, "interrupted by a shutdown of the worker; queued again", countAttempt: false, _options.MaxAttempts, Now(), CancellationToken.None).ConfigureAwait(false);
+                await JobOperations.RequeueAsync(db, job.Id, "interrupted by a shutdown of the worker; queued again", countAttempt: false, _options.MaxAttempts, _store.Clock, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception e)
             {
@@ -514,7 +514,7 @@ public sealed class JobRunner
 
             var outcome = RequeueOutcome.NotParsing;
             var reason = $"the event store refused the insert for memory and the job was queued again: {message}";
-            await TerminalAsync(job.Id, async db => outcome = await JobOperations.RequeueAsync(db, job.Id, reason, countAttempt: true, _options.MaxAttempts, Now(), CancellationToken.None).ConfigureAwait(false)).ConfigureAwait(false);
+            await TerminalAsync(job.Id, async db => outcome = await JobOperations.RequeueAsync(db, job.Id, reason, countAttempt: true, _options.MaxAttempts, _store.Clock, CancellationToken.None).ConfigureAwait(false)).ConfigureAwait(false);
             JobLog.MemoryLimit(_logger, job.Id, file.Id, job.Attempt, outcome.ToString(), _options.MemoryLimitBackoff.TotalSeconds);
         }
         catch (Exception e)
@@ -531,7 +531,7 @@ public sealed class JobRunner
                 JobLog.DeleteAfterFailure(_logger, job.Id, deleteFailure.Message);
             }
 
-            await TerminalAsync(job.Id, db => JobOperations.FailAsync(db, job.Id, worker, message, Now(), CancellationToken.None)).ConfigureAwait(false);
+            await TerminalAsync(job.Id, db => JobOperations.FailAsync(db, job.Id, worker, message, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
         }
     }
 
@@ -770,19 +770,19 @@ public sealed class JobRunner
         catch (CacheSpaceException e)
         {
             // Not the archive's fault: the job waits, the watermark holds the queue until there is room.
-            await TerminalAsync(job.Id, db => JobOperations.RequeueAsync(db, job.Id, e.Message, countAttempt: false, _options.MaxAttempts, Now(), CancellationToken.None)).ConfigureAwait(false);
+            await TerminalAsync(job.Id, db => JobOperations.RequeueAsync(db, job.Id, e.Message, countAttempt: false, _options.MaxAttempts, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
             await CheckWatermarkAsync(CancellationToken.None).ConfigureAwait(false);
             return;
         }
 
         if (outcome.Mismatch is { } mismatch)
         {
-            await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, Now(), CancellationToken.None)).ConfigureAwait(false);
+            await TerminalAsync(job.Id, db => JobOperations.QuarantineAsync(db, _store.Audit, job.Id, worker, mismatch, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
             JobLog.Quarantined(_logger, job.Id, file.Id, file.Sha256, mismatch.ActualSha256);
             return;
         }
 
-        await TerminalAsync(job.Id, db => JobOperations.CompleteExpandAsync(db, _store.Audit, job.Id, worker, outcome.Entries, outcome.Summary, outcome.Truncated, outcome.CachePath, Now(), CancellationToken.None)).ConfigureAwait(false);
+        await TerminalAsync(job.Id, db => JobOperations.CompleteExpandAsync(db, _store.Audit, job.Id, worker, outcome.Entries, outcome.Summary, outcome.Truncated, outcome.CachePath, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
     }
 
     private static TimeSpan ZoneOffset(string? zone, DateTime atUtc)
