@@ -49,4 +49,7 @@ public sealed class CaseTask
     public DateTime UpdatedAt { get; set; }
 
     public DateTime? FinishedAt { get; set; }
+
+    /// <summary>For an archive: when its files were last read and compared with the hashes above.</summary>
+    public DateTime? VerifiedAt { get; set; }
 }

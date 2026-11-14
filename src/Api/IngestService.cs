@@ -31,6 +31,7 @@ public sealed class IngestService(MetadataStore store, IJobEventStore events, St
             Watermark = new WatermarkOptions { MinFreeBytes = ingest.Watermark.MinFreeBytes, MinFreePercent = ingest.Watermark.MinFreePercent, Paths = [.. ingest.Watermark.Paths] },
             NightlyBackupAtUtc = ingest.NightlyBackupAtUtc,
             BackupDirectory = string.IsNullOrWhiteSpace(ingest.BackupDirectory) ? null : Rooted(ingest.BackupDirectory),
+            ArchiveRoot = string.IsNullOrWhiteSpace(lifecycle.ArchiveRoot) ? null : Rooted(lifecycle.ArchiveRoot),
             Lifecycle = new Urlog.Core.Lifecycle.LifecycleOptions
             {
                 TwoPersonPurge = lifecycle.TwoPersonPurge,

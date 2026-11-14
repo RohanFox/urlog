@@ -118,14 +118,22 @@ public static class IntegrityOperations
     public static Task<bool> RecordMismatchAsync(MetadataDb db, IAuditWriter audit, long fileId, IntegrityMismatch? actual, TimeProvider clock, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(clock);
-        return RecordMismatchCoreAsync(db, audit, fileId, actual, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+        return RecordMismatchCoreAsync(db, audit, fileId, actual, CheckSweep, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>As the sweep's mismatch, found by another read of the stored bytes; <paramref name="check"/> names it (an archive in the making).</summary>
+    public static Task<bool> RecordMismatchAsync(MetadataDb db, IAuditWriter audit, long fileId, IntegrityMismatch? actual, string check, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentException.ThrowIfNullOrWhiteSpace(check);
+        return RecordMismatchCoreAsync(db, audit, fileId, actual, check, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
     }
 
     /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
     internal static Task<bool> RecordMismatchAsync(MetadataDb db, IAuditWriter audit, long fileId, IntegrityMismatch? actual, DateTime nowUtc, CancellationToken cancellationToken = default) =>
-        RecordMismatchCoreAsync(db, audit, fileId, actual, () => nowUtc, cancellationToken);
+        RecordMismatchCoreAsync(db, audit, fileId, actual, CheckSweep, () => nowUtc, cancellationToken);
 
-    private static async Task<bool> RecordMismatchCoreAsync(MetadataDb db, IAuditWriter audit, long fileId, IntegrityMismatch? actual, Func<DateTime> now, CancellationToken cancellationToken)
+    private static async Task<bool> RecordMismatchCoreAsync(MetadataDb db, IAuditWriter audit, long fileId, IntegrityMismatch? actual, string check, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -151,7 +159,7 @@ public static class IntegrityOperations
             {
                 ["actual_sha256"] = actual?.ActualSha256 ?? Missing,
                 ["actual_size"] = actual?.ActualSize,
-                ["check"] = CheckSweep,
+                ["check"] = check,
                 ["state_before"] = Names.Of(was),
                 ["jobs_cancelled"] = cancelled,
             };

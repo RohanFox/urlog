@@ -23,13 +23,14 @@ internal static class CaseCommand
         urlog case close|reopen|restore --db <metadata.db> --case <id> [--as <user name>]
         urlog case soft-delete --db <metadata.db> --case <id> --confirm-name <case name> [--as <user name>]
         urlog case purge --db <metadata.db> --case <id> [--as <admin name>] [--two-person] [--evidence-root dir] [--cache-root dir]
-        urlog case usage --db <metadata.db> [--case <id>] [--evidence-root dir] [--cache-root dir]
+        urlog case archive|reimport --db <metadata.db> --case <id> --evidence-root dir --archive-root dir [--as <user name>] [--cache-root dir]
+        urlog case usage --db <metadata.db> [--case <id>] [--evidence-root dir] [--cache-root dir] [--archive-root dir]
         """;
 
     public static async Task<int> RunAsync(CliArgs args, CancellationToken ct)
     {
         var verb = args.Positional.Count > 0 ? args.Positional[0].ToLowerInvariant() : "";
-        if (verb is not ("create" or "close" or "reopen" or "soft-delete" or "restore" or "purge" or "usage"))
+        if (verb is not ("create" or "close" or "reopen" or "soft-delete" or "restore" or "purge" or "usage" or "archive" or "reimport"))
         {
             throw new CliException(Usage);
         }
@@ -54,6 +55,12 @@ internal static class CaseCommand
                     return 0;
                 case "purge":
                     await PurgeAsync(args, store, db, connection, now, ct).ConfigureAwait(false);
+                    break;
+                case "archive":
+                    await ArchiveAsync(args, store, db, connection, ct).ConfigureAwait(false);
+                    break;
+                case "reimport":
+                    await ReimportAsync(args, store, db, connection, ct).ConfigureAwait(false);
                     break;
                 default:
                     await MoveAsync(verb, args, store, db, now, ct).ConfigureAwait(false);
@@ -80,7 +87,103 @@ internal static class CaseCommand
     {
         var evidence = args.Option("evidence-root");
         var cache = args.Option("cache-root") ?? (evidence is null ? Path.Combine(Path.GetDirectoryName(store.Path)!, "archive-cache") : null);
-        return new LifecyclePaths(evidence, new MemberStore(evidence, cache).CacheRoot, Environment.GetEnvironmentVariable("URLOG_BACKUP_DIR") ?? SqliteBackup.DefaultDirectory(store.Path));
+        var paths = new LifecyclePaths(evidence, new MemberStore(evidence, cache).CacheRoot, Environment.GetEnvironmentVariable("URLOG_BACKUP_DIR") ?? SqliteBackup.DefaultDirectory(store.Path), args.Option("archive-root") ?? Environment.GetEnvironmentVariable("URLOG_ARCHIVE_ROOT"));
+        try
+        {
+            paths.CheckedArchiveRoot();
+        }
+        catch (ArgumentException e)
+        {
+            throw new CliException(e.Message);
+        }
+
+        return paths;
+    }
+
+    private static async Task ArchiveAsync(CliArgs args, MetadataStore store, MetadataDb db, Connection connection, CancellationToken ct)
+    {
+        var caseId = CaseId(args);
+        var actor = await ActorAsync(args, db, ct).ConfigureAwait(false);
+        var paths = Paths(args, store);
+        if (paths.ArchiveRoot is null || paths.EvidenceRoot is null)
+        {
+            throw new CliException("case archive needs --evidence-root (where the stored files are) and --archive-root (where the archive goes)");
+        }
+
+        var events = new ClickHouseJobEventStore(connection.Ingest, connection.Inserter(1));
+        var executor = new LifecycleExecutor(store, events, Lifecycle(args), paths, NullLogger.Instance);
+        var stray = await executor.StrayEntriesAsync(caseId, ct).ConfigureAwait(false);
+        if (stray.Count > 0)
+        {
+            throw new CliException($"case {caseId} is not archived: its directory holds {stray.Count} entr{(stray.Count == 1 ? "y" : "ies")} that no file record accounts for, and an archive removes the directory:\n  " + string.Join("\n  ", stray.Take(20)));
+        }
+
+        var task = await ArchiveOperations.RequestArchiveAsync(db, actor, caseId, store.Clock, ct).ConfigureAwait(false);
+        using var runnerLock = RunnerLock.TryAcquire(store.Path);
+        if (runnerLock is null)
+        {
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"case {caseId}: archive asked for; the runner that holds {RunnerLock.PathFor(store.Path)} carries it out (it needs the archive root)"));
+            return;
+        }
+
+        try
+        {
+            var flagged = await executor.ArchiveAsync(task, ct).ConfigureAwait(false);
+            var done = await db.CaseTasks.AsNoTracking().FirstAsync(t => t.Id == task.Id, ct).ConfigureAwait(false);
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"case {caseId}: archived to {done.ArchiveDirectory}"));
+            Console.WriteLine($"tar       sha256 {done.TarSha256}");
+            Console.WriteLine($"manifest  sha256 {done.ManifestSha256}");
+            foreach (var flag in flagged)
+            {
+                // Archived as found, and said so: here, in the manifest and in the case_archive row.
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"flagged   file {flag.FileId} '{flag.OriginalName}': recorded {flag.ExpectedSha256} ({flag.ExpectedSize} bytes), found {flag.ActualSha256}{(flag.ActualSize is { } size ? $" ({size} bytes)" : "")}"));
+            }
+        }
+        catch (Exception e) when (e is ArchiveRefusedException or StoreIdentityException or DeletionRefusedException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            var gaveUp = await executor.AfterArchiveFailureAsync(task, e).ConfigureAwait(false);
+            throw new CliException($"case {caseId}: the archive stopped: {e.Message}. {(gaveUp ? "It is given up; the case is as it was and nothing of it was dropped or removed." : "Nothing is dropped or removed before the archive is verified and committed; 'urlog worker --once --archive-root <dir>' or the backend takes it up again.")}");
+        }
+    }
+
+    private static async Task ReimportAsync(CliArgs args, MetadataStore store, MetadataDb db, Connection connection, CancellationToken ct)
+    {
+        var caseId = CaseId(args);
+        var actor = await ActorAsync(args, db, ct).ConfigureAwait(false);
+        var paths = Paths(args, store);
+        if (paths.ArchiveRoot is null || paths.EvidenceRoot is null)
+        {
+            throw new CliException("case reimport needs --archive-root (where the archive is) and --evidence-root (where the files go back)");
+        }
+
+        var task = await ArchiveOperations.RequestReimportAsync(db, actor, caseId, store.Clock, ct).ConfigureAwait(false);
+        using var runnerLock = RunnerLock.TryAcquire(store.Path);
+        if (runnerLock is null)
+        {
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"case {caseId}: re-import asked for; the runner that holds {RunnerLock.PathFor(store.Path)} carries it out"));
+            return;
+        }
+
+        var events = new ClickHouseJobEventStore(connection.Ingest, connection.Inserter(1));
+        var executor = new LifecycleExecutor(store, events, Lifecycle(args), paths, NullLogger.Instance);
+        try
+        {
+            var closed = await executor.ReimportAsync(task, ct).ConfigureAwait(false);
+            var after = await db.CaseTasks.AsNoTracking().FirstAsync(t => t.Id == task.Id, ct).ConfigureAwait(false);
+            if (after.State == CaseTaskState.Failed)
+            {
+                throw new CliException($"case {caseId}: re-import refused, nothing was restored: {after.Message}");
+            }
+
+            Console.WriteLine(closed
+                ? string.Create(CultureInfo.InvariantCulture, $"case {caseId}: re-imported; it had nothing to parse and is closed")
+                : string.Create(CultureInfo.InvariantCulture, $"case {caseId}: every file verified and back in place; the parses are queued. 'urlog worker --once --evidence-root <dir> --archive-root <dir>' or the backend runs them, and the case is closed when the last has ended"));
+        }
+        catch (Exception e) when (e is StoreIdentityException or DeletionRefusedException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            throw new CliException($"case {caseId}: the re-import stopped: {e.Message}. The case stays archived and its archive is untouched; run the command's work again with 'urlog worker --once'.");
+        }
     }
 
     private static async Task CreateAsync(CliArgs args, MetadataStore store, MetadataDb db, DateTime now, CancellationToken ct)
@@ -146,12 +249,12 @@ internal static class CaseCommand
         var ids = args.Option("case") is null
             ? await db.Cases.AsNoTracking().OrderBy(c => c.Id).Select(c => c.Id).ToListAsync(ct).ConfigureAwait(false)
             : [CaseId(args)];
-        Console.WriteLine("case  state         files  recorded_bytes  intake_bytes  upload_bytes  cache_bytes  store_rows  store_bytes  months  name");
+        Console.WriteLine("case  state         files  recorded_bytes  intake_bytes  upload_bytes  cache_bytes  archive_bytes  store_rows  store_bytes  months  name");
         foreach (var id in ids)
         {
             var usage = await CaseAccounting.MeasureAsync(db, events, paths, id, ct).ConfigureAwait(false) ?? throw new CliException($"no case {id}");
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"{usage.CaseId,-5} {Names.Of(usage.State),-13} {usage.Files,-6} {usage.RecordedBytes,-15} {usage.IntakeBytes,-13} {usage.UploadBytes,-13} {usage.CacheBytes,-12} {usage.StoreRows,-11} {usage.StoreBytes,-12} {usage.Partitions.Count,-7} {usage.Name}"));
+                $"{usage.CaseId,-5} {Names.Of(usage.State),-13} {usage.Files,-6} {usage.RecordedBytes,-15} {usage.IntakeBytes,-13} {usage.UploadBytes,-13} {usage.CacheBytes,-12} {usage.ArchiveBytes,-14} {usage.StoreRows,-11} {usage.StoreBytes,-12} {usage.Partitions.Count,-7} {usage.Name}"));
         }
     }
 

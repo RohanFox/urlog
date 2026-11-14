@@ -140,6 +140,39 @@ public sealed class IntegritySweep(MetadataStore store, MemberStore members, str
                 ok += await FlushAsync(verified, cancellationToken).ConfigureAwait(false);
             }
 
+            // Archived cases: what is left of them is the archive, so that is what is read.
+            List<CaseTask> archives;
+            await using (var db = store.CreateDbContext())
+            {
+                archives = await ArchiveOperations.DueArchivesAsync(db, before, cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var archive in archives)
+            {
+                if (!await MayReadAsync().ConfigureAwait(false))
+                {
+                    return Report();
+                }
+
+                var read = BytesRead;
+                var outcome = await CheckArchiveAsync(archive, buffer, MayReadAsync, cancellationToken).ConfigureAwait(false);
+                bytes += BytesRead - read;
+                switch (outcome)
+                {
+                    case null:
+                        return Report();
+                    case ReadOutcome.Read:
+                        ok++;
+                        break;
+                    case ReadOutcome.Unreadable:
+                        unreadable++;
+                        break;
+                    default:
+                        mismatched++;
+                        break;
+                }
+            }
+
             complete = true;
             return Report();
         }
@@ -220,6 +253,12 @@ public sealed class IntegritySweep(MetadataStore store, MemberStore members, str
                 : (ReadOutcome.Unreadable, null, 0, "the directory the stored files live under is not there");
         }
 
+        return await HashAsync(path, file.Id, buffer, mayRead, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>One file read once, start to end, hashed, with the question asked after every <see cref="LifecycleOptions.SweepYieldBytes"/>.</summary>
+    private async Task<(ReadOutcome Outcome, string? Sha256, long Bytes, string? Reason)> HashAsync(string path, long id, byte[] buffer, Func<Task<bool>> mayRead, CancellationToken cancellationToken)
+    {
         try
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -233,7 +272,7 @@ public sealed class IntegritySweep(MetadataStore store, MemberStore members, str
                     break;
                 }
 
-                OnRead?.Invoke(file.Id, read);
+                OnRead?.Invoke(id, read);
                 Interlocked.Add(ref _bytesRead, read);
                 hash.AppendData(buffer, 0, read);
                 total += read;
@@ -254,10 +293,73 @@ public sealed class IntegritySweep(MetadataStore store, MemberStore members, str
         {
             return (ReadOutcome.Missing, null, 0, null);
         }
+        catch (DirectoryNotFoundException)
+        {
+            return (ReadOutcome.Missing, null, 0, null);
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return (ReadOutcome.Unreadable, null, 0, e.Message);
         }
+    }
+
+    /// <summary>
+    /// The archive of an archived case: its tar and its manifest are hashed and compared with what the archive was
+    /// committed with. A difference, or a file that is gone, fails the archive's task with an
+    /// <c>integrity_mismatch</c> on the case. Returns null when the read was stopped.
+    /// </summary>
+    private async Task<ReadOutcome?> CheckArchiveAsync(CaseTask archive, byte[] buffer, Func<Task<bool>> mayRead, CancellationToken cancellationToken)
+    {
+        if (archive.ArchiveDirectory is not { } directory)
+        {
+            return ReadOutcome.Unreadable;
+        }
+
+        var actual = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var differs = false;
+        foreach (var (name, expected, key) in new[] { (ArchiveManifest.ManifestName, archive.ManifestSha256, "actual_manifest_sha256"), (ArchiveManifest.TarName, archive.TarSha256, "actual_tar_sha256") })
+        {
+            var read = await HashAsync(Path.Combine(directory, name), -archive.CaseId, buffer, mayRead, cancellationToken).ConfigureAwait(false);
+            switch (read.Outcome)
+            {
+                case ReadOutcome.Stopped:
+                    return null;
+                case ReadOutcome.Unreadable:
+                    LifecycleLog.SweepUnreadable(logger, 0, archive.CaseId, read.Reason ?? string.Empty);
+                    return ReadOutcome.Unreadable;
+                case ReadOutcome.Missing:
+                    // Gone, unless what is gone is the archive root: that says nothing about this archive.
+                    var root = Path.GetDirectoryName(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(directory)));
+                    if (root is null || !Directory.Exists(root))
+                    {
+                        LifecycleLog.SweepUnreadable(logger, 0, archive.CaseId, "the directory the archives live under is not there");
+                        return ReadOutcome.Unreadable;
+                    }
+
+                    actual[key] = IntegrityOperations.Missing;
+                    differs = true;
+                    break;
+                default:
+                    actual[key] = read.Sha256;
+                    differs |= !string.Equals(read.Sha256, expected, StringComparison.Ordinal);
+                    break;
+            }
+        }
+
+        await BusyRetry.Default.RunAsync(
+            async () =>
+            {
+                await using var db = store.CreateDbContext();
+                await ArchiveOperations.RecordArchiveCheckAsync(db, store.Audit, archive.Id, differs ? actual : null, store.Clock, cancellationToken).ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (differs)
+        {
+            LifecycleLog.SweepArchiveMismatch(logger, archive.CaseId, Path.GetFileName(directory));
+        }
+
+        return differs ? ReadOutcome.Missing : ReadOutcome.Read;
     }
 
     private bool AnchorExists(EvidenceFile file, string path) =>

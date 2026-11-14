@@ -115,7 +115,8 @@ public static class JobOperations
     }
 
     /// <summary>
-    /// Takes the oldest queued job whose case is <c>active</c> and has no job in <c>parsing</c> (one job per case at a
+    /// Takes the oldest queued job whose case is <c>active</c> (or archived with a re-import under way, whose jobs
+    /// these are) and has no job in <c>parsing</c> (one job per case at a
     /// time), marks it <c>parsing</c> for <paramref name="worker"/> and gives it a generation no earlier attempt on the
     /// file has used. Null when nothing can run. The write lock is taken at BEGIN, so two claimers never read the
     /// same row.
@@ -142,7 +143,10 @@ public static class JobOperations
             var job = await (
                 from j in db.Jobs
                 join c in db.Cases on j.CaseId equals c.Id
-                where j.State == JobState.Queued && c.State == CaseState.Active
+                where j.State == JobState.Queued
+                    // An archived case takes no job, except the ones its re-import queued while that is under way.
+                    && (c.State == CaseState.Active
+                        || (c.State == CaseState.Archived && db.CaseTasks.Any(t => t.CaseId == c.Id && t.Kind == CaseTaskKind.Reimport && t.State == CaseTaskState.Committed)))
                     && !db.Jobs.Any(o => o.CaseId == j.CaseId && o.State == JobState.Parsing)
                 orderby j.CreatedAt, j.Id
                 select j).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);

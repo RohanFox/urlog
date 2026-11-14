@@ -29,6 +29,15 @@ public static class AuditActions
     public const string CaseClose = "case_close";
     public const string CaseReopen = "case_reopen";
     public const string CaseArchive = "case_archive";
+
+    /// <summary>The partitions of an archived case are dropped and its stored files removed: the archive is all there is of it.</summary>
+    public const string CaseArchiveComplete = "case_archive_complete";
+
+    /// <summary>An archive was given up: its attempts are used, or its written archive no longer matches what was committed.</summary>
+    public const string CaseArchiveFailed = "case_archive_failed";
+
+    /// <summary>A re-import was refused and nothing was restored: the reason, and the file when one can be named.</summary>
+    public const string CaseReimportRefused = "case_reimport_refused";
     public const string CaseReimport = "case_reimport";
     public const string CaseSoftDelete = "case_soft_delete";
     public const string CaseRestore = "case_restore";
@@ -54,6 +63,9 @@ public static class AuditActions
     /// <summary>An administrator queued the expansion of one archive again with limits of their own; the limits are in the details.</summary>
     public const string FileExpandRerun = "file_expand_rerun";
     public const string FileReparse = "file_reparse";
+
+    /// <summary>A queued job was cancelled by the archive of its case: the job, its kind and the reason. The target is the file.</summary>
+    public const string JobCancelled = "job_cancelled";
     /// <summary>
     /// A parse was committed from a compressed input that ends before its format says it should: both offsets of
     /// the end in the details. Written in the commit's transaction, so no truncated file is visible without it.

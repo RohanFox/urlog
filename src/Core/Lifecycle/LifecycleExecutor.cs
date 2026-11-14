@@ -11,7 +11,39 @@ namespace Urlog.Core.Lifecycle;
 /// <param name="EvidenceRoot">The evidence root; null when files stay where they were found and nothing of them is removed.</param>
 /// <param name="CacheRoot">The root of the seekable copies of containers; null for none.</param>
 /// <param name="BackupDirectory">Where the backup before a purge goes.</param>
-public sealed record LifecyclePaths(string? EvidenceRoot, string? CacheRoot, string BackupDirectory);
+/// <param name="ArchiveRoot">Where archives are written, one directory per case; null when this process archives nothing.</param>
+public sealed record LifecyclePaths(string? EvidenceRoot, string? CacheRoot, string BackupDirectory, string? ArchiveRoot = null)
+{
+    /// <summary>
+    /// The archive root as an absolute path, or null for none.
+    /// </summary>
+    /// <exception cref="ArgumentException">It is the evidence root or the cache root, lies inside one, or contains one: an archive must outlive the removal of what it was made from.</exception>
+    public string? CheckedArchiveRoot()
+    {
+        if (string.IsNullOrWhiteSpace(ArchiveRoot))
+        {
+            return null;
+        }
+
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var archive = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ArchiveRoot));
+        foreach (var (name, other) in new[] { ("evidence root", EvidenceRoot), ("cache root", CacheRoot) })
+        {
+            if (string.IsNullOrWhiteSpace(other))
+            {
+                continue;
+            }
+
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(other));
+            if (string.Equals(archive, root, comparison) || archive.StartsWith(root + Path.DirectorySeparatorChar, comparison) || root.StartsWith(archive + Path.DirectorySeparatorChar, comparison))
+            {
+                throw new ArgumentException($"the archive root '{archive}' and the {name} '{root}' must be apart: neither may be the other or lie inside it", nameof(ArchiveRoot));
+            }
+        }
+
+        return archive;
+    }
+}
 
 /// <summary>
 /// Carries out the lifecycle work that outlasts a transaction (design record, "Consistency", Purge). It runs in
@@ -31,7 +63,7 @@ public sealed record LifecyclePaths(string? EvidenceRoot, string? CacheRoot, str
 /// here: an exception and a killed process leave the same state, and the same resume finishes both.
 /// </para>
 /// </summary>
-public sealed class LifecycleExecutor(MetadataStore store, IJobEventStore events, LifecycleOptions options, LifecyclePaths paths, ILogger logger)
+public sealed partial class LifecycleExecutor(MetadataStore store, IJobEventStore events, LifecycleOptions options, LifecyclePaths paths, ILogger logger)
 {
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
     private readonly Dictionary<long, (int Failures, long NotBefore)> _backoff = [];
@@ -76,6 +108,7 @@ public sealed class LifecycleExecutor(MetadataStore store, IJobEventStore events
             purged += await AttemptAsync(caseId, null, cancellationToken).ConfigureAwait(false) ? 1 : 0;
         }
 
+        await RunArchivesAsync(cancellationToken).ConfigureAwait(false);
         return purged;
     }
 
@@ -83,7 +116,8 @@ public sealed class LifecycleExecutor(MetadataStore store, IJobEventStore events
     public async Task<bool> HasPendingAsync(CancellationToken cancellationToken)
     {
         await using var db = store.CreateDbContext();
-        return await db.CaseTasks.AnyAsync(t => t.Kind == CaseTaskKind.Purge && (t.State == CaseTaskState.Running || t.State == CaseTaskState.Committed), cancellationToken).ConfigureAwait(false)
+        // A re-import whose jobs are running waits for them, not for this executor.
+        return await db.CaseTasks.AnyAsync(t => (t.State == CaseTaskState.Running || t.State == CaseTaskState.Committed) && !(t.Kind == CaseTaskKind.Reimport && t.State == CaseTaskState.Committed), cancellationToken).ConfigureAwait(false)
             || await db.Cases.AnyAsync(c => c.State == CaseState.Purging, cancellationToken).ConfigureAwait(false);
     }
 
@@ -299,8 +333,14 @@ public sealed class LifecycleExecutor(MetadataStore store, IJobEventStore events
 
     private int RemoveCaseDirectories(long caseId)
     {
-        var guard = new GuardedDelete([paths.EvidenceRoot, paths.CacheRoot], BeforeRemoval);
+        var guard = new GuardedDelete([paths.EvidenceRoot, paths.CacheRoot, _archiveRoot], BeforeRemoval);
         var removed = 0;
+        if (_archiveRoot is not null)
+        {
+            // The case's archives go with it: after a purge nothing of the case is left on this machine.
+            removed += guard.RemoveTree(CaseFolders.CaseDirectory(_archiveRoot, caseId));
+        }
+
         if (!string.IsNullOrWhiteSpace(paths.EvidenceRoot))
         {
             // Everything of the case under the evidence root: stored files, .uploads/ and web/. A file recorded
@@ -369,6 +409,9 @@ internal static partial class LifecycleLog
 
     [LoggerMessage(EventId = 215, Level = LogLevel.Information, Message = "integrity sweep: goes on after holding {Seconds:F1} s; {Bytes} bytes read")]
     public static partial void SweepGoesOn(ILogger logger, double seconds, long bytes);
+
+    [LoggerMessage(EventId = 216, Level = LogLevel.Error, Message = "integrity sweep: the archive {Archive} of case {CaseId} is changed or gone; it cannot be re-imported")]
+    public static partial void SweepArchiveMismatch(ILogger logger, long caseId, string archive);
 
     [LoggerMessage(EventId = 213, Level = LogLevel.Warning, Message = "lifecycle work failed: {Reason}")]
     public static partial void Failed(ILogger logger, string reason);

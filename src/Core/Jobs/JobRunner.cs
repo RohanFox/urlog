@@ -87,7 +87,7 @@ public sealed class JobRunner
         }
 
         _watermark = new DiskWatermark(options.Watermark, probe, local);
-        var paths = new LifecyclePaths(options.EvidenceRoot, _members.CacheRoot, options.BackupDirectory ?? SqliteBackup.DefaultDirectory(store.Path));
+        var paths = new LifecyclePaths(options.EvidenceRoot, _members.CacheRoot, options.BackupDirectory ?? SqliteBackup.DefaultDirectory(store.Path), options.ArchiveRoot);
         _lifecycle = new LifecycleExecutor(store, events, options.Lifecycle, paths, _loggers.CreateLogger<LifecycleExecutor>());
         _sweep = new IntegritySweep(store, _members, options.EvidenceRoot, options.Lifecycle, _loggers.CreateLogger<IntegritySweep>());
     }
@@ -154,6 +154,13 @@ public sealed class JobRunner
             await maintenanceStop.CancelAsync().ConfigureAwait(false);
             await maintenance.ConfigureAwait(false);
             await lifecycle.ConfigureAwait(false);
+        }
+
+        if (_options.ExitWhenIdle && !cancellationToken.IsCancellationRequested && Volatile.Read(ref _identityLost) is null)
+        {
+            // A one-shot run does not wait for the next tick: what its last job made possible (a re-import whose
+            // parses have ended) is finished before it leaves.
+            await _lifecycle.RunPendingAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (Volatile.Read(ref _identityLost) is { } lost)

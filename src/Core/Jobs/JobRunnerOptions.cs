@@ -66,6 +66,9 @@ public sealed record JobRunnerOptions
     /// </summary>
     public string? CacheRoot { get; init; }
 
+    /// <summary>Where the archives of archived cases are written, one directory per case; null when this runner archives nothing. Apart from the evidence root and the cache root.</summary>
+    public string? ArchiveRoot { get; init; }
+
     /// <summary>What an archive may expand to; also the ratio and size a single compressed log is held to.</summary>
     public ArchiveLimits Archive { get; init; } = ArchiveLimits.Default;
 
@@ -89,6 +92,8 @@ public sealed record JobRunnerOptions
         Pipeline.Validate();
         Archive.Validate();
         Lifecycle.Validate();
+        // Throws when the archive root is, holds or lies inside the evidence root or the cache root.
+        new Urlog.Core.Lifecycle.LifecyclePaths(EvidenceRoot, CacheRoot, BackupDirectory ?? string.Empty, ArchiveRoot).CheckedArchiveRoot();
         if (MaxConcurrentJobs < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConcurrentJobs), MaxConcurrentJobs, "must be positive");

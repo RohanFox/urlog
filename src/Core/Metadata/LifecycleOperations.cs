@@ -547,7 +547,7 @@ public static class LifecycleOperations
     private static Task<bool> IsOwnerAsync(MetadataDb db, long caseId, long userId, CancellationToken cancellationToken) =>
         db.CaseMembers.AnyAsync(m => m.CaseId == caseId && m.UserId == userId && m.Role == MemberRole.Owner, cancellationToken);
 
-    private static async Task AuthoriseAsync(MetadataDb db, AuditActor actor, CaseRecord @case, string operation, CancellationToken cancellationToken)
+    internal static async Task AuthoriseAsync(MetadataDb db, AuditActor actor, CaseRecord @case, string operation, CancellationToken cancellationToken)
     {
         if (actor.UserId is not { } userId)
         {

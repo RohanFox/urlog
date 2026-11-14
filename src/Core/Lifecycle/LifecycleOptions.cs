@@ -46,6 +46,9 @@ public sealed record LifecycleOptions
     /// <summary>Bytes of one file the sweep reads before it asks again whether a job has started.</summary>
     public int SweepYieldBytes { get; init; } = 16 << 20;
 
+    /// <summary>Bytes kept free on the archive volume on top of the size of the case's stored files, or the archive is not started.</summary>
+    public long ArchiveHeadroomBytes { get; init; } = 1L << 30;
+
     public void Validate()
     {
         if (PurgeAfter < TimeSpan.Zero || Interval <= TimeSpan.Zero)

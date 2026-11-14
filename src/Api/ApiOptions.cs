@@ -116,6 +116,9 @@ public sealed class LifecycleSettings
     /// <summary>Purge soft-deleted cases whose window has passed, as <c>system</c>.</summary>
     public bool ScheduledPurge { get; set; } = true;
 
+    /// <summary>Where archives are written, one directory per case; empty when this deployment archives nothing. Apart from the evidence root.</summary>
+    public string ArchiveRoot { get; set; } = "";
+
     /// <summary>UTC time from which the nightly integrity sweep reads every stored file; null turns it off.</summary>
     public TimeOnly? SweepAtUtc { get; set; } = new TimeOnly(3, 0);
 }

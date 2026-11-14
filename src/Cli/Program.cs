@@ -87,7 +87,7 @@ static void Usage()
         urlog expand --db <metadata.db> --file <id> [--max-depth n] [--max-ratio n] [--max-total-gb n] [--max-members n]
         urlog worker --db <metadata.db> [--once] [--jobs n] [--parallelism n] [--writers n] [--small-box]
                      [--evidence-root dir] [--cache-root dir] [--progress-interval ms] [--commit-timeout s]
-                     [--min-free-gb 20] [--min-free-percent 10] [--two-person] [--no-sweep]
+                     [--min-free-gb 20] [--min-free-percent 10] [--two-person] [--no-sweep] [--archive-root dir]
         urlog query  --case <id> [--from t --to t] [--tz zone] [--now t] [--sql] [--explain] '<spl>'
         urlog bench  query --case <id> [--runs 20] [--cold] '<spl>'
         urlog verify-audit --db <metadata.db> [--head] [--expect <seq>:<hash>] [--backup <file>] [--json]
@@ -99,7 +99,8 @@ static void Usage()
         urlog case close|reopen|restore --db <metadata.db> --case <id> [--as <user name>]
         urlog case soft-delete --db <metadata.db> --case <id> --confirm-name <case name> [--as <user name>]
         urlog case purge --db <metadata.db> --case <id> [--as <admin name>] [--two-person] [--evidence-root dir] [--cache-root dir]
-        urlog case usage --db <metadata.db> [--case <id>] [--evidence-root dir] [--cache-root dir]
+        urlog case archive|reimport --db <metadata.db> --case <id> --evidence-root dir --archive-root dir [--as <user name>]
+        urlog case usage --db <metadata.db> [--case <id>] [--evidence-root dir] [--cache-root dir] [--archive-root dir]
         urlog sweep --db <metadata.db> [--evidence-root dir] [--cache-root dir]
         urlog version
 
@@ -147,6 +148,16 @@ static void Usage()
         operation asks for, and the audit row also names the OS user that ran the command (os_user); without
         it the actor is the OS user. usage prints what each case occupies: recorded and
         stored bytes, unfinished uploads, cache, and rows and bytes in the event store by partition.
+        archive is for a closed case: its stored files go into <archive root>/<case id>/<utc>/evidence.tar.zst with
+        the case's audit trail and a manifest that lists every file with its hash. The archive is read back from
+        disk and compared with the manifest before anything else happens; only then is the case marked archived,
+        its partitions dropped and its directory emptied. A file that was missing or changed is archived as found
+        and listed, with the recorded and the found hash, here, in the manifest and in the audit row. The archive
+        root must be apart from the evidence root and the cache root (URLOG_ARCHIVE_ROOT sets it too). reimport
+        checks the archive against the hashes it was committed with, takes every file out into a staging folder,
+        puts each back under the name its record has (never a name from the archive), and queues the parses; the
+        case is closed when the last has ended. Anything wrong with the archive refuses the whole re-import and
+        restores nothing. A purge removes a case's archives too.
         sweep reads every stored file again and compares it with its intake record: integrity_ok or
         integrity_mismatch in the audit chain per file, and a file that changed or is gone is quarantined (exit 1).
         It needs the runner lock; a runner that is up sweeps nightly by itself and only while no job runs.

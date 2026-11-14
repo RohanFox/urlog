@@ -273,6 +273,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("verified_at");
+
                     b.HasKey("Id")
                         .HasName("pk_case_tasks");
 
