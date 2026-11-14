@@ -6,8 +6,9 @@
 .DESCRIPTION
   0. quiet precheck: warns when free RAM < 8 GB or when the ClickHouse container is above 20 % CPU before
      the benches start, so a noisy run is labelled as such in the output. With -Quiet those warnings stop
-     the run instead (use it when you are about to take a baseline). A running Ubuntu-24.04 WSL distro is an
-     advisory warning only, with or without -Quiet (measured: 5.8 % median difference, not proven at n = 4).
+     the run instead (use it when you are about to take a baseline). A WSL distro that is running but idle
+     is left running: stopping it takes Docker Desktop's link to the distro with it, and the two figures
+     above already say whether the machine is quiet.
      The ClickHouse figure is the median of eight docker stats samples about four seconds apart, and all
      eight are printed. One sample is not representative: an idle server flushes its system log tables
      (asynchronous_metric_log, trace_log, metric_log, part_log) every 7.5 seconds and merges the parts it
@@ -169,24 +170,7 @@ function Get-NoiseWarnings {
   return $warnings
 }
 
-# Advisory only: never changes the label and never stops a -Quiet run. A 1 GiB nginx ingest measured with the
-# distro terminated at a median 5.8 % above the runs with it idle but running; the ranges overlapped, so the effect
-# is not proven at n = 4.
-function Get-Advisories {
-  $notes = New-Object System.Collections.Generic.List[string]
-  try {
-    $list = ((& wsl.exe -l -v 2>$null | Out-String) -replace "`0", '') -split "`r?`n"
-    if (@($list | Where-Object { $_ -match 'Ubuntu-24\.04\s+Running' }).Count -gt 0) {
-      $notes.Add("the Ubuntu-24.04 WSL distro is running and shares the WSL VM with Docker Desktop: 5.8 % median difference measured on the 1 GiB nginx ingest, not proven at n = 4; 'wsl --terminate Ubuntu-24.04' before taking numbers")
-    }
-  }
-  catch { }
-  return $notes
-}
-
 Write-Host "=== quiet precheck"
-$advice = Get-Advisories
-foreach ($a in $advice) { Write-Host ("WARNING (advisory, does not stop the run) {0}" -f $a) }
 $noise = Get-NoiseWarnings
 $label = 'quiet'
 if ($noise.Count -gt 0) {
@@ -239,4 +223,3 @@ Invoke-Step 'regression gate (full)' { & powershell -NoProfile -ExecutionPolicy 
 Write-Host ""
 Write-Host ("pre-merge: OK (run conditions: {0})" -f $label)
 if ($noise.Count -gt 0) { foreach ($w in $noise) { Write-Host ("  noted: {0}" -f $w) } }
-foreach ($a in $advice) { Write-Host ("  advisory: {0}" -f $a) }
