@@ -207,3 +207,15 @@ views carry the definer clause. `RawSqlGateTests`: the table read directly, in a
 CTE named like its view is refused; a join to the view passes and stays case-filtered. `FieldStatsTests`: the view
 asked for a case outside the list returns zero rows by name, by negation, by value, through a subquery and through
 a join; with two cases in the list it shows both; without a list it shows nothing.
+
+## Amendment, 2026-11-18: the stored histogram is a third view
+
+`case_histogram` (migration 0009) holds events per minute and severity for every case, so it is treated as
+`field_stats` is: the query account has no grant on the table and the gate refuses its name. It reads
+`case_histogram_v`, `SQL SECURITY DEFINER`, filtered on `SQL_allowed_cases` and on the committed generation of
+each file by the filter of `events_v`. The query account now holds three grants, all on views.
+
+**What pins it.** `GrantTests`: the three grants, and `system.tables` as the query user lists the three views.
+`StoredHistogramTests`: the view asked for a case outside the list returns zero rows by name, by negation, by
+value, through a subquery and through a join; the table is refused by the gate and, with the gate out of the way,
+by the grant (497); the ingest account, which writes the table, cannot read it.

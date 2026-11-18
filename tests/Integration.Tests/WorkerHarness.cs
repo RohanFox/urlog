@@ -144,6 +144,41 @@ internal sealed class WorkerHarness : IAsyncDisposable
         return result;
     }
 
+    /// <summary>
+    /// The stored histogram of a case against its events, read as the admin account: how many (minute, severity)
+    /// buckets differ between the two over the committed generations, how many events the committed
+    /// buckets hold, and the generations of the given file the table has rows of that no delete has masked.
+    /// </summary>
+    public async Task<(long Differing, long Events, uint[] FileGenerations)> HistogramAsync(long caseId, long fileId = 0)
+    {
+        await using var admin = Admin();
+        var id = caseId.ToString(CultureInfo.InvariantCulture);
+        var committed = Urlog.Core.Ingest.CaseScopedEventsQuery.CommittedGenerations;
+        var differing = Convert.ToInt64(
+            await admin.ExecuteScalarAsync(
+                "SELECT count() FROM "
+                + $"(SELECT {Urlog.Core.Ingest.CaseScopedEventsQuery.HistogramBucket} AS b, severity, count() AS n FROM events WHERE case_id = {id} AND {committed} GROUP BY b, severity) AS e "
+                + $"FULL JOIN (SELECT bucket AS b, severity, sum(events) AS n FROM case_histogram WHERE case_id = {id} AND {committed} GROUP BY b, severity) AS h USING (b, severity) "
+                + "WHERE e.n != h.n",
+                cancellationToken: Ct),
+            CultureInfo.InvariantCulture);
+        var events = Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT sum(events) FROM case_histogram WHERE case_id = {id} AND {committed}", cancellationToken: Ct), CultureInfo.InvariantCulture);
+        var generations = new List<uint>();
+        await foreach (var row in admin.QueryAsync($"SELECT DISTINCT parse_generation FROM case_histogram WHERE case_id = {id} AND file_id = {fileId.ToString(CultureInfo.InvariantCulture)} ORDER BY parse_generation", cancellationToken: Ct))
+        {
+            generations.Add(Convert.ToUInt32(row[0], CultureInfo.InvariantCulture));
+        }
+
+        return (differing, events, [.. generations]);
+    }
+
+    /// <summary>Rows of every generation the case has in the stored histogram.</summary>
+    public async Task<long> HistogramRowsAsync(long caseId)
+    {
+        await using var admin = Admin();
+        return Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT count() FROM case_histogram WHERE case_id = {caseId.ToString(CultureInfo.InvariantCulture)}", cancellationToken: Ct), CultureInfo.InvariantCulture);
+    }
+
     public async Task<uint> MirroredGenerationAsync(long fileId)
     {
         await using var ingest = new ClickHouseTcpClient(_ch.NativeConnectionString(IngestUser, IngestPassword));

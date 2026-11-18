@@ -219,6 +219,7 @@ public sealed partial class LifecycleExecutor
 
         await StoreIdentityGuard.RequireAsync(store.Path, events, cancellationToken).ConfigureAwait(false);
         var dropped = await DropPartitionsAsync((ulong)caseId, cancellationToken).ConfigureAwait(false);
+        await DropHistogramAsync((ulong)caseId, cancellationToken).ConfigureAwait(false);
         await StoreIdentityGuard.RequireAsync(store.Path, events, cancellationToken).ConfigureAwait(false);
         // The generation rows stay: a re-import's parses are numbered above them.
         await events.DeleteCaseFieldStatsAsync((ulong)caseId, cancellationToken).ConfigureAwait(false);

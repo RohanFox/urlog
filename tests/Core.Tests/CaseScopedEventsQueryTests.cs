@@ -88,6 +88,49 @@ public sealed partial class CaseScopedEventsQueryTests
         Assert.ThrowsAny<ArgumentException>(() => CaseScopedEventsQuery.BuildVisible(1, projection, filter, tail, new StatementLimits(1, 1, 1)));
 
     [Fact]
+    public void TheFillOfTheStoredHistogramReadsOneGenerationOfOneFileOfOneCase()
+    {
+        Assert.Equal(
+            "INSERT INTO case_histogram (case_id, file_id, parse_generation, severity, bucket, events) "
+            + "SELECT 31, 412, 3, severity, toStartOfInterval(ts, toIntervalMinute(1)) AS bucket, count() AS events "
+            + "FROM events WHERE case_id = 31 AND (file_id = 412 AND parse_generation = 3 "
+            + "AND ts >= fromUnixTimestamp64Milli(toInt64(5), 'UTC') AND ts <= fromUnixTimestamp64Milli(toInt64(1772439327120), 'UTC')) "
+            + "GROUP BY severity, bucket",
+            CaseScopedEventsQuery.BuildHistogramFill(31, 412, 3, 5, 1_772_439_327_120));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(0, 412, 3, 0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(31, 0, 3, 0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(31, 412, 0, 0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(31, 412, 3, 2, 1));
+
+        // The bucket function returns a DateTime: a parse with a time before 1970 or past 2106-02-07 06:28:15 has no stored histogram.
+        Assert.True(CaseScopedEventsQuery.HistogramHolds(0, CaseScopedEventsQuery.HistogramLastMilliseconds));
+        Assert.Equal(CaseScopedEventsQuery.HistogramLastMilliseconds, new DateTimeOffset(2106, 2, 7, 6, 28, 15, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        Assert.False(CaseScopedEventsQuery.HistogramHolds(-1, 1));
+        Assert.False(CaseScopedEventsQuery.HistogramHolds(0, CaseScopedEventsQuery.HistogramLastMilliseconds + 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(31, 412, 3, -1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.BuildHistogramFill(31, 412, 3, 0, CaseScopedEventsQuery.HistogramLastMilliseconds + 1));
+    }
+
+    [Fact]
+    public void TheViewOfTheStoredHistogramFiltersAsEventsVDoes()
+    {
+        // The buckets of a generation show exactly when its events do: the two views carry one filter, the allowed
+        // cases and the committed generations, compared here with all whitespace runs taken as one space.
+        var events = File.ReadAllText(Path.Combine(RepoRoot, "migrations", "clickhouse", "0006_events_v_hide_uncommitted.sql"));
+        var histogram = File.ReadAllText(Path.Combine(RepoRoot, "migrations", "clickhouse", "0009_case_histogram.sql"));
+        static string Filter(string migration)
+        {
+            var text = Spaces().Replace(migration, " ").Replace("( ", "(", StringComparison.Ordinal).Replace(" )", ")", StringComparison.Ordinal);
+            var from = text.LastIndexOf("WHERE has(", StringComparison.Ordinal);
+            return text[from..(text.IndexOf(';', from) + 1)];
+        }
+
+        Assert.Equal(Filter(events), Filter(histogram));
+        Assert.Contains(Spaces().Replace(CaseScopedEventsQuery.CommittedGenerations, " "), Filter(histogram), StringComparison.Ordinal);
+        Assert.Contains("SQL SECURITY DEFINER DEFINER = CURRENT_USER AS SELECT case_id, severity, bucket, events FROM case_histogram WHERE", Spaces().Replace(histogram, " "), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheGenerationFilterIsTheViewsOwnText()
     {
         // events_v is defined by migration 0006. The statistics count the rows that view shows, so the filter the

@@ -853,7 +853,8 @@ public sealed class Transpiler
     /// span is a day or more and the zone is neither an IANA zone nor a fixed offset, so the server cannot cut it;
     /// nothing is added then.
     /// </summary>
-    internal static string? BucketExpression(int count, char unit, TimeZoneInfo zone, ICollection<QueryParameter> parameters, string prefix)
+    /// <param name="column">The time that is cut: <c>ts</c>, or the minute of the stored histogram.</param>
+    internal static string? BucketExpression(int count, char unit, TimeZoneInfo zone, ICollection<QueryParameter> parameters, string prefix, string column = "ts")
     {
         var span = "{" + prefix + "span:UInt32}";
         var spanParameter = new QueryParameter(prefix + "span", "UInt32", count.ToString(CultureInfo.InvariantCulture));
@@ -861,13 +862,13 @@ public sealed class Transpiler
         {
             case 's':
                 parameters.Add(spanParameter);
-                return $"toStartOfInterval(ts, toIntervalSecond({span}))";
+                return $"toStartOfInterval({column}, toIntervalSecond({span}))";
             case 'm':
                 parameters.Add(spanParameter);
-                return $"toStartOfInterval(ts, toIntervalMinute({span}))";
+                return $"toStartOfInterval({column}, toIntervalMinute({span}))";
             case 'h':
                 parameters.Add(spanParameter);
-                return $"toStartOfInterval(ts, toIntervalHour({span}))";
+                return $"toStartOfInterval({column}, toIntervalHour({span}))";
         }
 
         var week = unit == 'w';
@@ -880,7 +881,7 @@ public sealed class Transpiler
             parameters.Add(spanParameter);
             parameters.Add(new QueryParameter(prefix + "utc", "String", "UTC"));
             parameters.Add(new QueryParameter(prefix + "shift", "Int64", ((long)offset.TotalSeconds).ToString(CultureInfo.InvariantCulture)));
-            var shifted = $"toStartOfInterval(addSeconds(ts, {shift}), {interval}, {utc})";
+            var shifted = $"toStartOfInterval(addSeconds({column}, {shift}), {interval}, {utc})";
             return $"subtractSeconds({(week ? $"toDateTime({shifted}, {utc})" : shifted)}, {shift})";
         }
 
@@ -893,7 +894,7 @@ public sealed class Transpiler
         parameters.Add(spanParameter);
         parameters.Add(new QueryParameter(prefix + "utc", "String", "UTC"));
         parameters.Add(new QueryParameter(prefix + "tz", "String", iana));
-        var local = $"toStartOfInterval(ts, {interval}, {tz})";
+        var local = $"toStartOfInterval({column}, {interval}, {tz})";
         return $"toTimeZone({(week ? $"toDateTime({local}, {tz})" : local)}, {utc})";
     }
 

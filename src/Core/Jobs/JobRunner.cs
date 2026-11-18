@@ -542,6 +542,7 @@ public sealed class JobRunner
             DateTime? tsMax;
             long undated;
             long future;
+            (long Least, long Greatest)? allTimes;
             long acked;
             string sha256;
             long hashedBytes;
@@ -579,6 +580,7 @@ public sealed class JobRunner
                 tsMax = ranged.Max;
                 undated = ranged.Undated;
                 future = ranged.Future;
+                allTimes = ranged.AllTimes;
                 // A decoder may stop short of the end of the file; the digest is over every byte of it.
                 var scratch = new byte[1 << 20];
                 sha256 = hashing.DrainAndFinish(scratch);
@@ -606,9 +608,34 @@ public sealed class JobRunner
                 throw lost;
             }
 
+            // The stored histogram of this attempt, counted from the rows the store holds for it. Before the commit:
+            // the generation row that shows the events shows their buckets, never the one without the other. A
+            // failure here fails the attempt like a failed insert, and its rows and buckets go together.
+            // A parse with a time the histogram's minutes cannot hold (before 1970, after 2106) writes none, and
+            // its case then reads its timeline from the events.
+            var fill = Stopwatch.StartNew();
+            var histogramFilled = true;
+            if (allTimes is { } times)
+            {
+                histogramFilled = CaseScopedEventsQuery.HistogramHolds(times.Least, times.Greatest);
+                if (histogramFilled)
+                {
+                    await _events.FillHistogramAsync(caseId, fileId, generation, times.Least, times.Greatest, stopping).ConfigureAwait(false);
+                }
+            }
+
+            if (histogramFilled)
+            {
+                JobLog.HistogramFilled(_logger, job.Id, file.Id, fill.Elapsed.TotalMilliseconds);
+            }
+            else
+            {
+                JobLog.HistogramNotFilled(_logger, job.Id, file.Id);
+            }
+
             var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
             var spansDst = source.Info.NaiveTimestamps && tsMin is { } first && tsMax is { } last && IntakeHints.SpansTransition(zone, first, last);
-            var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst, undated, future);
+            var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst, undated, future, HistogramFilled: histogramFilled);
             await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, outcome, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
             try
             {

@@ -148,6 +148,81 @@ public sealed class SearchPlan
         return Statement($"SELECT {bucket} AS `{Names.Generated(0)}`, {severity}, count() FROM events_v WHERE {listing.Where} GROUP BY `{Names.Generated(0)}`, {severity} ORDER BY `{Names.Generated(0)}` ASC, {severity} ASC", extra);
     }
 
+    /// <summary>The width of a row of the stored histogram: a minute.</summary>
+    public const int StoredBucketSeconds = 60;
+
+    /// <summary>
+    /// The histogram of a search that narrows nothing, from the stored minutes of the case: (bucket start,
+    /// severity, count), oldest first, the rows <see cref="Histogram"/> returns. The whole minutes inside the
+    /// range come from <c>case_histogram_v</c>; the part of a minute at either end of the range, if the range
+    /// does not end on a minute, is counted from the events, which is a read of about a granule a host. Null
+    /// when the search narrows something, when the span is under a minute (the stored rows are minutes), or
+    /// when the zone cannot cut a day.
+    /// </summary>
+    public SearchStatement? StoredHistogram(HistogramSpan span)
+    {
+        ArgumentNullException.ThrowIfNull(span);
+        if (!Unfiltered || span.Seconds < StoredBucketSeconds)
+        {
+            return null;
+        }
+
+        var extra = new List<QueryParameter>();
+        var stored = Transpiler.BucketExpression(span.Count, span.Unit, _zone, extra, "s_h_", "bucket");
+        var live = Transpiler.BucketExpression(span.Count, span.Unit, _zone, extra, "s_e_");
+        if (stored is null || live is null)
+        {
+            return null;
+        }
+
+        // The first whole minute at or after the start of the range, and the minute the end of the range falls in.
+        const long Minute = StoredBucketSeconds * 1000L;
+        var from = Query.RangeFrom.ToUnixTimeMilliseconds();
+        var to = Query.RangeTo.ToUnixTimeMilliseconds();
+        var first = FloorTo(from + Minute - 1, Minute);
+        var last = FloorTo(to, Minute);
+        if (last < first)
+        {
+            return null;
+        }
+
+        var severity = _catalog.Resolve("log.level").Column!;
+        var bucket = $"`{Names.Generated(0)}`";
+        var count = $"`{Names.Generated(1)}`";
+        extra.Add(new QueryParameter("s_h_first", "DateTime64(3)", Transpiler.Fmt(DateTimeOffset.FromUnixTimeMilliseconds(first))));
+        extra.Add(new QueryParameter("s_h_last", "DateTime64(3)", Transpiler.Fmt(DateTimeOffset.FromUnixTimeMilliseconds(last))));
+        var sql = new StringBuilder($"SELECT {bucket}, {severity}, sum({count}) FROM (");
+        sql.Append($"SELECT {stored} AS {bucket}, {severity}, sum(events) AS {count} FROM case_histogram_v ");
+        sql.Append("WHERE case_id = {case:UInt64} AND bucket >= {s_h_first:DateTime64(3)} AND bucket < {s_h_last:DateTime64(3)} ");
+        sql.Append($"GROUP BY {bucket}, {severity}");
+        var edges = new List<string>();
+        if (from < first)
+        {
+            edges.Add("(ts >= {from:DateTime64(3)} AND ts < {s_h_first:DateTime64(3)})");
+        }
+
+        if (last < to)
+        {
+            edges.Add("(ts >= {s_h_last:DateTime64(3)} AND ts < {to:DateTime64(3)})");
+        }
+
+        if (edges.Count > 0)
+        {
+            sql.Append($" UNION ALL SELECT {live} AS {bucket}, {severity}, count() AS {count} FROM events_v ");
+            sql.Append("WHERE case_id = {case:UInt64} AND (").Append(string.Join(" OR ", edges)).Append(") ");
+            sql.Append($"GROUP BY {bucket}, {severity}");
+        }
+        else
+        {
+            extra.RemoveAll(p => p.Name.StartsWith("s_e_", StringComparison.Ordinal));
+        }
+
+        sql.Append($") GROUP BY {bucket}, {severity} ORDER BY {bucket} ASC, {severity} ASC");
+        return Statement(sql.ToString(), extra);
+    }
+
+    private static long FloorTo(long value, long step) => value - (((value % step) + step) % step);
+
     /// <summary>How many events the search matches.</summary>
     public SearchStatement Count() => Statement($"SELECT count() FROM events_v WHERE {Listing().Where}", []);
 

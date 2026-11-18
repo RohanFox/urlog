@@ -24,6 +24,7 @@ internal sealed class FakeEventStore : IJobEventStore
     private readonly List<string> _calls = [];
     private readonly Dictionary<(ulong Case, int Month), long> _partitions = [];
     private readonly HashSet<ulong> _fieldStats = [];
+    private readonly HashSet<(ulong Case, ulong File, uint Generation)> _histogram = [];
     private int _identityReads;
 
     /// <summary>Called at the start of every call the purge makes, with its name; a test throws from it to stop a purge there.</summary>
@@ -46,6 +47,27 @@ internal sealed class FakeEventStore : IJobEventStore
 
     /// <summary>How often the identity was read.</summary>
     public int IdentityReads => Volatile.Read(ref _identityReads);
+
+    /// <summary>Thrown by the next fill of the stored histogram, once.</summary>
+    public Exception? FailNextFill { get; set; }
+
+    /// <summary>The generations of the file that have a stored histogram.</summary>
+    public uint[] HistogramGenerations(ulong file)
+    {
+        lock (_lock)
+        {
+            return [.. _histogram.Where(k => k.File == file).Select(k => k.Generation).Order()];
+        }
+    }
+
+    /// <summary>Whether the case has any stored histogram left.</summary>
+    public bool HasHistogram(ulong caseId)
+    {
+        lock (_lock)
+        {
+            return _histogram.Any(k => k.Case == caseId);
+        }
+    }
 
     /// <summary>Thrown by the next generation commit, once.</summary>
     public Exception? FailNextCommit { get; set; }
@@ -245,6 +267,8 @@ internal sealed class FakeEventStore : IJobEventStore
             {
                 _rows.Remove(key);
             }
+
+            _histogram.RemoveWhere(k => k.File == fileId && k.Generation != keep);
         }
 
         return Task.CompletedTask;
@@ -259,9 +283,51 @@ internal sealed class FakeEventStore : IJobEventStore
             {
                 _rows.Remove(key);
             }
+
+            _histogram.RemoveWhere(k => k.File == fileId && k.Generation < generation);
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task FillHistogramAsync(ulong caseId, ulong fileId, uint generation, long fromMilliseconds, long toMilliseconds, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            if (FailNextFill is { } failure)
+            {
+                FailNextFill = null;
+                throw failure;
+            }
+
+            _calls.Add($"fill-histogram {fileId} {generation}");
+            if (!_histogram.Add((caseId, fileId, generation)))
+            {
+                throw new InvalidOperationException($"the histogram of file {fileId} generation {generation} was filled twice");
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DropCaseHistogramAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        BeforePurgeCall?.Invoke("drop-histogram");
+        lock (_lock)
+        {
+            _calls.Add($"drop-histogram {caseId}");
+            _histogram.RemoveWhere(k => k.Case == caseId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<long> CaseHistogramRowsAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult((long)_histogram.Count(k => k.Case == caseId));
+        }
     }
 
     public Task CommitFileGenerationsAsync(IReadOnlyList<KeyValuePair<ulong, uint>> generations, CancellationToken cancellationToken)

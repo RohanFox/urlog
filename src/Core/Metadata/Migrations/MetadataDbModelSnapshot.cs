@@ -432,6 +432,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("hash_of_stored_bytes");
 
+                    b.Property<int?>("HistogramGeneration")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("histogram_generation");
+
                     b.Property<long?>("HostId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("host_id");

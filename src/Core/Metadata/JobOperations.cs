@@ -19,7 +19,8 @@ public sealed record JobCounts(long ChunksRead, long ChunksParsed, long Rows, lo
 /// <param name="UndatedRows">Rows whose time is below <see cref="EventTime.Floor"/>.</param>
 /// <param name="FutureRows">Rows dated later than the file's arrival plus <see cref="EventTime.FutureMargin"/>.</param>
 /// <param name="SpansDst">The file was read with one zone offset and its events lie on both sides of a change of it.</param>
-public sealed record JobOutcome(Urlog.Core.Pipeline.InputEnd End, DateTime? TsMin = null, DateTime? TsMax = null, bool SpansDst = false, long UndatedRows = 0, long FutureRows = 0);
+/// <param name="HistogramFilled">The stored histogram of this generation was written before the commit.</param>
+public sealed record JobOutcome(Urlog.Core.Pipeline.InputEnd End, DateTime? TsMin = null, DateTime? TsMax = null, bool SpansDst = false, long UndatedRows = 0, long FutureRows = 0, bool HistogramFilled = false);
 
 /// <summary>What the runner found when it compared the bytes it read with the intake record (evidence rule 4).</summary>
 public sealed record IntegrityMismatch(string ActualSha256, long ActualSize);
@@ -255,6 +256,7 @@ public static class JobOperations
             file.SpansDst = outcome.SpansDst;
             file.UndatedRows = outcome.UndatedRows;
             file.FutureRows = outcome.FutureRows;
+            file.HistogramGeneration = outcome.HistogramFilled ? job.Generation : null;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             // The case's span and the mark that its field statistics are out of date, with the rows they describe.
             await CaseStatsOperations.OnCommitAsync(db, job.CaseId, nowUtc, cancellationToken).ConfigureAwait(false);

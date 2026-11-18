@@ -51,6 +51,7 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         Assert.Empty(await scene.PartitionsAsync(scene.CaseId));
         Assert.Equal(0, (await h.VisibleAsync(scene.CaseId)).Rows);
         Assert.Empty(await h.FieldStatsAsync(scene.CaseId));
+        Assert.Equal(0, await h.HistogramRowsAsync(scene.CaseId));
         Assert.Empty(Directory.EnumerateFileSystemEntries(scene.CaseDirectory));
         Assert.False(Directory.Exists(CaseFolders.CaseDirectory(scene.Evidence + "-cache", scene.CaseId)));
         Assert.Equal(Scene.KeptRows, (await h.VisibleAsync(scene.Kept)).Rows);
@@ -81,6 +82,9 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         Assert.Equal(records.Select(r => (r.Id, r.Sha256, r.Size, r.StoredPath, r.ParentFileId, r.State, r.RowCount)), after.Select(r => (r.Id, r.Sha256, r.Size, r.StoredPath, r.ParentFileId, r.State, r.RowCount)));
         var visible = await h.VisibleAsync(scene.CaseId);
         Assert.Equal((before.Rows, 1L), (visible.Rows, visible.Generations));
+        // The stored histogram went with the partitions, and the parses of the re-import wrote it again.
+        var histogram = await h.HistogramAsync(scene.CaseId);
+        Assert.Equal((0L, before.Rows), (histogram.Differing, histogram.Events));
         // The statistics went with the partitions and are rebuilt from the re-imported rows by the same runner:
         // the same values and counts, in a newer set.
         var statsAfter = await h.FieldStatsAsync(scene.CaseId);

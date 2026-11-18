@@ -88,6 +88,54 @@ public static class CaseScopedEventsQuery
         return sql;
     }
 
+    /// <summary>What a row of the stored histogram counts: a minute in UTC, cut as the search cuts its buckets.</summary>
+    public const string HistogramBucket = "toStartOfInterval(ts, toIntervalMinute(1))";
+
+    /// <summary>The greatest time, in milliseconds, whose minute the bucket function can return: the end of a <c>DateTime</c>, 2106-02-07 06:28:15 UTC.</summary>
+    public const long HistogramLastMilliseconds = 4_294_967_295_000;
+
+    /// <summary>
+    /// Whether every time from <paramref name="fromMilliseconds"/> to <paramref name="toMilliseconds"/> has a minute
+    /// the stored histogram can hold. The server's <c>toStartOfInterval</c> returns a <c>DateTime</c>, 1970 to 2106,
+    /// and an event's time is a <c>DateTime64</c> that can lie outside that. A parse with such a time gets no
+    /// stored histogram, so its case reads the events: a minute cut from such a time and then cut again into the
+    /// search's bucket need not be the bucket the event's own time is cut into.
+    /// </summary>
+    public static bool HistogramHolds(long fromMilliseconds, long toMilliseconds) =>
+        fromMilliseconds >= 0 && toMilliseconds <= HistogramLastMilliseconds && fromMilliseconds <= toMilliseconds;
+
+    /// <summary>
+    /// The fill of the stored histogram for one parse attempt: the rows of that file and generation, counted per
+    /// severity and minute, written to <c>case_histogram</c> under the same file and generation. The read is
+    /// <see cref="Build"/>'s, so the case comes first. <paramref name="fromMilliseconds"/> and
+    /// <paramref name="toMilliseconds"/> are the least and the greatest time among the attempt's rows, both
+    /// included: they add nothing to the answer and let the read prune to the file's months and times.
+    /// </summary>
+    public static string BuildHistogramFill(ulong caseId, ulong fileId, uint generation, long fromMilliseconds, long toMilliseconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfZero(fileId);
+        ArgumentOutOfRangeException.ThrowIfZero(generation);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(fromMilliseconds, toMilliseconds);
+        if (!HistogramHolds(fromMilliseconds, toMilliseconds))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fromMilliseconds), "the stored histogram holds minutes from 1970 to 2106; a parse with a time outside that has none");
+        }
+
+        var filter = string.Create(
+            CultureInfo.InvariantCulture,
+            $"file_id = {fileId} AND parse_generation = {generation} AND ts >= fromUnixTimestamp64Milli(toInt64({fromMilliseconds}), 'UTC') AND ts <= fromUnixTimestamp64Milli(toInt64({toMilliseconds}), 'UTC')");
+        // The case, the file and the generation are the same on every row the filter leaves, so they are written
+        // as the numbers they are and the rows are grouped by the two keys that vary. Measured on a syslog file of
+        // 7.8 M rows: 130 to 136 ms against 149 to 165 ms with all five as keys, the same rows either way.
+        var identity = string.Create(CultureInfo.InvariantCulture, $"{caseId}, {fileId}, {generation}");
+        var read = Build(
+            caseId,
+            $"{identity}, severity, {HistogramBucket} AS bucket, count() AS events",
+            filter,
+            "GROUP BY severity, bucket");
+        return "INSERT INTO case_histogram (case_id, file_id, parse_generation, severity, bucket, events) " + read;
+    }
+
     /// <summary>The first predicate of every text <see cref="Build"/> emits.</summary>
     public static string Predicate(ulong caseId)
     {

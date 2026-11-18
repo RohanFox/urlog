@@ -130,6 +130,13 @@ public sealed class EvidenceFile
 
     public int ParseGeneration { get; set; } = 1;
 
+    /// <summary>
+    /// The generation whose stored histogram was written, set by the commit of that parse; null for a file whose
+    /// committed parse has none (it was parsed before the histogram was kept). A case answers its unfiltered
+    /// timeline from the stored histogram only when this equals the committed generation for every parsed file.
+    /// </summary>
+    public int? HistogramGeneration { get; set; }
+
     public FileState State { get; set; } = FileState.Received;
 
     public DateTime? TsMin { get; set; }

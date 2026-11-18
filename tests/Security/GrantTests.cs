@@ -134,7 +134,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     }
 
     [Fact]
-    public async Task TheTwoGrantedRelationsAreReadableAndNothingElseIsListed()
+    public async Task TheGrantedRelationsAreReadableAndNothingElseIsListed()
     {
         var rows = await QueryAsync("SELECT count() FROM events_v", new() { ["SQL_allowed_cases"] = "[1]" });
         Assert.Equal(ClickHouseFixture.RowsPerCase.ToString(CultureInfo.InvariantCulture), rows[0][0]);
@@ -149,7 +149,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         // relations and the default database, nothing of the schema behind the view.
         var visible = await QueryAsync("SELECT database || '.' || name FROM system.tables WHERE database NOT IN ('INFORMATION_SCHEMA', 'information_schema') ORDER BY 1");
         output.WriteLine("system.tables as urlog_query: " + string.Join(", ", visible.Select(r => r[0])));
-        Assert.Equal(["default.events_v", "default.field_stats_v"], visible.Select(r => r[0]).ToArray());
+        Assert.Equal(["default.case_histogram_v", "default.events_v", "default.field_stats_v"], visible.Select(r => r[0]).ToArray());
         var databases = await QueryAsync("SELECT name FROM system.databases ORDER BY name");
         Assert.Equal(["default"], databases.Select(r => r[0]).ToArray());
     }
@@ -499,6 +499,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         output.WriteLine(string.Join("; ", grants));
         Assert.Equal(
             [
+                "ALTER DELETE default.case_histogram", "INSERT default.case_histogram",
                 "ALTER DELETE default.events", "INSERT default.events", "SELECT default.events",
                 "ALTER DELETE default.field_stats", "INSERT default.field_stats",
                 "ALTER DELETE default.file_generation", "INSERT default.file_generation", "SELECT default.file_generation",
@@ -514,7 +515,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     }
 
     [Fact]
-    public async Task GrantsAreExactlyTheTwoDeclaredOnes()
+    public async Task GrantsAreExactlyTheThreeDeclaredOnes()
     {
         await using var admin = ch.Admin();
         var grants = new List<string>();
@@ -524,7 +525,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         }
 
         output.WriteLine(string.Join("; ", grants));
-        Assert.Equal(["SELECT default.events_v", "SELECT default.field_stats_v"], grants);
+        Assert.Equal(["SELECT default.case_histogram_v", "SELECT default.events_v", "SELECT default.field_stats_v"], grants);
 
         // Both views read their tables as the definer; without the clause the query user would need the tables.
         var statsView = (string?)await admin.ExecuteScalarAsync("SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = 'field_stats_v'", cancellationToken: Ct);

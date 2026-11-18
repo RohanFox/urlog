@@ -47,20 +47,45 @@ public sealed class QuerySearchBackend(ClickHouseQueryClient client) : ISearchBa
 public sealed record HistogramBucket(DateTimeOffset Start, IReadOnlyDictionary<string, long> Counts);
 
 /// <summary>
-/// A histogram kept for the unfiltered view of a case, so the first screen of a large case does not wait for a
-/// read of every row. Asked only for a search that narrows nothing over the case's whole recorded span; null
-/// means there is none and the search reads it from the events.
+/// The histogram kept for the timeline of a case (design record, "Query language", The search API), so the first
+/// screen of a large case does not wait for a read of every row. Asked only for a search that narrows nothing,
+/// over a case whose every parsed file has its stored minutes; null means there is none for this request and the
+/// search reads the histogram from the events.
 /// </summary>
 public interface IStoredHistogram
 {
-    ValueTask<IReadOnlyList<HistogramBucket>?> FindAsync(long caseId, DateTimeOffset rangeFrom, DateTimeOffset rangeTo, HistogramSpan span, string zone, CancellationToken cancellationToken);
+    ValueTask<IReadOnlyList<HistogramBucket>?> FindAsync(SearchPlan plan, ulong caseId, HistogramSpan span, CancellationToken cancellationToken);
 }
 
 /// <summary>No stored histogram: every histogram is read from the events.</summary>
 public sealed class NoStoredHistogram : IStoredHistogram
 {
-    public ValueTask<IReadOnlyList<HistogramBucket>?> FindAsync(long caseId, DateTimeOffset rangeFrom, DateTimeOffset rangeTo, HistogramSpan span, string zone, CancellationToken cancellationToken) =>
+    public ValueTask<IReadOnlyList<HistogramBucket>?> FindAsync(SearchPlan plan, ulong caseId, HistogramSpan span, CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<HistogramBucket>?>(null);
+}
+
+/// <summary>
+/// The stored histogram through the search backend: as the query account, the route's case alone allowed, read
+/// through <c>case_histogram_v</c>. A read that fails is logged and answered with null, so the search falls back
+/// to the events and the analyst gets a histogram either way.
+/// </summary>
+public sealed partial class StoredHistogram(ISearchBackend backend, ILogger<StoredHistogram> logger) : IStoredHistogram
+{
+    public async ValueTask<IReadOnlyList<HistogramBucket>?> FindAsync(SearchPlan plan, ulong caseId, HistogramSpan span, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await new SearchRunner(backend, caseId).StoredHistogramAsync(plan, span, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Unavailable(logger, caseId, e.Message);
+            return null;
+        }
+    }
+
+    [LoggerMessage(EventId = 310, Level = LogLevel.Warning, Message = "the stored histogram of case {CaseId} could not be read, the events are read instead: {Reason}")]
+    private static partial void Unavailable(ILogger logger, ulong caseId, string reason);
 }
 
 /// <summary>How a request that carried a query text ended.</summary>

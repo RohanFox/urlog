@@ -105,6 +105,81 @@ public sealed class SearchEndpointTests
     }
 
     [Fact]
+    public async Task TheHistogramOfAnUnfilteredSearchComesFromTheStoredOneWhenTheCaseHasIt()
+    {
+        await using var factory = new ApiFactory();
+        var (owner, caseId) = await CaseAsync(factory, events: 30);
+        using var _ = owner;
+        long fileId;
+        await using (var db = factory.Open())
+        {
+            // A span of a day, so the search cuts it in minutes or more: the stored rows are minutes.
+            await db.Cases.Where(c => c.Id == caseId).ExecuteUpdateAsync(s => s.SetProperty(c => c.TsMin, First.AddDays(-1)), Ct);
+            var file = new EvidenceFile
+            {
+                CaseId = caseId,
+                Sha256 = new string('c', 64),
+                Size = 10,
+                OriginalName = "a.log",
+                StoredPath = "a.log",
+                Source = FileSource.Web,
+                Uploader = "alice",
+                ReceivedAt = DateTime.UtcNow,
+                Encoding = "utf8",
+                State = FileState.Parsed,
+                ParseGeneration = 2,
+                HistogramGeneration = 2,
+            };
+            db.Files.Add(file);
+            await db.SaveChangesAsync(Ct);
+            fileId = file.Id;
+            db.Jobs.Add(new Job { CaseId = caseId, FileId = fileId, Kind = JobKind.Reparse, Generation = 2, State = JobState.Done, CreatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        async Task<(string Source, long Total, string Kinds)> SearchAsync(string query, object? range = null)
+        {
+            factory.Search.Calls.Clear();
+            var response = await owner.PostAsync($"/api/v1/cases/{caseId}/search", range ?? new { query });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var histogram = (await SearchStreams.ReadAsync(response)).Single(e => e.Name == "histogram").Data;
+            return (histogram.GetProperty("source").GetString()!, histogram.GetProperty("total").GetInt64(), string.Join(",", factory.Search.Calls.Select(c => c.Kind).Where(k => k is "histogram" or "stored")));
+        }
+
+        // Every parsed file has its minutes: one statement, the stored one, through the view and for the route's case.
+        Assert.Equal(("stored", 30, "stored"), await SearchAsync(string.Empty));
+        var statement = factory.Search.Calls.Single(c => c.Kind == "stored");
+        Assert.Equal((ulong)caseId, statement.CaseId);
+        Assert.Contains("FROM case_histogram_v WHERE case_id = {case:UInt64}", statement.Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM case_histogram ", statement.Sql, StringComparison.Ordinal);
+
+        // A range of its own that narrows nothing is served the same way; a search that narrows is read from the events.
+        Assert.Equal(("stored", 30, "stored"), await SearchAsync(string.Empty, new { query = string.Empty, from = "2026-02-28T12:00:00Z", to = "2026-03-02T00:00:00Z" }));
+        Assert.Equal(("query", 30, "histogram"), await SearchAsync("host=web-01"));
+
+        // The stored read fails: the events are read and the analyst has a histogram all the same.
+        factory.Search.Failures["stored"] = new QueryFailedException(60, "Code: 60. UNKNOWN_TABLE", new InvalidOperationException());
+        Assert.Equal(("query", 30, "stored,histogram"), await SearchAsync(string.Empty));
+        factory.Search.Failures.Clear();
+
+        // A file whose committed parse wrote no minutes (it was parsed before they were kept): the seam is not asked.
+        await using (var db = factory.Open())
+        {
+            await db.Files.Where(f => f.Id == fileId).ExecuteUpdateAsync(s => s.SetProperty(f => f.HistogramGeneration, (int?)null), Ct);
+        }
+
+        Assert.Equal(("query", 30, "histogram"), await SearchAsync(string.Empty));
+
+        // And one whose minutes are of an older generation than its committed parse.
+        await using (var db = factory.Open())
+        {
+            await db.Files.Where(f => f.Id == fileId).ExecuteUpdateAsync(s => s.SetProperty(f => f.HistogramGeneration, (int?)1), Ct);
+        }
+
+        Assert.Equal(("query", 30, "histogram"), await SearchAsync(string.Empty));
+    }
+
+    [Fact]
     public async Task TheRequestMayNameAnotherZoneAndAnUnknownOneIsRefused()
     {
         await using var factory = new ApiFactory();

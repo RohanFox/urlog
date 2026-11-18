@@ -41,7 +41,7 @@ public static class RawSqlGate
     public const int MaxSelectDepth = 8;
 
     /// <summary>The relations the query path may name.</summary>
-    public static readonly FrozenSet<string> AllowedRelations = FrozenSet.ToFrozenSet(["events_v", "field_stats_v"], StringComparer.Ordinal);
+    public static readonly FrozenSet<string> AllowedRelations = FrozenSet.ToFrozenSet(["events_v", "field_stats_v", "case_histogram_v"], StringComparer.Ordinal);
 
     /// <summary>
     /// Every other relation the migrations create. An unqualified name that is in neither set is taken for a CTE
@@ -50,7 +50,7 @@ public static class RawSqlGate
     /// not in this list). tests/Security asserts this list against <c>system.tables</c>, so a new migration that
     /// adds a relation must add it here too.
     /// </summary>
-    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations", "store_identity", "field_stats"], StringComparer.Ordinal);
+    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations", "store_identity", "field_stats", "case_histogram"], StringComparer.Ordinal);
 
     private static readonly FrozenSet<string> InOperators = FrozenSet.ToFrozenSet(
         ["in", "notIn", "nullIn", "notNullIn", "globalIn", "globalNotIn", "globalNullIn", "globalNotNullIn"], StringComparer.Ordinal);
@@ -199,7 +199,7 @@ public static class RawSqlGate
 
         if (DeniedRelations.Contains(name))
         {
-            return $"{name} is not readable through the query path; query {(name == "field_stats" ? "field_stats_v" : "events_v")}";
+            return $"{name} is not readable through the query path; query {(name == "field_stats" ? "field_stats_v" : name == "case_histogram" ? "case_histogram_v" : "events_v")}";
         }
 
         return null;

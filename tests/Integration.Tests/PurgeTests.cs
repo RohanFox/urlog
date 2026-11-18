@@ -273,12 +273,19 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
             await using (var admin = h.Admin())
             {
                 await admin.ExecuteAsync("TRUNCATE TABLE field_stats", cancellationToken: Ct);
+                await admin.ExecuteAsync("TRUNCATE TABLE case_histogram", cancellationToken: Ct);
                 foreach (var (caseId, fileId, months) in new[] { (scene.Purged, scene.PurgedFiles[0], Months), (scene.Kept, scene.KeptFile, 2) })
                 {
                     await admin.ExecuteAsync(
                         $"INSERT INTO events (case_id, file_id, parse_generation, ts, raw) SELECT {Text(caseId)}, {Text(fileId)}, 1, addMonths(toDateTime64('2024-01-10 00:00:00', 3, 'UTC'), number % {months}), 'row' FROM numbers({months * RowsPerMonth})",
                         cancellationToken: Ct);
                     await admin.ExecuteAsync($"INSERT INTO field_stats (case_id, field, value, count, computed_at) VALUES ({Text(caseId)}, 'host', 'web-01', 10, now64(3))", cancellationToken: Ct);
+                    // The stored histogram of the file, as its parse would have written it.
+                    await admin.ExecuteAsync(
+                        "INSERT INTO case_histogram (case_id, file_id, parse_generation, severity, bucket, events) "
+                        + $"SELECT case_id, file_id, parse_generation, severity, {Urlog.Core.Ingest.CaseScopedEventsQuery.HistogramBucket} AS bucket, count() FROM events "
+                        + $"WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} GROUP BY case_id, file_id, parse_generation, severity, bucket",
+                        cancellationToken: Ct);
                 }
             }
 
@@ -339,8 +346,10 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
             {
                 Assert.Equal(0L, Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT count() FROM field_stats WHERE case_id = {Text(Purged)}", cancellationToken: Ct), CultureInfo.InvariantCulture));
                 Assert.Equal(0L, Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT count() FROM events WHERE case_id = {Text(Purged)}", cancellationToken: Ct), CultureInfo.InvariantCulture));
+                Assert.Equal(0L, Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT count() FROM case_histogram WHERE case_id = {Text(Purged)}", cancellationToken: Ct), CultureInfo.InvariantCulture));
                 // The case beside it: its rows, its statistics, its generation row.
                 Assert.Equal(1L, Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT count() FROM field_stats WHERE case_id = {Text(Kept)}", cancellationToken: Ct), CultureInfo.InvariantCulture));
+                Assert.Equal(2L * RowsPerMonth, Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT sum(events) FROM case_histogram WHERE case_id = {Text(Kept)}", cancellationToken: Ct), CultureInfo.InvariantCulture));
             }
 
             Assert.Equal((2L * RowsPerMonth, 1L, 1L), await _h.VisibleAsync(Kept));

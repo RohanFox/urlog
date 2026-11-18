@@ -45,7 +45,10 @@ public sealed class JobRunnerTests
         Assert.Equal(0, visibleDuringTheParse); // rows were in the store, none of them visible
         Assert.Equal(lines, h.Events.Visible(fileId));
         Assert.Equal([1u], h.Events.Generations(fileId));
-        Assert.Equal(["commit " + fileId + " 1"], h.Events.Calls); // a first attempt has nothing to delete
+        // A first attempt has nothing to delete. Its histogram is written before its commit.
+        Assert.Equal(["fill-histogram " + fileId + " 1", "commit " + fileId + " 1"], h.Events.Calls);
+        Assert.Equal([1u], h.Events.HistogramGenerations(fileId));
+        Assert.Equal(1, (await h.FileAsync(file.Id)).HistogramGeneration);
         Assert.Equal(["genesis", "case_create", "file_intake"], (await h.AuditAsync()).Select(a => a.Action).ToArray());
     }
 
@@ -73,6 +76,7 @@ public sealed class JobRunnerTests
         Assert.Equal(FileState.Quarantined, (await h.FileAsync(file.Id)).State);
         Assert.Equal(0, h.Events.Visible((ulong)file.Id));
         Assert.Empty(h.Events.Generations((ulong)file.Id)); // the attempt's rows were removed, not only hidden
+        Assert.DoesNotContain(h.Events.Calls, c => c == $"fill-histogram {file.Id} 1"); // and no histogram was written for it
         Assert.Equal(0u, h.Events.Current((ulong)file.Id));
 
         var row = Assert.Single(await h.AuditAsync(), a => a.Action == AuditActions.IntegrityMismatch);
@@ -340,6 +344,61 @@ public sealed class JobRunnerTests
     }
 
     [Fact]
+    public async Task TheStoredHistogramIsWrittenBeforeTheCommitAndAFillThatFailsFailsTheAttempt()
+    {
+        await using var h = await RunnerHarness.CreateAsync();
+        var @case = await h.AddCaseAsync("one");
+        var (bytes, lines) = TestData.NumberedLines(5_000, seed: 31);
+        var (file, job, _) = await h.AddFileAsync(@case.Id, bytes, "a.log");
+        var fileId = (ulong)file.Id;
+
+        // The store refuses the fill: nothing is committed, the attempt's rows are deleted, the job has failed.
+        h.Events.FailNextFill = new IOException("connection reset");
+        await h.Runner().RunAsync(Ct);
+        var failed = await h.JobAsync(job.Id);
+        Assert.Equal(JobState.Failed, failed.State);
+        Assert.Contains("connection reset", failed.Message, StringComparison.Ordinal);
+        Assert.Equal(0u, h.Events.Current(fileId));
+        Assert.Empty(h.Events.Generations(fileId));
+        Assert.Empty(h.Events.HistogramGenerations(fileId));
+        Assert.Null((await h.FileAsync(file.Id)).HistogramGeneration);
+        Assert.DoesNotContain(h.Events.Calls, c => c.StartsWith("commit", StringComparison.Ordinal));
+
+        // The case has no parsed file yet, so nothing is missing from its stored histogram.
+        await using (var db = h.Open())
+        {
+            Assert.True(await CaseStatsOperations.HasStoredHistogramAsync(db, @case.Id, Ct));
+            await JobOperations.EnqueueAsync(db, file.Id, DateTime.UtcNow, Ct);
+        }
+
+        // The next attempt fills under its own generation, once, and commits after it.
+        await h.Runner().RunAsync(Ct);
+        var parsed = await h.FileAsync(file.Id);
+        Assert.Equal(lines, h.Events.Visible(fileId));
+        Assert.Equal([(uint)parsed.ParseGeneration], h.Events.HistogramGenerations(fileId));
+        Assert.Equal(parsed.ParseGeneration, parsed.HistogramGeneration);
+        var calls = h.Events.Calls.ToList();
+        Assert.True(calls.IndexOf($"fill-histogram {fileId} {parsed.ParseGeneration}") < calls.IndexOf($"commit {fileId} {parsed.ParseGeneration}"));
+
+        await using (var db = h.Open())
+        {
+            Assert.True(await CaseStatsOperations.HasStoredHistogramAsync(db, @case.Id, Ct));
+
+            // A file whose committed parse wrote none, as one parsed before the histogram was kept: its case reads
+            // the events until the file is parsed again.
+            await db.Files.Where(f => f.Id == file.Id).ExecuteUpdateAsync(s => s.SetProperty(f => f.HistogramGeneration, (int?)null), Ct);
+            Assert.False(await CaseStatsOperations.HasStoredHistogramAsync(db, @case.Id, Ct));
+            await JobOperations.EnqueueAsync(db, file.Id, DateTime.UtcNow, Ct);
+        }
+
+        await h.Runner().RunAsync(Ct);
+        await using (var db = h.Open())
+        {
+            Assert.True(await CaseStatsOperations.HasStoredHistogramAsync(db, @case.Id, Ct));
+        }
+    }
+
+    [Fact]
     public async Task AReparseKeepsTheOldGenerationVisibleUntilTheNewOneIsCommitted()
     {
         await using var h = await RunnerHarness.CreateAsync();
@@ -371,7 +430,9 @@ public sealed class JobRunnerTests
         Assert.Equal((JobState.Done, JobKind.Reparse, 2), (done.State, done.Kind, done.Generation));
         Assert.Equal([2u], h.Events.Generations(fileId));
         Assert.Equal(lines, h.Events.Visible(fileId));
-        Assert.Equal([$"commit {fileId} 1", $"delete-except {fileId} keep 1", $"commit {fileId} 2", $"delete-below {fileId} 2"], h.Events.Calls);
+        Assert.Equal([$"fill-histogram {fileId} 1", $"commit {fileId} 1", $"delete-except {fileId} keep 1", $"fill-histogram {fileId} 2", $"commit {fileId} 2", $"delete-below {fileId} 2"], h.Events.Calls);
+        Assert.Equal([2u], h.Events.HistogramGenerations(fileId)); // the clean-up took the old generation's buckets with its rows
+        Assert.Equal(2, (await h.FileAsync(file.Id)).HistogramGeneration);
         var row = Assert.Single(await h.AuditAsync(), a => a.Action == AuditActions.FileReparse);
         Assert.Contains("\"from_generation\":1", row.DetailsJson, StringComparison.Ordinal);
     }

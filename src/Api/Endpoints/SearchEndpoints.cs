@@ -162,6 +162,9 @@ public static class SearchEndpoints
         }
 
         var density = await DensityAsync(db, @case, http.RequestAborted).ConfigureAwait(false);
+        // Asked before the statements start: the three run at once and share nothing of the metadata store.
+        var storedHistogram = cursor is null && plan.Kind == ResultKind.Events && plan.Unfiltered
+            && await CaseStatsOperations.HasStoredHistogramAsync(db, @case.Id, http.RequestAborted).ConfigureAwait(false);
         var runner = new SearchRunner(backend, (ulong)@case.Id);
         var aborted = http.RequestAborted;
 
@@ -221,7 +224,7 @@ public static class SearchEndpoints
                     var pending = new List<Task<(string Kind, byte[] Body, long Rows)>>
                     {
                         page,
-                        HistogramEventAsync(runner, stored, plan, @case, zoneId, work.Token),
+                        HistogramEventAsync(runner, stored, plan, @case, storedHistogram, work.Token),
                         CountsEventAsync(runner, statistics, db, plan, @case, loggers, work.Token),
                     };
 
@@ -342,14 +345,14 @@ public static class SearchEndpoints
         return ("page", body, page.Rows.Count);
     }
 
-    private static async Task<(string Kind, byte[] Body, long Rows)> HistogramEventAsync(SearchRunner runner, IStoredHistogram stored, SearchPlan plan, CaseRecord @case, string zone, CancellationToken cancellationToken)
+    private static async Task<(string Kind, byte[] Body, long Rows)> HistogramEventAsync(SearchRunner runner, IStoredHistogram stored, SearchPlan plan, CaseRecord @case, bool caseHasStored, CancellationToken cancellationToken)
     {
         var span = HistogramSpan.For(plan.Query.RangeFrom, plan.Query.RangeTo);
         IReadOnlyList<HistogramBucket>? buckets = null;
         var source = "query";
-        if (plan.Unfiltered && WholeSpan(plan, @case))
+        if (caseHasStored)
         {
-            buckets = await stored.FindAsync(@case.Id, plan.Query.RangeFrom, plan.Query.RangeTo, span, zone, cancellationToken).ConfigureAwait(false);
+            buckets = await stored.FindAsync(plan, (ulong)@case.Id, span, cancellationToken).ConfigureAwait(false);
             source = buckets is null ? source : "stored";
         }
 

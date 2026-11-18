@@ -15,6 +15,8 @@ internal sealed class TimeRangeSink(IBatchSink inner, long ceilingMilliseconds =
     private readonly long _floor = EventTime.FloorMilliseconds;
     private long _min = long.MaxValue;
     private long _max = long.MinValue;
+    private long _least = long.MaxValue;
+    private long _greatest = long.MinValue;
     private long _undated;
     private long _future;
 
@@ -23,6 +25,21 @@ internal sealed class TimeRangeSink(IBatchSink inner, long ceilingMilliseconds =
 
     /// <summary>The greatest event time inside the bounds, UTC; null when no row carried one.</summary>
     public DateTime? Max => Read(ref _max, long.MinValue);
+
+    /// <summary>
+    /// The least and the greatest time of any row, in milliseconds, the rows outside the bounds included; null when
+    /// no row was handed over. The stored histogram is filled from the rows between the two.
+    /// </summary>
+    public (long Least, long Greatest)? AllTimes
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _greatest == long.MinValue ? null : (_least, _greatest);
+            }
+        }
+    }
 
     /// <summary>Rows whose time is below the floor.</summary>
     public long Undated => Interlocked.Read(ref _undated);
@@ -37,8 +54,12 @@ internal sealed class TimeRangeSink(IBatchSink inner, long ceilingMilliseconds =
         var max = long.MinValue;
         long undated = 0;
         long future = 0;
+        var least = long.MaxValue;
+        var greatest = long.MinValue;
         foreach (var ts in batch.Ts.AsSpan(0, batch.RowCount))
         {
+            least = Math.Min(least, ts);
+            greatest = Math.Max(greatest, ts);
             if (ts < _floor)
             {
                 undated++;
@@ -59,6 +80,8 @@ internal sealed class TimeRangeSink(IBatchSink inner, long ceilingMilliseconds =
         {
             _undated += undated;
             _future += future;
+            _least = Math.Min(_least, least);
+            _greatest = Math.Max(_greatest, greatest);
             if (max != long.MinValue)
             {
                 _min = Math.Min(_min, min);

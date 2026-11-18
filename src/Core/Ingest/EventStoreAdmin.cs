@@ -28,12 +28,40 @@ public sealed class EventStoreAdmin(ClickHouseTcpClient client)
     /// crashed or failed attempts left behind, never the committed parse. The case predicate prunes to the case's
     /// partitions. Idempotent.
     /// </summary>
-    public ValueTask DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken = default) =>
-        client.ExecuteAsync($"DELETE FROM events WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation != {Text(keep)}", cancellationToken: cancellationToken);
+    public async ValueTask DeleteFileGenerationsExceptAsync(ulong caseId, ulong fileId, uint keep, CancellationToken cancellationToken = default)
+    {
+        await client.ExecuteAsync($"DELETE FROM events WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation != {Text(keep)}", cancellationToken: cancellationToken).ConfigureAwait(false);
+        // The buckets counted from those rows go with them. The view hides both until then.
+        await client.ExecuteAsync($"DELETE FROM case_histogram WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation != {Text(keep)}", cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Lightweight delete of the file's generations below <paramref name="generation"/>, after that one was committed. Idempotent.</summary>
-    public ValueTask DeleteFileGenerationsBelowAsync(ulong caseId, ulong fileId, uint generation, CancellationToken cancellationToken = default) =>
-        client.ExecuteAsync($"DELETE FROM events WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation < {Text(generation)}", cancellationToken: cancellationToken);
+    public async ValueTask DeleteFileGenerationsBelowAsync(ulong caseId, ulong fileId, uint generation, CancellationToken cancellationToken = default)
+    {
+        await client.ExecuteAsync($"DELETE FROM events WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation < {Text(generation)}", cancellationToken: cancellationToken).ConfigureAwait(false);
+        await client.ExecuteAsync($"DELETE FROM case_histogram WHERE case_id = {Text(caseId)} AND file_id = {Text(fileId)} AND parse_generation < {Text(generation)}", cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes the stored histogram of one parse attempt from the rows the store holds for it: one INSERT, so one
+    /// part, after the attempt's last insert was acknowledged and before its commit. The buckets carry the
+    /// attempt's generation and show when its events do. Not idempotent: an attempt fills once, and a fill that
+    /// fails fails the attempt, whose rows and buckets are then deleted together.
+    /// </summary>
+    public ValueTask FillHistogramAsync(ulong caseId, ulong fileId, uint generation, long fromMilliseconds, long toMilliseconds, CancellationToken cancellationToken = default) =>
+        client.ExecuteAsync(CaseScopedEventsQuery.BuildHistogramFill(caseId, fileId, generation, fromMilliseconds, toMilliseconds), cancellationToken: cancellationToken);
+
+    /// <summary>Drops the case's partition of the stored histogram (purge and archive). Idempotent: a missing partition is not an error.</summary>
+    public ValueTask DropCaseHistogramAsync(ulong caseId, CancellationToken cancellationToken = default) =>
+        client.ExecuteAsync($"ALTER TABLE case_histogram DROP PARTITION {Text(caseId)}", cancellationToken: cancellationToken);
+
+    /// <summary>Rows the case has in the active parts of the stored histogram (<c>system.parts</c>), of every generation.</summary>
+    public async Task<long> CaseHistogramRowsAsync(ulong caseId, CancellationToken cancellationToken = default) =>
+        Convert.ToInt64(
+            await client.ExecuteScalarAsync(
+                $"SELECT sum(rows) FROM system.parts WHERE database = currentDatabase() AND table = 'case_histogram' AND active AND partition = '{Text(caseId)}'",
+                cancellationToken: cancellationToken).ConfigureAwait(false),
+            CultureInfo.InvariantCulture);
 
     /// <summary>Records that <paramref name="generation"/> is the visible parse of the file. Visible to the next query.</summary>
     public ValueTask CommitFileGenerationAsync(ulong fileId, uint generation, CancellationToken cancellationToken = default) =>

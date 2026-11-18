@@ -29,10 +29,10 @@ public sealed class PurgeTests
         Assert.Equal(["backup", "mark", "store", "files", "metadata"], steps);
         await scene.AssertPurgedAsync();
 
-        // The order the store saw: drops, then the statistics, then the generation rows; the identity read before each group.
+        // The order the store saw: drops, the stored histogram with them, then the statistics, then the generation rows; the identity read before each group.
         var calls = h.Events.Calls;
         Assert.Equal(
-            [$"drop {scene.Purged} 202601", $"drop {scene.Purged} 202602", $"drop {scene.Purged} 202603", $"field-stats {scene.Purged}", $"clear-generations {string.Join(',', scene.PurgedFiles)}"],
+            [$"drop {scene.Purged} 202601", $"drop {scene.Purged} 202602", $"drop {scene.Purged} 202603", $"drop-histogram {scene.Purged}", $"field-stats {scene.Purged}", $"clear-generations {string.Join(',', scene.PurgedFiles)}"],
             calls.Where(c => c.StartsWith("drop", StringComparison.Ordinal) || c.StartsWith("field-stats", StringComparison.Ordinal) || c.StartsWith("clear", StringComparison.Ordinal)));
         Assert.True(h.Events.IdentityReads >= 2);
 

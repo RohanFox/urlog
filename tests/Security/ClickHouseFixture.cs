@@ -217,18 +217,34 @@ public sealed class ClickHouseFixture : IAsyncLifetime
     /// backend inserts with: hosts <c>web-01</c>/<c>web-02</c>, one row a minute. The seed is file id = case id,
     /// generation 1.
     /// </summary>
-    public async Task InsertAsync(ulong caseId, ulong fileId, uint generation, int month, int rows)
+    public Task InsertAsync(ulong caseId, ulong fileId, uint generation, int month, int rows)
     {
-        var buffers = new PipelineBuffers(new PipelineOptions { BatchRows = rows, Parallelism = 1, InFlightChunks = 3, InFlightBatches = 5 });
+        var start = new DateTimeOffset(2026, month, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        return InsertRowsAsync(caseId, fileId, generation, [.. Enumerable.Range(0, rows).Select(i => new SeedRow(start + (i * 60_000L), i % 2 == 0 ? "web-01" : "web-02", string.Empty))]);
+    }
+
+    /// <summary>
+    /// Writes the given rows of one file and generation through the real insert path, as <see cref="InsertAsync"/>
+    /// does: each with its own time, host and severity, its offset the row's position.
+    /// </summary>
+    public async Task InsertRowsAsync(ulong caseId, ulong fileId, uint generation, IReadOnlyList<SeedRow> seed)
+    {
+        ArgumentNullException.ThrowIfNull(seed);
+        var rows = seed.Count;
+        var buffers = new PipelineBuffers(new PipelineOptions { BatchRows = Math.Max(1, rows), Parallelism = 1, InFlightChunks = 3, InFlightBatches = 5 });
         var sink = new CollectingBatchSink();
         var writer = new EventBatchWriter(buffers.Batches, sink);
         writer.Bind(new ParseContext { CaseId = caseId, HostId = caseId, FileId = fileId, ParseGeneration = generation, DefaultHost = "web-01"u8.ToArray() });
-        var start = new DateTimeOffset(2026, month, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         for (var i = 0; i < rows; i++)
         {
             writer.AppendUInt64(EventColumn.FileOffset, (ulong)i);
-            writer.AppendTimestamp(start + (i * 60_000L));
-            writer.AppendString(EventColumn.Host, i % 2 == 0 ? "web-01"u8 : "web-02"u8);
+            writer.AppendTimestamp(seed[i].Milliseconds);
+            writer.AppendString(EventColumn.Host, System.Text.Encoding.UTF8.GetBytes(seed[i].Host));
+            if (seed[i].Severity.Length > 0)
+            {
+                writer.AppendString(EventColumn.Severity, System.Text.Encoding.UTF8.GetBytes(seed[i].Severity));
+            }
+
             writer.AppendString(EventColumn.Program, "nginx"u8);
             writer.AppendString(EventColumn.Raw, "GET /index.html 200"u8);
             writer.AppendMessage(0, 19);
@@ -275,3 +291,6 @@ public sealed class SeedReaders : ICollectionFixture<ClickHouseFixture>
 {
     public const string Name = "seed readers";
 }
+
+/// <summary>One seeded event: its time in milliseconds, its host, and its severity (empty for none).</summary>
+public sealed record SeedRow(long Milliseconds, string Host, string Severity);

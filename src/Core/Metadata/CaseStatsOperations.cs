@@ -33,6 +33,19 @@ public static class CaseStatsOperations
     private const int MaxMessageLength = 4000;
 
     /// <summary>
+    /// Whether the stored histogram covers the case: every file with a committed parse had its minutes written
+    /// by that parse. A file parsed before the histogram was kept has none until it is parsed again, and its
+    /// case then reads the histogram from the events. A case without a parsed file is covered.
+    /// </summary>
+    public static async Task<bool> HasStoredHistogramAsync(MetadataDb db, long caseId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return !await db.Files.AsNoTracking()
+            .Where(f => f.CaseId == caseId && (f.HistogramGeneration == null || f.HistogramGeneration != f.ParseGeneration))
+            .AnyAsync(f => db.Jobs.Any(j => j.FileId == f.Id && j.State == JobState.Done && j.Kind != JobKind.Expand), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Inside the transaction that commits a parse: the case's span is the least <c>ts_min</c> and the greatest
     /// <c>ts_max</c> of its files, recomputed and never only widened, since a re-parse can narrow it; the two
     /// counts are sums; the statistics are marked out of date as of <paramref name="nowUtc"/>.

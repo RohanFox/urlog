@@ -167,6 +167,7 @@ public sealed partial class LifecycleExecutor(MetadataStore store, IJobEventStor
         // Store. The identity is read again before each group of statements that remove something.
         await StoreIdentityGuard.RequireAsync(store.Path, events, cancellationToken).ConfigureAwait(false);
         var dropped = await DropPartitionsAsync((ulong)caseId, cancellationToken).ConfigureAwait(false);
+        await DropHistogramAsync((ulong)caseId, cancellationToken).ConfigureAwait(false);
         List<long> fileIds;
         await using (var db = store.CreateDbContext())
         {
@@ -302,6 +303,17 @@ public sealed partial class LifecycleExecutor(MetadataStore store, IJobEventStor
         }
 
         return dropped;
+    }
+
+    /// <summary>The case's stored histogram goes with its events: its partition is dropped and looked for again.</summary>
+    private async Task DropHistogramAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        await events.DropCaseHistogramAsync(caseId, cancellationToken).ConfigureAwait(false);
+        var left = await events.CaseHistogramRowsAsync(caseId, cancellationToken).ConfigureAwait(false);
+        if (left > 0)
+        {
+            throw new InvalidOperationException($"case {caseId} still has {left} row(s) in the stored histogram after its partition was dropped; something is writing to it");
+        }
     }
 
     private async Task ClearGenerationsAsync(long caseId, List<long> fileIds, CancellationToken cancellationToken)

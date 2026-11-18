@@ -185,7 +185,7 @@ public sealed class StoreIdentityRunnerTests
 
         Assert.Equal(JobState.Done, (await h.JobAsync(job.Id)).State);
         Assert.True(h.Events.IdentityReads >= 1);
-        Assert.Equal(["commit " + file.Id + " 1"], h.Events.Calls);
+        Assert.Equal(["fill-histogram " + file.Id + " 1", "commit " + file.Id + " 1"], h.Events.Calls);
     }
 
     [Fact]

@@ -36,6 +36,18 @@ public interface IJobEventStore : IStoreIdentitySource
     /// <summary>Removes the file's rows of the generations below <paramref name="generation"/>.</summary>
     Task DeleteFileGenerationsBelowAsync(ulong caseId, ulong fileId, uint generation, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Writes the stored histogram of one parse attempt from its rows in the store, before its commit. The times
+    /// are the least and the greatest among the attempt's rows, in milliseconds.
+    /// </summary>
+    Task FillHistogramAsync(ulong caseId, ulong fileId, uint generation, long fromMilliseconds, long toMilliseconds, CancellationToken cancellationToken);
+
+    /// <summary>Drops the case's stored histogram. A case that has none is not an error.</summary>
+    Task DropCaseHistogramAsync(ulong caseId, CancellationToken cancellationToken);
+
+    /// <summary>Rows the case still has in the stored histogram.</summary>
+    Task<long> CaseHistogramRowsAsync(ulong caseId, CancellationToken cancellationToken);
+
     Task CommitFileGenerationsAsync(IReadOnlyList<KeyValuePair<ulong, uint>> generations, CancellationToken cancellationToken);
 
     Task<Dictionary<ulong, uint>> ReadFileGenerationsAsync(CancellationToken cancellationToken);
@@ -101,6 +113,18 @@ public sealed class ClickHouseJobEventStore(Func<ClickHouseTcpClient> control, N
 
     public Task DeleteFileGenerationsBelowAsync(ulong caseId, ulong fileId, uint generation, CancellationToken cancellationToken) =>
         WithAsync(admin => admin.DeleteFileGenerationsBelowAsync(caseId, fileId, generation, cancellationToken).AsTask());
+
+    public Task FillHistogramAsync(ulong caseId, ulong fileId, uint generation, long fromMilliseconds, long toMilliseconds, CancellationToken cancellationToken) =>
+        WithAsync(admin => admin.FillHistogramAsync(caseId, fileId, generation, fromMilliseconds, toMilliseconds, cancellationToken).AsTask());
+
+    public Task DropCaseHistogramAsync(ulong caseId, CancellationToken cancellationToken) =>
+        WithAsync(admin => admin.DropCaseHistogramAsync(caseId, cancellationToken).AsTask());
+
+    public async Task<long> CaseHistogramRowsAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        await using var client = control();
+        return await new EventStoreAdmin(client).CaseHistogramRowsAsync(caseId, cancellationToken).ConfigureAwait(false);
+    }
 
     public Task CommitFileGenerationsAsync(IReadOnlyList<KeyValuePair<ulong, uint>> generations, CancellationToken cancellationToken) =>
         WithAsync(admin => admin.CommitFileGenerationsAsync(generations, cancellationToken).AsTask());

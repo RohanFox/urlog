@@ -21,7 +21,7 @@ public sealed class FieldStatsTests
         Assert.Equal(
             "SELECT case_id, field, value, count, distinct_estimate, toString(computed_at) FROM field_stats_v WHERE case_id = {case:UInt64} ORDER BY field ASC, count DESC, value ASC",
             FieldStats.Sql);
-        Assert.Equal(["events_v", "field_stats_v"], RawSqlGate.AllowedRelations.Order(StringComparer.Ordinal));
+        Assert.Equal(["case_histogram_v", "events_v", "field_stats_v"], RawSqlGate.AllowedRelations.Order(StringComparer.Ordinal));
         Assert.Contains("field_stats", RawSqlGate.DeniedRelations.AsEnumerable());
     }
 

@@ -25,7 +25,7 @@ internal sealed class FakeSearchBackend : ISearchBackend
 
     public ConcurrentQueue<(string Kind, string Sql, ulong CaseId)> Calls { get; } = new();
 
-    /// <summary>Thrown in place of an answer to a statement of this kind (page, boundary, histogram, counts, count, query, sql, stream).</summary>
+    /// <summary>Thrown in place of an answer to a statement of this kind (page, boundary, histogram, stored, counts, count, query, sql, stream).</summary>
     public ConcurrentDictionary<string, Exception> Failures { get; } = new();
 
     /// <summary>Awaited before every answer; a test swaps in an open source to hold statements in flight.</summary>
@@ -73,7 +73,7 @@ internal sealed class FakeSearchBackend : ISearchBackend
                 return new QueryRows(["count()"], [[(ulong)matching.Count]], false, TimeSpan.Zero);
             case "counts":
                 return new QueryRows(["c0", "host", "c1"], [[1UL, string.Empty, (ulong)matching.Count]], false, TimeSpan.Zero);
-            case "histogram":
+            case "histogram" or "stored":
                 var rows = matching.GroupBy(e => (Day: e.Ts.Date, e.Severity)).OrderBy(g => g.Key.Day).ThenBy(g => g.Key.Severity, StringComparer.Ordinal)
                     .Select(g => new object?[] { DateTime.SpecifyKind(g.Key.Day, DateTimeKind.Utc), g.Key.Severity, (ulong)g.Count() }).ToList();
                 return new QueryRows(["c0", "severity", "count()"], rows, false, TimeSpan.Zero);
@@ -140,6 +140,7 @@ internal sealed class FakeSearchBackend : ISearchBackend
         sql.StartsWith("SELECT min(ts), count() FROM (", StringComparison.Ordinal) ? "boundary"
         : sql.Contains("GROUPING SETS", StringComparison.Ordinal) ? "counts"
         : sql.StartsWith("SELECT count() FROM events_v", StringComparison.Ordinal) ? "count"
+        : sql.Contains("FROM case_histogram_v", StringComparison.Ordinal) ? "stored"
         : sql.Contains("toStartOfInterval", StringComparison.Ordinal) && sql.Contains("GROUP BY", StringComparison.Ordinal) ? "histogram"
         : "page";
 

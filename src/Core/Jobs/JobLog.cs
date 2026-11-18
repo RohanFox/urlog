@@ -17,6 +17,12 @@ internal static partial class JobLog
     [LoggerMessage(EventId = 136, Level = LogLevel.Information, Message = "job {JobId} input: {StoredBytes} stored bytes ({Compression}) read and decoded in {ReadSeconds:F2} s, of which {HashSeconds:F2} s hash; the decoder alone {DecodeSeconds:F2} s")]
     public static partial void Input(ILogger logger, long jobId, long storedBytes, string compression, double readSeconds, double hashSeconds, double decodeSeconds);
 
+    [LoggerMessage(EventId = 142, Level = LogLevel.Information, Message = "job {JobId} file {FileId}: stored histogram written in {Milliseconds:F0} ms")]
+    public static partial void HistogramFilled(ILogger logger, long jobId, long fileId, double milliseconds);
+
+    [LoggerMessage(EventId = 143, Level = LogLevel.Warning, Message = "job {JobId} file {FileId}: no stored histogram, the file has a time before 1970 or after 2106; its case reads its timeline from the events")]
+    public static partial void HistogramNotFilled(ILogger logger, long jobId, long fileId);
+
     [LoggerMessage(EventId = 102, Level = LogLevel.Warning, Message = "job {JobId} failed: file {FileId}: {Reason}")]
     public static partial void Failed(ILogger logger, long jobId, long fileId, string reason);
 

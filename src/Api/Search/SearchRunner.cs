@@ -115,8 +115,24 @@ public sealed class SearchRunner(ISearchBackend backend, ulong caseId)
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(span);
 
+        return await BucketsAsync(plan.Histogram(span), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The same histogram from the stored minutes of the case, for a search that narrows nothing; null when the
+    /// plan has no stored form for it (<see cref="SearchPlan.StoredHistogram"/>).
+    /// </summary>
+    public async Task<IReadOnlyList<HistogramBucket>?> StoredHistogramAsync(SearchPlan plan, HistogramSpan span, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(span);
+        return plan.StoredHistogram(span) is { } statement ? await BucketsAsync(statement, cancellationToken).ConfigureAwait(false) : null;
+    }
+
+    private async Task<IReadOnlyList<HistogramBucket>> BucketsAsync(SearchStatement statement, CancellationToken cancellationToken)
+    {
         // At most the bucket cap times the severities there are; the row limit is a guard, not a page.
-        var rows = (await backend.RunAsync(plan.Histogram(span), caseId, 100_000, cancellationToken).ConfigureAwait(false)).Rows;
+        var rows = (await backend.RunAsync(statement, caseId, 100_000, cancellationToken).ConfigureAwait(false)).Rows;
         var buckets = new List<HistogramBucket>();
         Dictionary<string, long>? counts = null;
         DateTimeOffset current = default;

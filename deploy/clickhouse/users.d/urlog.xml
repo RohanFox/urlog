@@ -1,19 +1,19 @@
 <!--
   Development users. The `default` user (password in compose.dev.yml) is created by the image
   entrypoint from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD, so it is not declared here. `urlog_query` is the
-  read-only user the backend queries through: restricted profile plus the two grants below (
+  read-only user the backend queries through: restricted profile plus the three grants below (
   docs/adr/0001-case-isolation.md).
 
   Accounts:
     default         admin: migrations (`urlog migrate`), definer of events_v; never held by the backend at runtime
-    urlog_query     read: SELECT on events_v and field_stats_v, readonly=2, constrained limits
-    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit and its removal at a purge, field statistics; reads the store identity
+    urlog_query     read: SELECT on events_v, field_stats_v and case_histogram_v, readonly=2, constrained limits
+    urlog_ingest    write: insert, lightweight delete, partition drop, generation commit and its removal at a purge, field statistics, the stored histogram; reads the store identity
 -->
 <clickhouse>
     <users>
         <!-- The query path's user (ADR 0001, ADR 0003): readonly=2 so the per-request SQL_allowed_cases setting goes
-             through, and exactly two grants. Listing grants here replaces the "everything" a users.xml user gets by
-             default: no SELECT on events, file_generation or field_stats (the two views read them as their definer), no dictGet, no table
+             through, and exactly three grants. Listing grants here replaces the "everything" a users.xml user gets by
+             default: no SELECT on events, file_generation, field_stats or case_histogram (the three views read them as their definer), no dictGet, no table
              functions (url/file/s3/remote need READ ON URL/FILE/... and are refused), no system.* beyond what every
              user may read, no CREATE TEMPORARY TABLE. tests/Security/GrantTests.cs asserts each refusal. -->
         <urlog_query>
@@ -26,6 +26,7 @@
             <grants>
                 <query>GRANT SELECT ON default.events_v</query>
                 <query>GRANT SELECT ON default.field_stats_v</query>
+                <query>GRANT SELECT ON default.case_histogram_v</query>
             </grants>
         </urlog_query>
         <!-- The write path's user (design record "Write path"): inserts, the re-parse protocol, case deletion and
@@ -61,6 +62,10 @@
                 <!-- ALTER DELETE: a case's statistics are removed when the case is deleted or purged, and replaced
                      when they are recomputed (migration 0004; decided 2026-11-11). -->
                 <query>GRANT INSERT, ALTER DELETE ON default.field_stats</query>
+                <!-- The stored histogram of a case (migration 0009): written from the rows of a parse before its
+                     commit, its superseded generations deleted with their events, its partition dropped when
+                     the case is archived or purged. The account cannot read the table. -->
+                <query>GRANT INSERT, ALTER DELETE ON default.case_histogram</query>
                 <query>GRANT SELECT ON system.parts</query>
                 <query>GRANT SELECT ON system.merges</query>
                 <query>GRANT SELECT ON system.mutations</query>

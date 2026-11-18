@@ -103,6 +103,47 @@ public sealed partial class SearchPlanTests
     }
 
     [Fact]
+    public void TheStoredHistogramReadsWholeMinutesFromTheViewAndTheEdgesFromTheEvents()
+    {
+        // A range that ends on minutes at both ends: the stored rows alone.
+        var whole = Plan(string.Empty).StoredHistogram(new HistogramSpan(1, 'h'))!;
+        Assert.Equal(
+            "SELECT `c0`, severity, sum(`c1`) FROM ("
+            + "SELECT toStartOfInterval(bucket, toIntervalHour({s_h_span:UInt32})) AS `c0`, severity, sum(events) AS `c1` FROM case_histogram_v "
+            + "WHERE case_id = {case:UInt64} AND bucket >= {s_h_first:DateTime64(3)} AND bucket < {s_h_last:DateTime64(3)} GROUP BY `c0`, severity"
+            + ") GROUP BY `c0`, severity ORDER BY `c0` ASC, severity ASC",
+            whole.Sql);
+        Assert.Equal(["case", "s_h_span", "s_h_first", "s_h_last"], whole.Parameters.Select(p => p.Name));
+        Assert.Equal(("2026-03-01 00:00:00.000", "2026-04-01 00:00:00.000"), (whole.Parameters.Single(p => p.Name == "s_h_first").Value, whole.Parameters.Single(p => p.Name == "s_h_last").Value));
+
+        // Ends inside a minute: the whole minutes between them from the view, the two parts of a minute from the events.
+        var options = new TranspileOptions(7, new DateTimeOffset(2026, 3, 2, 8, 15, 27, 120, TimeSpan.Zero), new DateTimeOffset(2026, 3, 9, 17, 42, 3, 501, TimeSpan.Zero), TimeZoneInfo.Utc, To);
+        var edged = SearchPlan.Create(string.Empty, options).StoredHistogram(new HistogramSpan(1, 'h'))!;
+        Assert.Equal(
+            "SELECT `c0`, severity, sum(`c1`) FROM ("
+            + "SELECT toStartOfInterval(bucket, toIntervalHour({s_h_span:UInt32})) AS `c0`, severity, sum(events) AS `c1` FROM case_histogram_v "
+            + "WHERE case_id = {case:UInt64} AND bucket >= {s_h_first:DateTime64(3)} AND bucket < {s_h_last:DateTime64(3)} GROUP BY `c0`, severity"
+            + " UNION ALL SELECT toStartOfInterval(ts, toIntervalHour({s_e_span:UInt32})) AS `c0`, severity, count() AS `c1` FROM events_v "
+            + "WHERE case_id = {case:UInt64} AND ((ts >= {from:DateTime64(3)} AND ts < {s_h_first:DateTime64(3)}) OR (ts >= {s_h_last:DateTime64(3)} AND ts < {to:DateTime64(3)})) GROUP BY `c0`, severity"
+            + ") GROUP BY `c0`, severity ORDER BY `c0` ASC, severity ASC",
+            edged.Sql);
+        Assert.Equal(("2026-03-02 08:16:00.000", "2026-03-09 17:42:00.000"), (edged.Parameters.Single(p => p.Name == "s_h_first").Value, edged.Parameters.Single(p => p.Name == "s_h_last").Value));
+
+        // A day or more is cut on the display zone's calendar, over the stored minute as over the event's time.
+        var bucharest = TimeZoneInfo.CreateCustomTimeZone("Europe/Bucharest", TimeSpan.FromHours(2), "Europe/Bucharest", "EET");
+        var days = Plan(string.Empty, bucharest).StoredHistogram(new HistogramSpan(1, 'd'))!;
+        Assert.Contains("toStartOfInterval(bucket, toIntervalDay({s_h_span:UInt32}), {s_h_tz:String})", days.Sql, StringComparison.Ordinal);
+        Assert.Equal("Europe/Bucharest", days.Parameters.Single(p => p.Name == "s_h_tz").Value);
+
+        // No stored form: a search that narrows, a span under the stored minute, a range inside one minute.
+        Assert.Null(Plan("error").StoredHistogram(new HistogramSpan(1, 'h')));
+        Assert.Null(Plan("host=web-01").StoredHistogram(new HistogramSpan(1, 'h')));
+        Assert.Null(Plan(string.Empty).StoredHistogram(new HistogramSpan(30, 's')));
+        var inside = new TranspileOptions(7, new DateTimeOffset(2026, 3, 2, 8, 15, 10, TimeSpan.Zero), new DateTimeOffset(2026, 3, 2, 8, 15, 50, TimeSpan.Zero), TimeZoneInfo.Utc, To);
+        Assert.Null(SearchPlan.Create(string.Empty, inside).StoredHistogram(new HistogramSpan(1, 'm')));
+    }
+
+    [Fact]
     public void TheHistogramCountsBySeverityOverTheSearchsFilter()
     {
         var hours = Plan("error").Histogram(new HistogramSpan(3, 'h'));

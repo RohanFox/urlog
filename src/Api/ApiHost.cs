@@ -70,7 +70,7 @@ public static class ApiHost
         });
         services.AddSingleton<Endpoints.IFieldStatsSource, Endpoints.QueryFieldStatsSource>();
         services.AddSingleton<Search.ISearchBackend, Search.QuerySearchBackend>();
-        services.AddSingleton<Search.IStoredHistogram, Search.NoStoredHistogram>();
+        services.AddSingleton<Search.IStoredHistogram, Search.StoredHistogram>();
         services.AddSingleton<Search.QueryAudit>();
         services.AddSingleton(sp =>
         {

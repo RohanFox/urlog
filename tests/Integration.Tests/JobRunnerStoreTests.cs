@@ -43,6 +43,11 @@ public sealed class JobRunnerStoreTests(ClickHouseFixture ch, ITestOutputHelper 
         Assert.Equal((lines, 1L, 1L), await h.VisibleAsync(@case.Id));
         Assert.Equal(1u, await h.MirroredGenerationAsync(file.Id));
         output.WriteLine($"{lines:N0} rows of generation 1 visible");
+        // The runner wrote the file's stored histogram before that commit: every minute and severity as the events have them.
+        var stored = await h.HistogramAsync(@case.Id, file.Id);
+        Assert.Equal((0L, (long)lines), (stored.Differing, stored.Events));
+        Assert.Equal([1u], stored.FileGenerations);
+        Assert.Equal(1, (await h.FileAsync(file.Id)).HistogramGeneration);
 
         // Re-parse: generation 2 replaces generation 1, in the view and in the table.
         await using (var db = h.Store.CreateDbContext())
@@ -54,6 +59,10 @@ public sealed class JobRunnerStoreTests(ClickHouseFixture ch, ITestOutputHelper 
         Assert.Equal((lines, 1L, 2L), await h.VisibleAsync(@case.Id));
         await WorkerHarness.EventuallyAsync(async () => (await h.StoredGenerationsAsync(file.Id)).Keys.SequenceEqual([2u]), "generation 1 deleted after the commit of 2", seconds: 60, pollMilliseconds: 250);
         Assert.Equal(2, (await h.FileAsync(file.Id)).ParseGeneration);
+        // The clean-up took the first generation's buckets with its rows: the table holds the second's alone.
+        await WorkerHarness.EventuallyAsync(async () => (await h.HistogramAsync(@case.Id, file.Id)).FileGenerations.SequenceEqual([2u]), "the buckets of generation 1 deleted after the commit of 2", seconds: 60, pollMilliseconds: 250);
+        Assert.Equal((0L, (long)lines), ((await h.HistogramAsync(@case.Id, file.Id)).Differing, (await h.HistogramAsync(@case.Id, file.Id)).Events));
+        Assert.Equal(2, (await h.FileAsync(file.Id)).HistogramGeneration);
 
         // The mirror drifts (a commit the event store never got, or a row written by mistake): the next start puts SQLite's value back.
         await using (var ingest = new ClickHouse.Driver.Tcp.ClickHouseTcpClient(ch.NativeConnectionString(WorkerHarness.IngestUser, WorkerHarness.IngestPassword)))
@@ -94,6 +103,7 @@ public sealed class JobRunnerStoreTests(ClickHouseFixture ch, ITestOutputHelper 
         Assert.Equal(0, (await h.VisibleAsync(@case.Id)).Rows);
         Assert.Equal(0u, await h.MirroredGenerationAsync(file.Id));
         await WorkerHarness.EventuallyAsync(async () => (await h.StoredGenerationsAsync(file.Id)).Count == 0, "the unverified rows deleted", seconds: 60, pollMilliseconds: 250);
+        Assert.Equal(0, await h.HistogramRowsAsync(@case.Id)); // a file that fails its hash gets no stored histogram
 
         await using var db = h.Store.CreateDbContext();
         var row = Assert.Single(db.Audit.Where(a => a.Action == AuditActions.IntegrityMismatch).ToList());
