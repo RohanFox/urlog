@@ -316,8 +316,10 @@ public sealed class JobRunnerTests
         var fileId = (ulong)file.Id;
 
         // The event store refuses the commit once: SQLite says done, the store has no row, the file shows nothing.
+        // No maintenance tick in this run: a tick after the refused commit writes the row itself, which is the
+        // runner doing its work and not what this step looks at.
         h.Events.FailNextCommit = new IOException("connection reset");
-        await h.Runner().RunAsync(Ct);
+        await h.Runner(RunnerHarness.Options() with { WatermarkInterval = TimeSpan.FromHours(1) }).RunAsync(Ct);
         Assert.Equal(1, (await h.FileAsync(file.Id)).ParseGeneration);
         Assert.Equal(0u, h.Events.Current(fileId));
         Assert.Equal(0, h.Events.Visible(fileId));
