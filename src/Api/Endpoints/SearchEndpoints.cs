@@ -542,7 +542,7 @@ public static class SearchEndpoints
         // The names the analyst sees, and which of them the catalog marks sensitive.
         var columns = plan.Query.Columns;
         var sensitive = columns.Select(SensitiveName).Where(n => n is not null).Select(n => n!).Distinct(StringComparer.Ordinal).ToList();
-        await ExportAsync(http, me, backend, slots, audit, limits, loggers, @case, record, sw, kind, formulaGuard == true, plan.Export(limits.MaxExportRows), null, plan.Kind == ResultKind.Events ? plan.Count() : null, plan.Head, columns, sensitive).ConfigureAwait(false);
+        await ExportAsync(http, me, backend, slots, audit, limits, loggers, @case, record, sw, kind, formulaGuard == true, plan.Export(limits.MaxExportRows), null, plan.Kind == ResultKind.Events ? plan.Count() : null, plan.Head, columns, sensitive, plan.ExportCapped(limits.MaxExportRows)).ConfigureAwait(false);
     }
 
     private static async Task ExportSqlAsync(
@@ -592,7 +592,8 @@ public static class SearchEndpoints
         SearchStatement? count,
         int? head,
         IReadOnlyList<string>? columns,
-        IReadOnlyList<string>? sensitive)
+        IReadOnlyList<string>? sensitive,
+        SearchStatement? capped = null)
     {
         using var lease = await slots.AcquireAsync(me.Id, 1, export: true, http.RequestAborted).ConfigureAwait(false);
         if (lease is null)
@@ -623,6 +624,15 @@ public static class SearchEndpoints
                 }
             }
 
+            // Which values(f) columns hold a group over the cap, before the first byte: the file says so at its start.
+            IReadOnlyList<int> valuesColumns = statement is null || statement.ValuesColumns.IsDefault ? [] : statement.ValuesColumns;
+            var cappedColumns = new List<int>();
+            if (capped is not null)
+            {
+                var flags = (await backend.RunAsync(capped, (ulong)@case.Id, 1, aborted).ConfigureAwait(false)).Rows;
+                cappedColumns.AddRange(valuesColumns.Where((_, i) => flags.Count > 0 && Convert.ToInt64(flags[0][i], CultureInfo.InvariantCulture) != 0));
+            }
+
             await backend.StreamAsync(
                 statement,
                 sql,
@@ -636,7 +646,7 @@ public static class SearchEndpoints
                     http.Response.Headers.ContentDisposition = $"attachment; filename=\"case-{@case.Id.ToString(CultureInfo.InvariantCulture)}-export.{(format == ExportFormat.Csv ? "csv" : "jsonl")}\"";
                     http.Response.Headers.CacheControl = "no-store";
                     started = true;
-                    writer.Begin(shown, marked);
+                    writer.Begin(shown, marked, valuesColumns, [.. cappedColumns.Where(i => i < shown.Count).Select(i => shown[i])]);
                 },
                 async row =>
                 {

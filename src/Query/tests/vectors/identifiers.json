@@ -1308,7 +1308,7 @@
     "name": "identifier-aggregate-field-trailing-backslash",
     "spl": "| stats values(u\\) by host",
     "expect": {
-      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "sql": "SELECT host AS `host.name`, groupArraySortedDistinctIf(101)(extras[{p0:String}], notEmpty(extras[{p0:String}])) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",

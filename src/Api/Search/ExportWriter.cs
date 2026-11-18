@@ -22,7 +22,9 @@ public enum ExportFormat
 /// <para>
 /// CSV is RFC 4180: a header row, CRLF, a cell quoted when it holds a comma, a quote or a line break. JSON is one
 /// object a line. When a column is a field the catalog marks sensitive the file starts with a line that names
-/// those fields. Cells are written as they are stored. The one exception is asked for by the caller
+/// those fields. A <c>values(f)</c> cell is cut to the hundred values the query language shows, and when a group
+/// was over that cap the start of the file names the columns it happened in. Every other cell is written as it
+/// is stored. The one exception is asked for by the caller
 /// (<c>formula_guard</c>, CSV only): a cell a spreadsheet would read as a formula gets a leading apostrophe, and
 /// the first line of the file says the cells were altered.
 /// </para>
@@ -43,6 +45,7 @@ public sealed class ExportWriter : IDisposable
     private readonly StringBuilder _line = new();
     private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private IReadOnlyList<string> _columns = [];
+    private IReadOnlyList<int> _valuesColumns = [];
     private long _pending;
 
     public ExportWriter(PipeWriter output, ExportFormat format, bool formulaGuard)
@@ -64,12 +67,18 @@ public sealed class ExportWriter : IDisposable
 
     public void Dispose() => _hash.Dispose();
 
-    /// <summary>The lines before the first row: the altered note, the sensitive fields, and for CSV the header.</summary>
-    public void Begin(IReadOnlyList<string> columns, IReadOnlyList<string> sensitive)
+    /// <summary>
+    /// The lines before the first row: the altered note, the sensitive fields, the <c>values(f)</c> columns that
+    /// hold a group over the cap, and for CSV the header. <paramref name="valuesColumns"/> are the positions whose
+    /// cells are cut to the cap.
+    /// </summary>
+    public void Begin(IReadOnlyList<string> columns, IReadOnlyList<string> sensitive, IReadOnlyList<int>? valuesColumns = null, IReadOnlyList<string>? capped = null)
     {
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(sensitive);
         _columns = columns;
+        _valuesColumns = valuesColumns ?? [];
+        capped ??= [];
         if (_format == ExportFormat.Csv)
         {
             if (_formulaGuard)
@@ -80,6 +89,11 @@ public sealed class ExportWriter : IDisposable
             if (sensitive.Count > 0)
             {
                 Put("# sensitive fields: " + string.Join(", ", sensitive) + "\r\n");
+            }
+
+            if (capped.Count > 0)
+            {
+                Put($"# values capped: a cell with {Urlog.Query.Transpiler.ValuesCap} values in these columns may stand for more: " + string.Join(", ", capped) + "\r\n");
             }
 
             _line.Clear();
@@ -95,9 +109,20 @@ public sealed class ExportWriter : IDisposable
 
             Put(_line.Append("\r\n").ToString());
         }
-        else if (sensitive.Count > 0)
+        else if (sensitive.Count > 0 || capped.Count > 0)
         {
-            Put(JsonSerializer.Serialize(new Dictionary<string, object> { ["sensitive_fields"] = sensitive }) + "\n");
+            var first = new Dictionary<string, object>();
+            if (sensitive.Count > 0)
+            {
+                first["sensitive_fields"] = sensitive;
+            }
+
+            if (capped.Count > 0)
+            {
+                first["values_capped"] = capped;
+            }
+
+            Put(JsonSerializer.Serialize(first) + "\n");
         }
     }
 
@@ -105,6 +130,17 @@ public sealed class ExportWriter : IDisposable
     public async ValueTask WriteAsync(object?[] row, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(row);
+        foreach (var i in _valuesColumns)
+        {
+            // The statement asks for one value more than the cap so a group over it can be told: the file shows the cap.
+            if (i < row.Length && row[i] is Array { Length: > Urlog.Query.Transpiler.ValuesCap } list)
+            {
+                var kept = Array.CreateInstance(list.GetType().GetElementType()!, Urlog.Query.Transpiler.ValuesCap);
+                Array.Copy(list, kept, kept.Length);
+                row[i] = kept;
+            }
+        }
+
         if (_format == ExportFormat.Csv)
         {
             _line.Clear();

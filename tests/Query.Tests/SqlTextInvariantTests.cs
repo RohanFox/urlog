@@ -182,7 +182,7 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
     [InlineData("SELECT count() AS `c0` FROM events_v WHERE http_status = 404", "literal 404")]
     [InlineData("SELECT count() AS `c0` FROM events_v LIMIT 10", "literal 10")]
     [InlineData("SELECT extractGroups(raw, raw)[17] AS `c0` FROM events_v", "literal 17")]
-    [InlineData("SELECT groupUniqArray(100)(host) AS `c0` FROM events_v", "literal 100")]
+    [InlineData("SELECT groupArraySortedDistinct(100)(host) AS `c0` FROM events_v", "literal 100")]
     public void TheCheckItselfRefusesWhatItShould(string sql, string expected)
     {
         var problem = SqlTextProblem(new TranspileResult(sql, [], [], [], false, 1, Options.RangeFrom, Options.RangeTo));

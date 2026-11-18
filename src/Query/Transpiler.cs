@@ -90,7 +90,7 @@ public sealed record TranspileResult(
     /// <summary>
     /// Columns that hold <c>values(f)</c>. The SQL asks for one value more than the cap
     /// (<see cref="Transpiler.ValuesCap"/>), so the reader can tell a group that reached it: it trims the cell to
-    /// the cap and marks the row.
+    /// the cap and marks the row. A cell holds the smallest values of its group in ascending order.
     /// </summary>
     public ImmutableArray<int> ValuesColumns { get; init; } = [];
 
@@ -733,15 +733,17 @@ public sealed class Transpiler
             case AggregateFunction.Dc:
                 return (If("uniqExact", e), FieldType.Number, false);
             case AggregateFunction.Values:
+                // The smallest values of the group, ascending: the same cell on every run, and above the cap the
+                // same ones. The server keeps every distinct value of a group while it reads, not the cap.
                 return (has is null
-                    ? $"groupUniqArray({ValuesRequested})({e})"
-                    : $"groupUniqArrayIf({ValuesRequested})({e}, {has})", ResultType(operand.Type), true);
+                    ? $"groupArraySortedDistinct({ValuesRequested})({e})"
+                    : $"groupArraySortedDistinctIf({ValuesRequested})({e}, {has})", ResultType(operand.Type), true);
             case AggregateFunction.Earliest or AggregateFunction.Latest:
             {
                 var earliest = call.Function == AggregateFunction.Earliest;
                 return operand.Type == FieldType.Time
                     ? ($"{(earliest ? "min" : "max")}({e})", FieldType.Time, false)
-                    : (If(earliest ? "argMin" : "argMax", $"{e}, ts"), ResultType(operand.Type), false);
+                    : (If(earliest ? "argMin" : "argMax", $"{e}, {RowKey}"), ResultType(operand.Type), false);
             }
 
             case AggregateFunction.Sum when operand.Type == FieldType.Number:
@@ -760,6 +762,12 @@ public sealed class Transpiler
     }
 
     private const int ValuesRequested = ValuesCap + 1;
+
+    /// <summary>
+    /// What earliest(f) and latest(f) compare rows by: the key of a listing. A visible row is the only one with
+    /// its file and offset, so rows on one instant have one order and the same row is chosen on every run.
+    /// </summary>
+    private const string RowKey = "(ts, file_id, file_offset)";
 
     /// <summary>How a result column compares: an extras value and a text column are plain strings there.</summary>
     private static FieldType ResultType(FieldType type) => type is FieldType.Extra or FieldType.Text ? FieldType.Verbatim : type;

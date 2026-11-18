@@ -172,9 +172,26 @@ public sealed class ClickHouseQueryClient
         }
         catch (ClickHouseServerException e)
         {
-            throw new QueryFailedException(e.ErrorCode, e.Message.Split((char)10, 2)[0], e);
+            throw Failed(e, valuesColumns is { Count: > 0 });
         }
     }
+
+    /// <summary>The server's code for a query that passed its memory limit.</summary>
+    public const int MemoryLimitExceeded = 241;
+
+    /// <summary>
+    /// A server refusal as the caller's query error: the server's code and the first line of its text. The one
+    /// refusal that is explained is a <c>values(f)</c> query that passed the memory limit, because the cause is the
+    /// aggregate (it holds every distinct value of a group) and the analyst can act on it.
+    /// </summary>
+    private static QueryFailedException Failed(ClickHouseServerException e, bool holdsValues) =>
+        e.ErrorCode == MemoryLimitExceeded && holdsValues
+            ? new QueryFailedException(e.ErrorCode, ValuesOutOfMemory, e)
+            : new QueryFailedException(e.ErrorCode, e.Message.Split((char)10, 2)[0], e);
+
+    public const string ValuesOutOfMemory =
+        "values(f) passed the memory limit of a query: it keeps every distinct value of a group while it reads, and this search has too many. "
+        + "Count them with dc(f), or narrow the search or the time range.";
 
     /// <summary>
     /// The span of a case through <c>events_v</c>, for a caller without a metadata file: null when the case has no
@@ -227,7 +244,7 @@ public sealed class ClickHouseQueryClient
         ArgumentNullException.ThrowIfNull(allowedCases);
         var cases = AllowedCases(allowedCases);
         await EnsureAllowedAsync(statement.Sql, statement.Parameters, cases, cancellationToken).ConfigureAwait(false);
-        return await CollectAsync(statement.Sql, statement.Parameters, cases, maxRows, cancellationToken).ConfigureAwait(false);
+        return await CollectAsync(statement.Sql, statement.Parameters, cases, maxRows, cancellationToken, !statement.ValuesColumns.IsDefaultOrEmpty).ConfigureAwait(false);
     }
 
     /// <summary>The raw-SQL tab's text, gated, as <see cref="RunAsync(SearchStatement, IReadOnlyCollection{ulong}, int, CancellationToken)"/> returns a statement.</summary>
@@ -252,7 +269,7 @@ public sealed class ClickHouseQueryClient
         ArgumentNullException.ThrowIfNull(allowedCases);
         var cases = AllowedCases(allowedCases);
         await EnsureAllowedAsync(statement.Sql, statement.Parameters, cases, cancellationToken).ConfigureAwait(false);
-        return await ReadAsync(statement.Sql, statement.Parameters, cases, onColumns, onRow, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(statement.Sql, statement.Parameters, cases, onColumns, onRow, cancellationToken, !statement.ValuesColumns.IsDefaultOrEmpty).ConfigureAwait(false);
     }
 
     /// <summary>The raw-SQL tab's text read row by row, gated.</summary>
@@ -266,7 +283,7 @@ public sealed class ClickHouseQueryClient
         return await ReadAsync(text, [], cases, onColumns, onRow, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<QueryRows> CollectAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, int maxRows, CancellationToken cancellationToken)
+    private async Task<QueryRows> CollectAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, int maxRows, CancellationToken cancellationToken, bool holdsValues = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxRows);
         var sw = Stopwatch.StartNew();
@@ -289,12 +306,13 @@ public sealed class ClickHouseQueryClient
                 rows.Add(row);
                 return ValueTask.FromResult(true);
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            holdsValues).ConfigureAwait(false);
         return new QueryRows(columns, rows, truncated, sw.Elapsed);
     }
 
     /// <summary>A gated text, run and handed over a row at a time; a server refusal is the caller's query error.</summary>
-    private async Task<long> ReadAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken)
+    private async Task<long> ReadAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken, bool holdsValues = false)
     {
         ArgumentNullException.ThrowIfNull(onColumns);
         ArgumentNullException.ThrowIfNull(onRow);
@@ -344,7 +362,7 @@ public sealed class ClickHouseQueryClient
         }
         catch (ClickHouseServerException e)
         {
-            throw new QueryFailedException(e.ErrorCode, e.Message.Split((char)10, 2)[0], e);
+            throw Failed(e, holdsValues);
         }
     }
 

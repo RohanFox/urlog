@@ -5,7 +5,11 @@ using System.Text;
 namespace Urlog.Query;
 
 /// <summary>One statement of a search: SQL over <c>events_v</c> and its bound parameters. Run through the gate like any other.</summary>
-public sealed record SearchStatement(string Sql, ImmutableArray<QueryParameter> Parameters);
+public sealed record SearchStatement(string Sql, ImmutableArray<QueryParameter> Parameters)
+{
+    /// <summary>Columns of the result that hold <c>values(f)</c>: the reader cuts such a cell to the cap, and a refusal for memory is explained by them.</summary>
+    public ImmutableArray<int> ValuesColumns { get; init; } = [];
+}
 
 /// <summary>
 /// The statements one search runs (design record, "Query language", The search API), all built from one
@@ -186,12 +190,39 @@ public sealed class SearchPlan
     {
         if (_listing is null)
         {
-            return new SearchStatement(Query.Sql, Query.Parameters);
+            return new SearchStatement(Query.Sql, Query.Parameters) { ValuesColumns = Query.ValuesColumns };
         }
 
         var limit = Math.Min(cap, _listing.Head ?? cap).ToString(CultureInfo.InvariantCulture);
         var sql = $"SELECT {_listing.Select} FROM events_v WHERE {_listing.Where} ORDER BY {Order(_listing)} LIMIT {{s_limit:UInt64}}";
         return Statement(sql, [new QueryParameter("s_limit", "UInt64", limit)]);
+    }
+
+    /// <summary>
+    /// Which <c>values(f)</c> columns of an exported aggregation hold a group over the cap, asked before the first
+    /// byte so the file can say so at its start: one flag per column of <see cref="TranspileResult.ValuesColumns"/>,
+    /// over the rows the export will send. Null when the result has no such column.
+    /// </summary>
+    public SearchStatement? ExportCapped(long cap)
+    {
+        if (_listing is not null || Query.ValuesColumns.IsDefaultOrEmpty)
+        {
+            return null;
+        }
+
+        // The columns are read by position: their names are generated aliases only the transpiler knows.
+        var flags = Query.ValuesColumns.Select(i => $"max(length(tupleElement(r, {(i + 1).ToString(CultureInfo.InvariantCulture)})) > {{s_values:UInt64}})");
+        var sql = $"SELECT {string.Join(", ", flags)} FROM (SELECT tuple(*) AS r FROM ({Query.Sql}) LIMIT {{s_rows:UInt64}})";
+        return new SearchStatement(sql,
+        [
+            .. Query.Parameters,
+            new QueryParameter("s_values", "UInt64", Transpiler.ValuesCap.ToString(CultureInfo.InvariantCulture)),
+            new QueryParameter("s_rows", "UInt64", cap.ToString(CultureInfo.InvariantCulture)),
+        ])
+        {
+            // It runs the aggregation, so it meets the memory limit where the export would.
+            ValuesColumns = Query.ValuesColumns,
+        };
     }
 
     private ListingParts Listing() => _listing ?? throw new InvalidOperationException("the query is an aggregation: it has no listing");

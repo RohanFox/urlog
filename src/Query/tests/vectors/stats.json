@@ -34,7 +34,7 @@
     "name": "stats-values-asks-for-one-more-than-the-cap",
     "spl": "| stats values(src_ip) as ips by host",
     "expect": {
-      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(source_ip, source_ip != toIPv6({p0:String})) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "sql": "SELECT host AS `host.name`, groupArraySortedDistinctIf(101)(source_ip, source_ip != toIPv6({p0:String})) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -57,7 +57,7 @@
     "name": "stats-values-of-a-field-that-always-has-a-value",
     "spl": "| stats values(bytes) as sizes by host",
     "expect": {
-      "sql": "SELECT host AS `host.name`, groupUniqArray(101)(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "sql": "SELECT host AS `host.name`, groupArraySortedDistinct(101)(http_response_body_bytes) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -79,7 +79,7 @@
     "name": "stats-earliest-latest",
     "spl": "| stats earliest(_time) as first, latest(_time) as last, latest(raw) as sample by src_ip",
     "expect": {
-      "sql": "SELECT source_ip AS `source.ip`, min(ts) AS `c0`, max(ts) AS `c1`, argMaxIf(raw, ts, notEmpty(raw)) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip",
+      "sql": "SELECT source_ip AS `source.ip`, min(ts) AS `c0`, max(ts) AS `c1`, argMaxIf(raw, (ts, file_id, file_offset), notEmpty(raw)) AS `c2` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND source_ip != toIPv6({p0:String}) GROUP BY source_ip",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -105,7 +105,7 @@
     "name": "stats-earliest-of-a-field",
     "spl": "| stats earliest(user) by host",
     "expect": {
-      "sql": "SELECT host AS `host.name`, argMinIf(user_name, ts, notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
+      "sql": "SELECT host AS `host.name`, argMinIf(user_name, (ts, file_id, file_offset), notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",

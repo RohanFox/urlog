@@ -270,7 +270,7 @@
     "name": "where-after-stats-values-holds",
     "spl": "| stats values(user) as users by host | where users=root",
     "expect": {
-      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(user_name, notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (has(`c0`, {p0:String}))",
+      "sql": "SELECT host AS `host.name`, groupArraySortedDistinctIf(101)(user_name, notEmpty(user_name)) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (has(`c0`, {p0:String}))",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",
@@ -293,7 +293,7 @@
     "name": "where-after-stats-values-holds-not",
     "spl": "| stats values(status) as codes by host | where codes!=500",
     "expect": {
-      "sql": "SELECT host AS `host.name`, groupUniqArrayIf(101)(http_status, http_status != 0) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (NOT has(`c0`, {p0:UInt64}))",
+      "sql": "SELECT host AS `host.name`, groupArraySortedDistinctIf(101)(http_status, http_status != 0) AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host HAVING (NOT has(`c0`, {p0:UInt64}))",
       "params": {
         "case": "UInt64:1",
         "from": "DateTime64(3):2026-03-01 00:00:00.000",

@@ -364,6 +364,136 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
     }
 
     [Fact]
+    public async Task EarliestLatestAndValuesChooseTheSameOnEveryRun()
+    {
+        // Three files in case 3, all in May, each with a row on the same 200 instants and offsets 0 to 199: every
+        // instant is a tie between three rows that differ in their file, and the case has 200 distinct offsets,
+        // twice the cap of values(f).
+        await using var ingest = ch.Ingest();
+        var store = new EventStoreAdmin(ingest);
+        foreach (var file in new ulong[] { 41, 42, 43 })
+        {
+            await ch.InsertAsync(3, file, 1, 5, 200);
+            await store.CommitFileGenerationAsync(file, 1, Ct);
+        }
+
+        var (api, _, mallory) = await StartAsync();
+        await using var host = api;
+        const string Range = "&from=2026-05-01T00:00:00Z&to=2026-06-01T00:00:00Z";
+        var searches = new[]
+        {
+            "| stats earliest(file.id) as first by host",
+            "| stats latest(file.id) as last by host",
+            "| stats values(file.offset) as offsets, values(file.id) as files",
+        };
+        foreach (var query in searches)
+        {
+            foreach (var format in new[] { "csv", "json" })
+            {
+                var path = $"/api/v1/cases/3/search/export?format={format}&query={Uri.EscapeDataString(query)}{Range}";
+                var first = await (await mallory.GetAsync(path)).Content.ReadAsByteArrayAsync(Ct);
+                var second = await (await mallory.GetAsync(path)).Content.ReadAsByteArrayAsync(Ct);
+                var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(first));
+                Assert.Equal(hash, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(second)));
+                output.WriteLine($"{format} '{query}': {first.Length:N0} bytes twice, sha256 {hash[..16]}...");
+            }
+        }
+
+        async Task<JsonElement> TableAsync(string query) =>
+            (await EventsAsync(await mallory.PostAsync("/api/v1/cases/3/search", new { query, from = "2026-05-01T00:00:00Z", to = "2026-06-01T00:00:00Z" }))).Single(e => e.Name == "table").Data;
+        static List<string[]> Rows(JsonElement table) => [.. table.GetProperty("rows").EnumerateArray().Select(r => r.EnumerateArray().Select(c => c.GetString()!).ToArray())];
+
+        // Which row: among the three on the first instant of a host the one of the lowest file, among the three on
+        // its last instant the one of the highest, as the listing orders them.
+        Assert.Equal([["web-01", "41"], ["web-02", "41"]], Rows(await TableAsync(searches[0])));
+        Assert.Equal([["web-01", "43"], ["web-02", "43"]], Rows(await TableAsync(searches[1])));
+
+        // Which values: ascending, and above the cap the hundred smallest, with the row marked.
+        var values = await TableAsync(searches[2]);
+        var cell = Rows(values)[0];
+        Assert.Equal("[" + string.Join(", ", Enumerable.Range(0, Transpiler.ValuesCap)) + ", ...]", cell[0]);
+        Assert.Equal("[41, 42, 43]", cell[1]);
+        Assert.Equal([0], values.GetProperty("values_capped_rows").EnumerateArray().Select(i => i.GetInt32()));
+
+        // A group at the cap is whole and not marked: web-01 has the hundred even offsets.
+        var atCap = await TableAsync("| stats values(file.offset) as offsets by host");
+        Assert.Equal("[" + string.Join(", ", Enumerable.Range(0, Transpiler.ValuesCap).Select(i => i * 2)) + "]", Rows(atCap)[0][1]);
+        Assert.Empty(atCap.GetProperty("values_capped_rows").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task AnExportCutsAValuesCellToTheCapAndNamesTheColumnAtItsStart()
+    {
+        // The seed of case 2: 200 instants, a hundred a host, and a hundred distinct offsets (each in both months).
+        var (api, alice, _) = await StartAsync();
+        await using var host = api;
+        const string Over = "| stats values(file.offset) as offsets, values(host) as hosts, values(_time) as seen";
+        const string AtCap = "| stats values(_time) as seen by host";
+        static string Path(string format, string query) => $"/api/v1/cases/2/search/export?format={format}&query={Uri.EscapeDataString(query)}";
+
+        var csv = (await (await alice.GetAsync(Path("csv", Over))).Content.ReadAsStringAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal($"# values capped: a cell with {Transpiler.ValuesCap} values in these columns may stand for more: seen", csv[0]);
+        Assert.Equal("offsets,hosts,seen", csv[1]);
+        Assert.StartsWith("\"[" + string.Join(",", Enumerable.Range(0, Transpiler.ValuesCap)) + "]\",", csv[2], StringComparison.Ordinal);
+        Assert.Equal(3, csv.Length);
+
+        var json = (await (await alice.GetAsync(Path("json", Over))).Content.ReadAsStringAsync(Ct)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("{\"values_capped\":[\"seen\"]}", json[0]);
+        using var row = JsonDocument.Parse(json[1]);
+        Assert.Equal(Enumerable.Range(0, Transpiler.ValuesCap), row.RootElement.GetProperty("offsets").EnumerateArray().Select(v => v.GetInt32()));
+        Assert.Equal(Transpiler.ValuesCap, row.RootElement.GetProperty("seen").GetArrayLength());
+        Assert.Equal(["web-01", "web-02"], row.RootElement.GetProperty("hosts").EnumerateArray().Select(v => v.GetString()!));
+
+        // A group at the cap is whole: no line, a hundred values.
+        var whole = (await (await alice.GetAsync(Path("csv", AtCap))).Content.ReadAsStringAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("host.name,seen", whole[0]);
+        Assert.Equal(Transpiler.ValuesCap, whole[1].Split("Z").Length - 1);
+        var wholeJson = (await (await alice.GetAsync(Path("json", AtCap))).Content.ReadAsStringAsync(Ct)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.StartsWith("{\"host.name\":\"web-01\",", wholeJson[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AValuesQueryThatPassesTheMemoryLimitSaysSoAndNamesTheWayOut()
+    {
+        // The query account's profile with a memory limit no aggregation fits in.
+        await using (var admin = ch.Admin())
+        {
+            await admin.ExecuteAsync("CREATE USER IF NOT EXISTS small_memory_probe IDENTIFIED WITH plaintext_password BY 'probe' SETTINGS PROFILE 'urlog_query', max_memory_usage = 400000", cancellationToken: Ct);
+            await admin.ExecuteAsync("GRANT SELECT ON default.events_v TO small_memory_probe", cancellationToken: Ct);
+        }
+
+        var (api, alice, _) = await StartAsync(new Dictionary<string, string?> { ["Urlog:ClickHouse:QueryUser"] = "small_memory_probe", ["Urlog:ClickHouse:QueryPassword"] = "probe" });
+        await using var host = api;
+        async Task<JsonElement> ProblemAsync(string query)
+        {
+            var response = await alice.GetAsync("/api/v1/cases/2/search/export?format=csv&query=" + Uri.EscapeDataString(query));
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+            return problem.RootElement.Clone();
+        }
+
+        var values = await ProblemAsync("| stats values(raw) as lines by host");
+        Assert.Equal("query_error", values.GetProperty("code").GetString());
+        Assert.Equal(ClickHouseQueryClient.ValuesOutOfMemory, values.GetProperty("detail").GetString());
+        Assert.Contains("dc(f)", ClickHouseQueryClient.ValuesOutOfMemory, StringComparison.Ordinal);
+        Assert.Contains("narrow the search", ClickHouseQueryClient.ValuesOutOfMemory, StringComparison.Ordinal);
+
+        // The same refusal through the stream, after its first event.
+        var events = await EventsAsync(await alice.PostAsync("/api/v1/cases/2/search", new { query = "| stats values(raw) as lines by host" }));
+        Assert.Equal(ClickHouseQueryClient.ValuesOutOfMemory, events.Single(e => e.Name == "error").Data.GetProperty("message").GetString());
+
+        // Without values(f) the refusal is the server's own, with its code: there is nothing to advise.
+        var other = await ProblemAsync("| stats dc(raw) as lines by host");
+        Assert.Equal("query_error", other.GetProperty("code").GetString());
+        Assert.Contains("MEMORY_LIMIT_EXCEEDED", other.GetProperty("detail").GetString(), StringComparison.Ordinal);
+
+        // The audit row of the first export carries the explanation as its reason.
+        var first = JsonDocument.Parse((await QueryRowsAsync(api))[0].DetailsJson).RootElement;
+        Assert.Equal("failed", first.GetProperty("outcome").GetString());
+        Assert.Equal(ClickHouseQueryClient.ValuesOutOfMemory, first.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task AClientThatLeavesStopsItsStatementAndIsRecordedAsAbandoned()
     {
         var (api, alice, _) = await StartAsync();
