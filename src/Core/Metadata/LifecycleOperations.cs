@@ -451,6 +451,7 @@ public static class LifecycleOperations
             await db.Hosts.Where(h => h.CaseId == caseId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.CaseMembers.Where(m => m.CaseId == caseId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.CaseTasks.Where(t => t.CaseId == caseId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.CaseStats.Where(s => s.CaseId == caseId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Cases.Where(c => c.Id == caseId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             db.ChangeTracker.Clear();

@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Urlog.Cli;
 
 /// <summary>
-/// <c>urlog worker --db &lt;metadata.db&gt; [--once] [--jobs n] [--parallelism n] [--writers n] [--small-box]
+/// <c>urlog worker --db &lt;metadata.db&gt; [--once] [--jobs n] [--parallelism n] [--writers n] [--small-box] [--no-stats]
 /// [--evidence-root dir] [--progress-interval ms] [--commit-timeout s] [--min-free-gb n] [--min-free-percent n]</c>:
 /// the job runner outside the backend, for a
 /// deployment that ingests from the command line. The same <see cref="JobRunner"/> the backend hosts, as the ingest
@@ -31,6 +31,7 @@ internal static class WorkerCommand
             MaxConcurrentJobs = args.Int("jobs", 1),
             Pipeline = pipeline,
             ExitWhenIdle = once,
+            Stats = new FieldStatsOptions { Fields = args.Flag("no-stats") ? [] : Urlog.Query.FieldStats.TaskFields(Urlog.Query.FieldCatalog.Embedded) },
             EvidenceRoot = args.Option("evidence-root"),
             ArchiveRoot = args.Option("archive-root") ?? Environment.GetEnvironmentVariable("URLOG_ARCHIVE_ROOT"),
             // Seekable copies of compressed and nested archives; beside the metadata file when no root is given.

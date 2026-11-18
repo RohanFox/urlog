@@ -62,6 +62,13 @@ public static class ApiHost
             return ClickHouseJobEventStore.Create(options.ClickHouse.Host, options.ClickHouse.NativePort, options.ClickHouse.User, options.ClickHouse.Password, options.Ingest.Writers);
         });
         services.AddSingleton<IStoreIdentitySource>(sp => sp.GetRequiredService<IJobEventStore>());
+        // The event store as the read-only query account, over HTTP: what the API reads for a member of a case.
+        services.AddSingleton(sp =>
+        {
+            var clickHouse = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.ClickHouse;
+            return new Urlog.Query.ClickHouseQueryClient(clickHouse.Host, clickHouse.HttpPort, clickHouse.QueryUser, clickHouse.QueryPassword);
+        });
+        services.AddSingleton<Endpoints.IFieldStatsSource, Endpoints.QueryFieldStatsSource>();
         services.AddSingleton<StoreReadiness>();
         services.AddHostedService<StoreReadinessService>();
         if (builder.Configuration.GetValue($"{UrlogOptions.Section}:Ingest:Enabled", true))

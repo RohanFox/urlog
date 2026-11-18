@@ -36,7 +36,7 @@ public sealed class AuditChainTests(ITestOutputHelper output)
         Assert.Equal(AuditHash.ZeroHash, genesis.PrevHash);
         Assert.Equal(AuditHash.FormatVersion, genesis.SchemaVersion);
         Assert.Equal(AuditHash.Compute(genesis), genesis.Hash);
-        Assert.Contains("\"migration\":\"20261114111744_ArchiveVerifiedAt\"", genesis.DetailsJson, StringComparison.Ordinal);
+        Assert.Contains("\"migration\":\"20261118055202_CaseSpanAndStats\"", genesis.DetailsJson, StringComparison.Ordinal);
         Assert.Contains("\"tool\":\"urlog ", genesis.DetailsJson, StringComparison.Ordinal);
         Assert.Equal(DateTimeKind.Utc, genesis.TsUtc.Kind);
         Assert.Equal(0, genesis.TsUtc.Ticks % 10);

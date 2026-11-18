@@ -278,7 +278,7 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
                     await admin.ExecuteAsync(
                         $"INSERT INTO events (case_id, file_id, parse_generation, ts, raw) SELECT {Text(caseId)}, {Text(fileId)}, 1, addMonths(toDateTime64('2024-01-10 00:00:00', 3, 'UTC'), number % {months}), 'row' FROM numbers({months * RowsPerMonth})",
                         cancellationToken: Ct);
-                    await admin.ExecuteAsync($"INSERT INTO field_stats VALUES ({Text(caseId)}, 'host', 'web-01', 10, now64(3))", cancellationToken: Ct);
+                    await admin.ExecuteAsync($"INSERT INTO field_stats (case_id, field, value, count, computed_at) VALUES ({Text(caseId)}, 'host', 'web-01', 10, now64(3))", cancellationToken: Ct);
                 }
             }
 

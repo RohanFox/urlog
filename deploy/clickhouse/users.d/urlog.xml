@@ -6,14 +6,14 @@
 
   Accounts:
     default         admin: migrations (`urlog migrate`), definer of events_v; never held by the backend at runtime
-    urlog_query     read: SELECT on events_v and field_stats, readonly=2, constrained limits
+    urlog_query     read: SELECT on events_v and field_stats_v, readonly=2, constrained limits
     urlog_ingest    write: insert, lightweight delete, partition drop, generation commit and its removal at a purge, field statistics; reads the store identity
 -->
 <clickhouse>
     <users>
         <!-- The query path's user (ADR 0001, ADR 0003): readonly=2 so the per-request SQL_allowed_cases setting goes
              through, and exactly two grants. Listing grants here replaces the "everything" a users.xml user gets by
-             default: no SELECT on events or file_generation (events_v reads both as its definer), no dictGet, no table
+             default: no SELECT on events, file_generation or field_stats (the two views read them as their definer), no dictGet, no table
              functions (url/file/s3/remote need READ ON URL/FILE/... and are refused), no system.* beyond what every
              user may read, no CREATE TEMPORARY TABLE. tests/Security/GrantTests.cs asserts each refusal. -->
         <urlog_query>
@@ -25,7 +25,7 @@
             <quota>default</quota>
             <grants>
                 <query>GRANT SELECT ON default.events_v</query>
-                <query>GRANT SELECT ON default.field_stats</query>
+                <query>GRANT SELECT ON default.field_stats_v</query>
             </grants>
         </urlog_query>
         <!-- The write path's user (design record "Write path"): inserts, the re-parse protocol, case deletion and

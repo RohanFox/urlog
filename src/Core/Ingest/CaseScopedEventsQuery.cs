@@ -41,6 +41,53 @@ public static class CaseScopedEventsQuery
         return sql;
     }
 
+    /// <summary>
+    /// The rows <c>events_v</c> shows: the committed generation of each file, from the newest row per file of
+    /// <c>file_generation</c>. The same text as the view's own filter (migration 0006; a test compares the two), so
+    /// what the statistics count is what an analyst's query counts. Without it a read of the table would include
+    /// the rows of a parse that has not been committed and of one a re-parse has replaced, until their delete has
+    /// been applied.
+    /// </summary>
+    public const string CommittedGenerations =
+        "(file_id, parse_generation) IN (SELECT file_id, argMax(current, updated_at) AS visible FROM file_generation GROUP BY file_id HAVING visible > 0)";
+
+    /// <summary>One row per pair of the extras map, as <c>k</c> and <c>v</c>.</summary>
+    private const string ExtrasPairs = " ARRAY JOIN mapKeys(extras) AS k, mapValues(extras) AS v";
+
+    /// <summary>
+    /// <see cref="Build"/> over the visible rows only, with the statement's own limits:
+    /// <c>SELECT projection FROM events [pairs of extras] WHERE case_id = caseId AND (committed generations) [AND (filter)] [tail] [SETTINGS ...]</c>.
+    /// The generation filter, the array join and the settings are written here; a fragment still carries no
+    /// <c>FROM</c> and no <c>SETTINGS</c> of its own.
+    /// </summary>
+    public static string BuildVisible(ulong caseId, string projection, string? filter = null, string? tail = null, StatementLimits? limits = null, bool extrasPairs = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projection);
+        Check(projection, nameof(projection));
+        Check(filter, nameof(filter));
+        Check(tail, nameof(tail));
+        var sql = $"SELECT {projection} FROM events{(extrasPairs ? ExtrasPairs : string.Empty)} WHERE {Predicate(caseId)} AND {CommittedGenerations}";
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            sql += $" AND ({filter})";
+        }
+
+        if (!string.IsNullOrWhiteSpace(tail))
+        {
+            sql += " " + tail;
+        }
+
+        if (limits is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(limits.MaxExecutionSeconds, 1, nameof(limits));
+            ArgumentOutOfRangeException.ThrowIfLessThan(limits.MaxThreads, 1, nameof(limits));
+            ArgumentOutOfRangeException.ThrowIfLessThan(limits.MaxMemoryBytes, 1, nameof(limits));
+            sql += string.Create(CultureInfo.InvariantCulture, $" SETTINGS max_execution_time = {limits.MaxExecutionSeconds}, max_threads = {limits.MaxThreads}, max_memory_usage = {limits.MaxMemoryBytes}");
+        }
+
+        return sql;
+    }
+
     /// <summary>The first predicate of every text <see cref="Build"/> emits.</summary>
     public static string Predicate(ulong caseId)
     {
@@ -93,3 +140,6 @@ public static class CaseScopedEventsQuery
         }
     }
 }
+
+/// <summary>What one statement of a maintenance read may use on the server; sent as the statement's own settings.</summary>
+public sealed record StatementLimits(int MaxExecutionSeconds, int MaxThreads, long MaxMemoryBytes);

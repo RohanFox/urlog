@@ -84,6 +84,9 @@ public sealed record JobRunnerOptions
     /// <summary>The purge window and approval, and the integrity sweep's schedule.</summary>
     public LifecycleOptions Lifecycle { get; init; } = new();
 
+    /// <summary>The field statistics the runner computes after a case's parses; without fields it computes none.</summary>
+    public FieldStatsOptions Stats { get; init; } = new();
+
     /// <summary>The name written to <c>jobs.worker</c>, without the slot number.</summary>
     public string WorkerName { get; init; } = $"{Environment.MachineName}:{Environment.ProcessId}";
 
@@ -94,6 +97,7 @@ public sealed record JobRunnerOptions
         Lifecycle.Validate();
         // Throws when the archive root is, holds or lies inside the evidence root or the cache root.
         new Urlog.Core.Lifecycle.LifecyclePaths(EvidenceRoot, CacheRoot, BackupDirectory ?? string.Empty, ArchiveRoot).CheckedArchiveRoot();
+        Stats.Validate();
         if (MaxConcurrentJobs < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConcurrentJobs), MaxConcurrentJobs, "must be positive");
@@ -122,6 +126,56 @@ public sealed record JobRunnerOptions
         if (Watermark.MinFreeBytes < 0 || Watermark.MinFreePercent is < 0 or > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(Watermark), "the watermark is a byte count and a percentage");
+        }
+    }
+}
+
+/// <summary>
+/// When and at what cost the runner computes a case's field statistics (design record, "Query language",
+/// Autocomplete). A run waits behind the queue: a slot takes it only when it finds no job to claim, the case has no
+/// job left to run, and <see cref="QuietPeriod"/> has passed since the case's last commit, so files that arrive one
+/// after the other end in one run.
+/// </summary>
+public sealed record FieldStatsOptions
+{
+    /// <summary>The fields covered, from the field catalog. Empty: this runner computes no statistics.</summary>
+    public IReadOnlyList<Urlog.Core.Ingest.StatsField> Fields { get; init; } = [];
+
+    /// <summary>How long after a case's last commit a run may start. A one-shot runner does not wait.</summary>
+    public TimeSpan QuietPeriod { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// For one run, all statements together. A run that passes it writes nothing. Also the longest a file queued
+    /// behind a run can wait for its slot. Measured: 3.1 s for 25.2 M rows (design record, Field statistics).
+    /// </summary>
+    public TimeSpan TimeLimit { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Server threads one statement of a run may use: half of the reference box's cores, so a search beside a
+    /// run keeps the other half. Measured: 1.28 times the run at 8 threads.
+    /// </summary>
+    public int MaxThreads { get; init; } = 4;
+
+    /// <summary>
+    /// Server memory one statement of a run may use, inside the ingest profile's own bound. Measured peak: 67 MiB;
+    /// the bound on distinct values is what keeps the hash tables small.
+    /// </summary>
+    public long MaxMemoryBytes { get; init; } = 1_000_000_000;
+
+    /// <summary>
+    /// A case with more rows than this (the sum of its files' row counts) is not read at all: its statistics are
+    /// removed and the case says why. At the measured rate a case of this size is a run of about half
+    /// <see cref="TimeLimit"/>; that is an extrapolation from 25.2 M rows, not a measurement.
+    /// </summary>
+    public long MaxCaseRows { get; init; } = 250_000_000;
+
+    public Urlog.Core.Ingest.FieldStatsLimits Limits => new(TimeLimit, MaxThreads, MaxMemoryBytes);
+
+    public void Validate()
+    {
+        if (QuietPeriod < TimeSpan.Zero || TimeLimit < TimeSpan.FromSeconds(1) || MaxThreads < 1 || MaxMemoryBytes < 1 || MaxCaseRows < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(TimeLimit), "the statistics limits are positive, and the quiet period is not negative");
         }
     }
 }

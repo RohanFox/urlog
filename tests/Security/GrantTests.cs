@@ -10,7 +10,7 @@ namespace Urlog.Security.Tests;
 /// <summary>
 /// What the server itself refuses <c>urlog_query</c>, with the gate out of the way
 /// (the driver straight). The profile constraints keep the limits unraisable; the two grants in
-/// deploy/clickhouse/users.d/urlog.xml keep everything but <c>events_v</c> and <c>field_stats</c> unreadable.
+/// deploy/clickhouse/users.d/urlog.xml keep everything but <c>events_v</c> and <c>field_stats_v</c> unreadable.
 /// The same for <c>urlog_ingest</c> over the driver's TCP client and <see cref="NativeInserter"/>, the way the
 /// backend's write path connects: what the account can do, what the server refuses it, and the pinned grant list.
 /// </summary>
@@ -139,14 +139,17 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         var rows = await QueryAsync("SELECT count() FROM events_v", new() { ["SQL_allowed_cases"] = "[1]" });
         Assert.Equal(ClickHouseFixture.RowsPerCase.ToString(CultureInfo.InvariantCulture), rows[0][0]);
         // Case 1: the ingest-account test of this class writes field_stats rows for cases 2 and 3, in either order.
-        var stats = await QueryAsync("SELECT count() FROM field_stats WHERE case_id = 1");
+        var stats = await QueryAsync("SELECT count() FROM field_stats_v", new() { ["SQL_allowed_cases"] = "[1]" });
         Assert.Equal("0", stats[0][0]);
+        // The table under that view holds every case's statistics and has no filter: no grant on it.
+        var table = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT count() FROM field_stats", new() { ["SQL_allowed_cases"] = "[1,2,3]" }));
+        Assert.Equal(AccessDenied, table.ErrorCode);
 
         // system.tables and system.databases are filtered by SHOW, which SELECT implies: the user sees its two
         // relations and the default database, nothing of the schema behind the view.
         var visible = await QueryAsync("SELECT database || '.' || name FROM system.tables WHERE database NOT IN ('INFORMATION_SCHEMA', 'information_schema') ORDER BY 1");
         output.WriteLine("system.tables as urlog_query: " + string.Join(", ", visible.Select(r => r[0])));
-        Assert.Equal(["default.events_v", "default.field_stats"], visible.Select(r => r[0]).ToArray());
+        Assert.Equal(["default.events_v", "default.field_stats_v"], visible.Select(r => r[0]).ToArray());
         var databases = await QueryAsync("SELECT name FROM system.databases ORDER BY name");
         Assert.Equal(["default"], databases.Select(r => r[0]).ToArray());
     }
@@ -286,13 +289,13 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         var now = new DateTime(DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond * TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
         var times = ClickHouseTcpColumn.Create("computed_at", new[] { now, now });
         await ingest.InsertAsync("INSERT INTO field_stats (case_id, field, value, count, computed_at) VALUES", [cases, fields, values, counts, times], cancellationToken: Ct);
-        Assert.Equal("1", (await QueryAsync("SELECT count() FROM field_stats WHERE case_id = 2"))[0][0]);
+        Assert.Equal("1", (await QueryAsync("SELECT count() FROM field_stats_v", new() { ["SQL_allowed_cases"] = "[2]" }))[0][0]);
 
         // A case's statistics go when the case does or when they are recomputed: the delete of one case's
         // rows is allowed and leaves the other case's.
         await ingest.ExecuteAsync("DELETE FROM field_stats WHERE case_id = 2", cancellationToken: Ct);
-        Assert.Equal("0", (await QueryAsync("SELECT count() FROM field_stats WHERE case_id = 2"))[0][0]);
-        Assert.Equal("1", (await QueryAsync("SELECT count() FROM field_stats WHERE case_id = 3"))[0][0]);
+        Assert.Equal("0", (await QueryAsync("SELECT count() FROM field_stats_v", new() { ["SQL_allowed_cases"] = "[2]" }))[0][0]);
+        Assert.Equal("1", (await QueryAsync("SELECT count() FROM field_stats_v", new() { ["SQL_allowed_cases"] = "[3]" }))[0][0]);
 
         foreach (var table in new[] { "parts", "merges", "mutations" })
         {
@@ -519,7 +522,11 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
         }
 
         output.WriteLine(string.Join("; ", grants));
-        Assert.Equal(["SELECT default.events_v", "SELECT default.field_stats"], grants);
+        Assert.Equal(["SELECT default.events_v", "SELECT default.field_stats_v"], grants);
+
+        // Both views read their tables as the definer; without the clause the query user would need the tables.
+        var statsView = (string?)await admin.ExecuteScalarAsync("SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = 'field_stats_v'", cancellationToken: Ct);
+        Assert.Contains("SQL SECURITY DEFINER", statsView, StringComparison.Ordinal);
 
         var definer = (string?)await admin.ExecuteScalarAsync("SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = 'events_v'", cancellationToken: Ct);
         Assert.NotNull(definer);

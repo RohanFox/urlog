@@ -69,6 +69,20 @@ public enum JobState
     Cancelled,
 }
 
+/// <summary>
+/// How the last run of the field statistics of a case ended (<see cref="CaseStats"/>). <c>skipped</c>: the case holds
+/// more rows than the task may read; <c>timed_out</c>: the run passed its time limit; in both, and in <c>failed</c>,
+/// the message says why.
+/// </summary>
+public enum CaseStatsState
+{
+    None,
+    Ok,
+    Skipped,
+    TimedOut,
+    Failed,
+}
+
 /// <summary>Lifecycle work that outlasts a transaction (<see cref="CaseTask"/>).</summary>
 public enum CaseTaskKind
 {

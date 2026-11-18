@@ -173,12 +173,20 @@ public sealed class ClickHouseQueryClient
         }
     }
 
-    /// <summary>The span of a case through <c>events_v</c>: null when the case has no visible events.</summary>
+    /// <summary>
+    /// The span of a case through <c>events_v</c>, for a caller without a metadata file: null when the case has no
+    /// visible event with a time. Times below <see cref="Urlog.Core.EventTime.Floor"/> are left out, as in the
+    /// recorded span (rejected lines and timestamps parsed without a year sit at the epoch and in 1970). The other
+    /// bound of the recorded span, the arrival of each file, is not known here.
+    /// </summary>
     public async Task<(DateTimeOffset From, DateTimeOffset To)?> CaseSpanAsync(ulong caseId, CancellationToken cancellationToken = default)
     {
         var table = await ExecuteAsync(
-            "SELECT toString(min(ts)), toString(max(ts)), count() FROM events_v WHERE case_id = {case:UInt64}",
-            [new QueryParameter("case", "UInt64", caseId.ToString(CultureInfo.InvariantCulture))],
+            "SELECT toString(min(ts)), toString(max(ts)), count() FROM events_v WHERE case_id = {case:UInt64} AND ts >= {floor:DateTime64(3)}",
+            [
+                new QueryParameter("case", "UInt64", caseId.ToString(CultureInfo.InvariantCulture)),
+                new QueryParameter("floor", "DateTime64(3)", Urlog.Core.EventTime.Floor.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)),
+            ],
             AllowedCases([caseId]),
             cancellationToken).ConfigureAwait(false);
         var row = table.Rows[0];
@@ -190,6 +198,20 @@ public sealed class ClickHouseQueryClient
         var from = DateTimeOffset.ParseExact(row[0], "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
         var to = DateTimeOffset.ParseExact(row[1], "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
         return (from, to.AddMilliseconds(1)); // the range is half-open
+    }
+
+    /// <summary>
+    /// The field statistics of one case through <c>field_stats_v</c>, with the allowed-case list set to that case
+    /// alone: <see cref="FieldStats.Sql"/>, this class's own constant text.
+    /// </summary>
+    public async Task<CaseFieldStats> FieldStatsAsync(ulong caseId, CancellationToken cancellationToken = default)
+    {
+        var table = await ExecuteAsync(
+            FieldStats.Sql,
+            [new QueryParameter("case", "UInt64", caseId.ToString(CultureInfo.InvariantCulture))],
+            AllowedCases([caseId]),
+            cancellationToken).ConfigureAwait(false);
+        return FieldStats.Read(caseId, table.Rows);
     }
 
     private static string AllowedCases(IReadOnlyCollection<ulong> cases) => "[" + string.Join(",", cases.Select(c => c.ToString(CultureInfo.InvariantCulture))) + "]";

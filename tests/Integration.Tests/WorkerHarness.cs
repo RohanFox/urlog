@@ -50,6 +50,7 @@ internal sealed class WorkerHarness : IAsyncDisposable
             // Every test starts its own metadata file at id 1, so the store starts empty too.
             await admin.ExecuteAsync("TRUNCATE TABLE events", cancellationToken: Ct);
             await admin.ExecuteAsync("TRUNCATE TABLE file_generation", cancellationToken: Ct);
+            await admin.ExecuteAsync("TRUNCATE TABLE field_stats", cancellationToken: Ct);
             // And a new pair: the store takes the identity of this test's metadata file.
             await admin.ExecuteAsync("TRUNCATE TABLE store_identity", cancellationToken: Ct);
             await new EventStoreAdmin(admin).WriteStoreIdentityAsync(harness.StoreId, ClickHouseFixture.AdminUser, Ct);
@@ -107,6 +108,19 @@ internal sealed class WorkerHarness : IAsyncDisposable
         }
 
         throw new InvalidOperationException("the count returned no row");
+    }
+
+    /// <summary>Every row of the case in <c>field_stats</c>, as the admin account reads the table: what is stored, not what the view shows.</summary>
+    public async Task<List<(string Field, string Value, long Count, long Distinct, DateTime ComputedAt)>> FieldStatsAsync(long caseId)
+    {
+        await using var admin = Admin();
+        var rows = new List<(string, string, long, long, DateTime)>();
+        await foreach (var row in admin.QueryAsync($"SELECT toString(field), value, count, distinct_estimate, toUnixTimestamp64Milli(computed_at) FROM field_stats WHERE case_id = {caseId.ToString(CultureInfo.InvariantCulture)} ORDER BY field, count DESC, value", cancellationToken: Ct))
+        {
+            rows.Add(((string)row[0]!, (string)row[1]!, Convert.ToInt64(row[2], CultureInfo.InvariantCulture), Convert.ToInt64(row[3], CultureInfo.InvariantCulture), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(row[4], CultureInfo.InvariantCulture)).UtcDateTime));
+        }
+
+        return rows;
     }
 
     /// <summary>Rows in the case's active parts: what the table holds, visible or not, without reading the table.</summary>

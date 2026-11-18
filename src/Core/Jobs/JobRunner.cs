@@ -54,6 +54,7 @@ public sealed class JobRunner
     private int _paused;
     private int _syncNeeded;
     private long _claimNotBefore;
+    private int _statsBusy;
     private string? _identity;
     private StoreIdentityException? _identityLost;
 
@@ -161,6 +162,10 @@ public sealed class JobRunner
             // A one-shot run does not wait for the next tick: what its last job made possible (a re-import whose
             // parses have ended) is finished before it leaves.
             await _lifecycle.RunPendingAsync(cancellationToken).ConfigureAwait(false);
+            // A re-import the line above has just closed: its case can have its statistics only now.
+            while (!cancellationToken.IsCancellationRequested && await TryRunStatsAsync(cancellationToken).ConfigureAwait(false))
+            {
+            }
         }
 
         if (Volatile.Read(ref _identityLost) is { } lost)
@@ -300,6 +305,11 @@ public sealed class JobRunner
                     }
                 }
 
+                if (claimed is null && !Paused && await TryRunStatsAsync(token).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
                 if (claimed is null)
                 {
                     if (_options.ExitWhenIdle && Running == 0 && !Paused)
@@ -355,6 +365,130 @@ public sealed class JobRunner
         }
     }
 
+    /// <summary>
+    /// The field statistics of one case that is due, when the queue has nothing for this slot. One run at a time
+    /// in the process, counted as running, so the integrity sweep waits for it as it does for a job. True when a
+    /// run took place, whatever its result.
+    /// </summary>
+    private async Task<bool> TryRunStatsAsync(CancellationToken token)
+    {
+        var stats = _options.Stats;
+        if (stats.Fields.Count == 0 || Interlocked.CompareExchange(ref _statsBusy, 1, 0) != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            StatsClaim? claim;
+            try
+            {
+                await using var db = _store.CreateDbContext();
+                claim = await CaseStatsOperations.NextDueAsync(db, Now(), _options.ExitWhenIdle ? TimeSpan.Zero : stats.QuietPeriod, token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (IsBusy(e) || (e is OperationCanceledException && token.IsCancellationRequested))
+            {
+                return false;
+            }
+
+            if (claim is null)
+            {
+                return false;
+            }
+
+            Interlocked.Increment(ref _running);
+            try
+            {
+                return await RunStatsAsync(claim, stats, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _running);
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _statsBusy, 0);
+        }
+    }
+
+    private async Task<bool> RunStatsAsync(StatsClaim claim, FieldStatsOptions stats, CancellationToken token)
+    {
+        var caseId = (ulong)claim.CaseId;
+        var clock = Stopwatch.StartNew();
+        var state = CaseStatsState.Ok;
+        string? message = null;
+        var computedAt = claim.LastComputedAt;
+        long events = 0;
+        try
+        {
+            if (claim.Rows > stats.MaxCaseRows)
+            {
+                // Not read at all. An older set would describe a smaller case, so it goes.
+                await _events.DeleteCaseFieldStatsAsync(caseId, token).ConfigureAwait(false);
+                state = CaseStatsState.Skipped;
+                message = string.Create(CultureInfo.InvariantCulture, $"the case holds {claim.Rows:N0} events, more than the {stats.MaxCaseRows:N0} the field statistics are computed for");
+                computedAt = null;
+            }
+            else
+            {
+                // Later than the set it replaces whatever the clock says: the view shows the newest set.
+                var at = Now();
+                if (claim.LastComputedAt is { } last && at <= last)
+                {
+                    at = last.AddMilliseconds(1);
+                }
+
+                var set = await _events.RefreshFieldStatsAsync(caseId, stats.Fields, stats.Limits, at, token).ConfigureAwait(false);
+                computedAt = new DateTime(at.Ticks / TimeSpan.TicksPerMillisecond * TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
+                events = (long)set.Events;
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // A stop: nothing is recorded, the mark stays, the next start runs it again.
+            return false;
+        }
+        catch (FieldStatsTimeoutException e)
+        {
+            state = CaseStatsState.TimedOut;
+            message = e.Message;
+        }
+        catch (Exception e)
+        {
+            state = CaseStatsState.Failed;
+            message = Describe(e);
+        }
+
+        try
+        {
+            await new BusyRetry { Timeout = _options.CommitBusyTimeout }.RunAsync(
+                async () =>
+                {
+                    await using var db = _store.CreateDbContext();
+                    await CaseStatsOperations.RecordAsync(db, claim, state, message, computedAt, events, clock.Elapsed, _store.Clock, CancellationToken.None).ConfigureAwait(false);
+                    return true;
+                },
+                cancellationToken: CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (MetadataBusyException)
+        {
+            // The mark stays, so the run is repeated; this slot goes back to the queue first.
+            return false;
+        }
+
+        if (state == CaseStatsState.Ok)
+        {
+            JobLog.StatsDone(_logger, claim.CaseId, events, clock.Elapsed.TotalSeconds);
+        }
+        else
+        {
+            JobLog.StatsNotDone(_logger, claim.CaseId, Names.Of(state), message ?? string.Empty);
+        }
+
+        return true;
+    }
+
     private async Task ExecuteAsync(ClaimedJob claimed, string worker, PipelineBuffers buffers, CancellationToken stopping)
     {
         var job = claimed.Job;
@@ -406,6 +540,8 @@ public sealed class JobRunner
             InputEnd inputEnd;
             DateTime? tsMin;
             DateTime? tsMax;
+            long undated;
+            long future;
             long acked;
             string sha256;
             long hashedBytes;
@@ -421,7 +557,8 @@ public sealed class JobRunner
                 // A compressed log is held to the same expansion ratio and size as an archive.
                 using var limited = compression == CompressionKind.None ? (Stream)decompressed : new LimitedDecodeStream(decompressed, _options.Archive, file.Size);
                 using var decoded = InputDecoding.Transcode(limited, encoding);
-                var ranged = new TimeRangeSink(sink);
+                // Times later than the file can have been written do not count toward its span.
+                var ranged = new TimeRangeSink(sink, EventTime.CeilingMilliseconds(file.ReceivedAt));
                 using var progressStop = new CancellationTokenSource();
                 var progressWriter = Task.Run(() => ProgressLoopAsync(job.Id, progress, sink, progressStop.Token), CancellationToken.None);
                 try
@@ -440,6 +577,8 @@ public sealed class JobRunner
                 readTime = decompressed.ReadTime;
                 tsMin = ranged.Min;
                 tsMax = ranged.Max;
+                undated = ranged.Undated;
+                future = ranged.Future;
                 // A decoder may stop short of the end of the file; the digest is over every byte of it.
                 var scratch = new byte[1 << 20];
                 sha256 = hashing.DrainAndFinish(scratch);
@@ -469,7 +608,7 @@ public sealed class JobRunner
 
             var counts = new JobCounts(progress.ChunksRead, progress.ChunksParsed, result.Rows, result.Rejects, result.Bytes);
             var spansDst = source.Info.NaiveTimestamps && tsMin is { } first && tsMax is { } last && IntakeHints.SpansTransition(zone, first, last);
-            var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst);
+            var outcome = new JobOutcome(inputEnd, tsMin, tsMax, spansDst, undated, future);
             await TerminalAsync(job.Id, db => JobOperations.CompleteAsync(db, _store.Audit, job.Id, worker, counts, outcome, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
             try
             {

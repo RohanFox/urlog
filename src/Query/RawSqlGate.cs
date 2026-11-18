@@ -25,7 +25,7 @@ public sealed class RawSqlRejectedException : Exception
 /// <summary>
 /// The raw-SQL gate (design record, "Security"; ADR 0001): every query text, the analyst's raw SQL and the
 /// transpiler's output alike, is parsed by ClickHouse itself (<c>EXPLAIN AST</c>, run as the same read-only user)
-/// and refused unless the tree is a plain SELECT that names nothing but <c>events_v</c>, <c>field_stats</c> and its
+/// and refused unless the tree is a plain SELECT that names nothing but <c>events_v</c>, <c>field_stats_v</c> and its
 /// own CTEs. The one hole it closes is a <c>SETTINGS</c> clause: with <c>readonly = 2</c> the server lets a query-level
 /// <c>SETTINGS SQL_allowed_cases = ...</c> override the per-request value (measured, ADR 0001), so the gate is mandatory,
 /// not defence in depth. The walk is over the dumped tree, so there is no SQL parser on this side: the shapes come
@@ -41,7 +41,7 @@ public static class RawSqlGate
     public const int MaxSelectDepth = 8;
 
     /// <summary>The relations the query path may name.</summary>
-    public static readonly FrozenSet<string> AllowedRelations = FrozenSet.ToFrozenSet(["events_v", "field_stats"], StringComparer.Ordinal);
+    public static readonly FrozenSet<string> AllowedRelations = FrozenSet.ToFrozenSet(["events_v", "field_stats_v"], StringComparer.Ordinal);
 
     /// <summary>
     /// Every other relation the migrations create. An unqualified name that is in neither set is taken for a CTE
@@ -50,7 +50,7 @@ public static class RawSqlGate
     /// not in this list). tests/Security asserts this list against <c>system.tables</c>, so a new migration that
     /// adds a relation must add it here too.
     /// </summary>
-    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations", "store_identity"], StringComparer.Ordinal);
+    public static readonly FrozenSet<string> DeniedRelations = FrozenSet.ToFrozenSet(["events", "file_generation", "schema_migrations", "store_identity", "field_stats"], StringComparer.Ordinal);
 
     private static readonly FrozenSet<string> InOperators = FrozenSet.ToFrozenSet(
         ["in", "notIn", "nullIn", "notNullIn", "globalIn", "globalNotIn", "globalNullIn", "globalNotNullIn"], StringComparer.Ordinal);
@@ -199,7 +199,7 @@ public static class RawSqlGate
 
         if (DeniedRelations.Contains(name))
         {
-            return $"{name} is not readable through the query path; query events_v";
+            return $"{name} is not readable through the query path; query {(name == "field_stats" ? "field_stats_v" : "events_v")}";
         }
 
         return null;

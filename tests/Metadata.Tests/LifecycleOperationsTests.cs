@@ -415,7 +415,7 @@ public sealed class LifecycleOperationsTests
         // Zero rows of the case in every table but the audit chain; the other case is whole.
         await using var connection = new SqliteConnection(MetadataStore.ConnectionString(temp.Path));
         await connection.OpenAsync(Ct);
-        foreach (var (table, column) in new[] { ("cases", "id"), ("case_members", "case_id"), ("hosts", "case_id"), ("files", "case_id"), ("jobs", "case_id"), ("case_tasks", "case_id") })
+        foreach (var (table, column) in new[] { ("cases", "id"), ("case_members", "case_id"), ("hosts", "case_id"), ("files", "case_id"), ("jobs", "case_id"), ("case_tasks", "case_id"), ("case_stats", "case_id") })
         {
             await using var command = connection.CreateCommand();
             command.CommandText = $"SELECT count(*) FROM {table} WHERE {column} = {@case.Id}";

@@ -68,7 +68,48 @@ public sealed record SetPasswordRequest
 public sealed record CaseSummaryResponse(long Id, string Name, CaseState State, MemberRole Role, string Owner, DateTimeOffset CreatedAt);
 
 /// <summary>One case, as a member sees it.</summary>
-public sealed record CaseResponse(long Id, string Name, CaseState State, string Owner, DateTimeOffset CreatedAt, DateTimeOffset? ClosedAt, DateTimeOffset? ArchivedAt, int Members, MemberRole MyRole);
+public sealed record CaseResponse(long Id, string Name, CaseState State, string Owner, DateTimeOffset CreatedAt, DateTimeOffset? ClosedAt, DateTimeOffset? ArchivedAt, int Members, MemberRole MyRole, SpanResponse Span);
+
+/// <summary>
+/// The span of a case: its first and its last event time, from the file records, and the default range of a
+/// search. Null while no file with a usable time is parsed. The two counts are the events that lie outside it:
+/// those without a usable time (before 1980, the epoch of a rejected line included) and those dated more than a
+/// day after their file arrived. They are stored and searchable with an explicit range.
+/// </summary>
+public sealed record SpanResponse(DateTimeOffset? From, DateTimeOffset? To, long UndatedEvents, long FutureEvents)
+{
+    public static SpanResponse Of(CaseRecord @case)
+    {
+        ArgumentNullException.ThrowIfNull(@case);
+        return new(UserResponse.Utc(@case.TsMin), UserResponse.Utc(@case.TsMax), @case.UndatedRows, @case.FutureRows);
+    }
+}
+
+/// <summary>
+/// Where the statistics of the case stand. <c>state</c>: <c>ok</c>, <c>none</c> (nothing computed yet),
+/// <c>skipped</c> (the case is larger than the statistics are computed for), <c>timed_out</c>, <c>failed</c>,
+/// <c>unavailable</c> (the event store did not answer); <c>reason</c> says why for all but the first two.
+/// <c>pending</c>: a parse was committed since, and a new run is due.
+/// </summary>
+public sealed record StatisticsResponse(string State, bool Pending, DateTimeOffset? ComputedAt, long? Events, string? Reason);
+
+/// <summary>One of a field's most frequent values, with the exact number of events that carry it.</summary>
+public sealed record TopValueResponse(string Value, long Count);
+
+/// <summary>
+/// A catalog field in one case. <c>events</c>: how many events have a value in it (null without statistics, and
+/// for time and text fields, which every event has). <c>distinct_estimate</c>: about how many distinct values, an
+/// estimate, null where none was computed. <c>top</c>: the most frequent values, exact counts, most frequent first;
+/// null for a field that never has them (string and text fields, and a field the catalog excludes), empty when
+/// none are stored (no statistics, or more distinct values than top values are computed for).
+/// </summary>
+public sealed record FieldResponse(string Name, string Type, string Description, IReadOnlyList<string> Aliases, bool Sensitive, long? Events, long? DistinctEstimate, IReadOnlyList<TopValueResponse>? Top);
+
+/// <summary>An extras key seen in the case that the catalog does not list: its name and how many events carry it, no values.</summary>
+public sealed record ExtrasKeyResponse(string Key, long Events);
+
+/// <summary>Response of <c>GET /api/v1/cases/{caseId}/fields</c>.</summary>
+public sealed record FieldsResponse(long CaseId, SpanResponse Span, StatisticsResponse Statistics, IReadOnlyList<FieldResponse> Fields, IReadOnlyList<ExtrasKeyResponse> ExtrasKeys, IReadOnlyList<string> Verbs);
 
 /// <summary>Payload for <c>POST /api/v1/cases</c>.</summary>
 public sealed record CreateCaseRequest

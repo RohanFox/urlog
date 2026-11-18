@@ -178,6 +178,25 @@ internal sealed class FakeEventStore : IJobEventStore
         return Task.CompletedTask;
     }
 
+    /// <summary>What a statistics run does in place of the store: throw to fail it, or return the events it counted.</summary>
+    public Func<ulong, ulong>? OnFieldStats { get; set; }
+
+    /// <summary>The <c>computed_at</c> of every statistics run, in order, with its case.</summary>
+    public List<(ulong Case, DateTime ComputedAt)> StatsRuns { get; } = [];
+
+    public Task<FieldStatsSet> RefreshFieldStatsAsync(ulong caseId, IReadOnlyList<StatsField> fields, FieldStatsLimits limits, DateTime computedAt, CancellationToken cancellationToken)
+    {
+        var events = OnFieldStats?.Invoke(caseId) ?? 0;
+        lock (_lock)
+        {
+            _calls.Add($"refresh-field-stats {caseId}");
+            StatsRuns.Add((caseId, computedAt));
+            _fieldStats.Add(caseId);
+        }
+
+        return Task.FromResult(new FieldStatsSet(events, [new FieldStatsRow(string.Empty, string.Empty, events)], []));
+    }
+
     public Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken)
     {
         BeforePurgeCall?.Invoke("field-stats");

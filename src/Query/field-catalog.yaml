@@ -14,6 +14,12 @@
 #            text index; field=value is a substring compare and is flagged unindexed
 #   extra    a known extras key: extras[key] = value, string compare, flagged unindexed
 #
+# sensitive: true    the values can name a person or carry a credential. The field listing of a case passes the
+#                    mark on; a query is not affected.
+# top_values: false  the per-case statistics store no values of the field, only how many events have it. Keyword,
+#                    int, ip and extra fields have top values unless this says otherwise; string and text fields
+#                    never have them.
+#
 # Adding an alias is a change here plus a test vector. Adding a column is a migration plus a design-record update.
 # Aliases are matched case-insensitively and must be unique across the catalog (the loader refuses duplicates).
 version: 1
@@ -57,16 +63,19 @@ fields:
   - name: user.name
     column: user_name
     type: string
+    sensitive: true
     description: User name as logged
     aliases: [user, username, remote_user, TargetUserName, SubjectUserName]
   - name: source.ip
     column: source_ip
     type: ip
+    sensitive: true
     description: Client or source address
     aliases: [src_ip, src, remote_addr, IpAddress, c-ip, clientip, client_ip]
   - name: destination.ip
     column: destination_ip
     type: ip
+    sensitive: true
     description: Destination address
     aliases: [dst_ip, dst, dest_ip, dest, s-ip]
   - name: process.name
@@ -88,11 +97,13 @@ fields:
   - name: message
     column: message
     type: text
+    sensitive: true
     description: The human-readable core of the event (a slice of raw, indexed for bare terms)
     aliases: [msg, _msg]
   - name: raw
     column: raw
     type: text
+    sensitive: true
     description: The record byte for byte
     aliases: [_raw, line]
   - name: http.request.method
@@ -113,6 +124,7 @@ fields:
   - name: http.request.referrer
     column: http_referrer
     type: string
+    sensitive: true
     description: Referer header as logged
     aliases: [referer, referrer, http_referer, http_referrer]
   - name: user_agent.original
@@ -123,6 +135,7 @@ fields:
   - name: url.query
     column: url_query
     type: string
+    sensitive: true
     description: Query string after the ?
     aliases: [args, query_string, query, url_query, cs-uri-query]
   - name: log.syslog.facility.name
@@ -155,6 +168,8 @@ fields:
   - name: url.original
     extra: url.original
     type: extra
+    sensitive: true
+    top_values: false
     description: Full request target as logged ($request_uri)
     aliases: [request_uri]
   - name: event.duration
@@ -175,6 +190,7 @@ fields:
   - name: network.forwarded_ip
     extra: network.forwarded_ip
     type: extra
+    sensitive: true
     description: X-Forwarded-For as logged, may be a list
     aliases: [http_x_forwarded_for, x_forwarded_for, X-Forwarded-For, forwarded_ip]
   - name: url.domain
@@ -230,6 +246,7 @@ fields:
   - name: source.address
     extra: source.address
     type: extra
+    sensitive: true
     description: Client token that is not an IP address (HostnameLookups, "unknown")
     aliases: []
   - name: http.request.line
@@ -240,6 +257,7 @@ fields:
   - name: ident
     extra: ident
     type: extra
+    sensitive: true
     description: Apache %l identity when not -
     aliases: []
   - name: trailing

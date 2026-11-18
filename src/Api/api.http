@@ -64,6 +64,9 @@ GET {{baseUrl}}/cases/1
 ### Cases: members
 GET {{baseUrl}}/cases/1/members
 
+### Cases: fields for autocomplete (the catalog, this case's statistics, its span)
+GET {{baseUrl}}/cases/1/fields
+
 ### Cases: share (owner)
 POST {{baseUrl}}/cases/1/members
 Content-Type: application/json

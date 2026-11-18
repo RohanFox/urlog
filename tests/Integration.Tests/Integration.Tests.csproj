@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
     <ProjectReference Include="../../src/Sources/Sources.csproj" />
+    <!-- The field catalog: the fields the statistics cover. -->
+    <ProjectReference Include="../../src/Query/Query.csproj" />
     <!-- The fixed-seed 1 GiB fixture (generated on first use) for the worker tests. -->
     <ProjectReference Include="../../bench/Bench.csproj" />
     <!-- Built before these tests, not referenced: the crash tests start urlog as a child process. -->

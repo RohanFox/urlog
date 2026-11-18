@@ -90,8 +90,48 @@ public sealed class RawSqlGateTests
                   TableIdentifier c (alias k)
             """)));
 
-        // SELECT * FROM events_v e JOIN field_stats f ON e.case_id = f.case_id
+        // SELECT * FROM events_v e JOIN field_stats_v f ON e.case_id = f.case_id
         Assert.Null(RawSqlGate.Inspect(Lines("""
+            SelectWithUnionQuery (children 1)
+             ExpressionList (children 1)
+              SelectQuery (children 2)
+               ExpressionList (children 1)
+                Asterisk
+               TablesInSelectQuery (children 2)
+                TablesInSelectQueryElement (children 1)
+                 TableExpression (children 1)
+                  TableIdentifier events_v (alias e)
+                TablesInSelectQueryElement (children 2)
+                 TableExpression (children 1)
+                  TableIdentifier field_stats_v (alias f)
+                 TableJoin (children 1)
+                  Function equals (children 1)
+                   ExpressionList (children 2)
+                    Identifier e.case_id
+                    Identifier f.case_id
+            """)));
+
+    }
+
+    [Fact]
+    public void TheStatisticsTableUnderItsViewIsRefused()
+    {
+        // The table holds every case's statistics and has no filter of its own: refused by name, alone and in a
+        // join. SELECT * FROM field_stats
+        Assert.Equal("field_stats is not readable through the query path; query field_stats_v", RawSqlGate.Inspect(Lines("""
+            SelectWithUnionQuery (children 1)
+             ExpressionList (children 1)
+              SelectQuery (children 2)
+               ExpressionList (children 1)
+                Asterisk
+               TablesInSelectQuery (children 1)
+                TablesInSelectQueryElement (children 1)
+                 TableExpression (children 1)
+                  TableIdentifier field_stats
+            """)));
+
+        // SELECT * FROM events_v e JOIN field_stats f ON e.case_id = f.case_id
+        Assert.Equal("field_stats is not readable through the query path; query field_stats_v", RawSqlGate.Inspect(Lines("""
             SelectWithUnionQuery (children 1)
              ExpressionList (children 1)
               SelectQuery (children 2)

@@ -45,6 +45,33 @@ public sealed record FieldDef(string Name, string? Column, string? ExtraKey, Fie
     /// </summary>
     public bool ZeroIsAbsent { get; init; }
 
+    /// <summary>
+    /// The values of the field can name a person or carry a credential (YAML <c>sensitive: true</c>). The field
+    /// listing passes the mark on, for an interface to act on; it changes nothing in a query.
+    /// </summary>
+    public bool Sensitive { get; init; }
+
+    /// <summary>
+    /// Whether the per-case statistics store the field's most frequent values (YAML <c>top_values: false</c> turns
+    /// it off: a request target can carry a token). Only keyword, int, ip and extras fields have them at all.
+    /// </summary>
+    public bool TopValues { get; init; } = true;
+
+    /// <summary>
+    /// The test for "this row has a value in the field", or null when every row has one. A string is a value
+    /// unless empty, an address unless <c>::</c>, a number unless it is 0 in a column the catalog marks
+    /// (<see cref="ZeroIsAbsent"/>); the columns are not nullable, so a source without the field stores exactly
+    /// those. One rule for the query verbs and for the field statistics.
+    /// </summary>
+    /// <param name="unspecifiedAddress">The SQL of the string <c>::</c>: a bound parameter in a query, a literal in the statistics.</param>
+    public static string? HasValue(FieldType type, bool zeroIsAbsent, string expression, string unspecifiedAddress) => type switch
+    {
+        FieldType.Keyword or FieldType.Verbatim or FieldType.Text or FieldType.Extra => $"notEmpty({expression})",
+        FieldType.Ip => $"{expression} != toIPv6({unspecifiedAddress})",
+        FieldType.Number when zeroIsAbsent => $"{expression} != 0",
+        _ => null,
+    };
+
     /// <summary>The SQL expression that reads the field from <c>events_v</c> (an extras lookup takes a parameter name for the key).</summary>
     public string Expression(string? keyParameter = null) =>
         Column ?? (keyParameter is null ? throw new ArgumentNullException(nameof(keyParameter)) : $"extras[{{{keyParameter}:String}}]");
@@ -145,7 +172,7 @@ public sealed class FieldCatalog
                 throw new InvalidDataException($"field catalog: {e.Name}: zero_is_absent applies to int fields only");
             }
 
-            fields.Add(new FieldDef(e.Name, hasColumn ? e.Column : null, hasExtra ? e.Extra : null, type, e.Description ?? "", [.. e.Aliases ?? []]) { ZeroIsAbsent = e.ZeroIsAbsent });
+            fields.Add(new FieldDef(e.Name, hasColumn ? e.Column : null, hasExtra ? e.Extra : null, type, e.Description ?? "", [.. e.Aliases ?? []]) { ZeroIsAbsent = e.ZeroIsAbsent, Sensitive = e.Sensitive, TopValues = e.TopValues ?? true });
         }
 
         return new FieldCatalog(fields);
@@ -189,6 +216,10 @@ public sealed class FieldCatalog
         public string? Description { get; set; }
 
         public bool ZeroIsAbsent { get; set; }
+
+        public bool Sensitive { get; set; }
+
+        public bool? TopValues { get; set; }
 
         public List<string>? Aliases { get; set; }
     }

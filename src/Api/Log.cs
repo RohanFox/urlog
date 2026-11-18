@@ -20,6 +20,9 @@ internal static partial class Log
     [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "not serving, only the health route answers: {Reason}")]
     public static partial void StoreMismatch(ILogger logger, string reason);
 
+    [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "field statistics of case {Case} could not be read: {Reason}")]
+    public static partial void FieldStatsUnavailable(ILogger logger, long @case, string reason);
+
     [LoggerMessage(EventId = 20, Level = LogLevel.Information, Message = "ingest: job runner starting as {User} at {Host}:{Port}, {Jobs} job(s) at a time")]
     public static partial void IngestStarting(ILogger logger, string user, string host, int port, int jobs);
 

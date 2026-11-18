@@ -30,4 +30,18 @@ public sealed class CaseRecord
     public DateTime? PurgingAt { get; internal set; }
 
     public DateTime? PurgedAt { get; set; }
+
+    /// <summary>
+    /// The least <c>ts_min</c> of the case's files with a committed parse: with <see cref="TsMax"/> the span of the
+    /// case and the default range of a search. Written by the commit of a parse; null while no file has a time.
+    /// </summary>
+    public DateTime? TsMin { get; set; }
+
+    public DateTime? TsMax { get; set; }
+
+    /// <summary>The sum of the files' <c>undated_rows</c>: events outside the span because their time is below <see cref="EventTime.Floor"/>.</summary>
+    public long UndatedRows { get; set; }
+
+    /// <summary>The sum of the files' <c>future_rows</c>: events outside the span because they are dated after their file arrived.</summary>
+    public long FutureRows { get; set; }
 }

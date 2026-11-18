@@ -15,9 +15,11 @@ public sealed record JobCounts(long ChunksRead, long ChunksParsed, long Rows, lo
 /// <see cref="Urlog.Core.Pipeline.InputEndKind.Unknown"/> is refused by the commit, so a path that never asked how
 /// the input ended cannot mark a file parsed.
 /// </summary>
-/// <param name="TsMin">Least event time, UTC; null when no row carried a time.</param>
+/// <param name="TsMin">Least event time inside the bounds of <see cref="EventTime"/>, UTC; null when no row carried one.</param>
+/// <param name="UndatedRows">Rows whose time is below <see cref="EventTime.Floor"/>.</param>
+/// <param name="FutureRows">Rows dated later than the file's arrival plus <see cref="EventTime.FutureMargin"/>.</param>
 /// <param name="SpansDst">The file was read with one zone offset and its events lie on both sides of a change of it.</param>
-public sealed record JobOutcome(Urlog.Core.Pipeline.InputEnd End, DateTime? TsMin = null, DateTime? TsMax = null, bool SpansDst = false);
+public sealed record JobOutcome(Urlog.Core.Pipeline.InputEnd End, DateTime? TsMin = null, DateTime? TsMax = null, bool SpansDst = false, long UndatedRows = 0, long FutureRows = 0);
 
 /// <summary>What the runner found when it compared the bytes it read with the intake record (evidence rule 4).</summary>
 public sealed record IntegrityMismatch(string ActualSha256, long ActualSize);
@@ -251,7 +253,11 @@ public static class JobOperations
             file.TsMin = outcome.TsMin;
             file.TsMax = outcome.TsMax;
             file.SpansDst = outcome.SpansDst;
+            file.UndatedRows = outcome.UndatedRows;
+            file.FutureRows = outcome.FutureRows;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            // The case's span and the mark that its field statistics are out of date, with the rows they describe.
+            await CaseStatsOperations.OnCommitAsync(db, job.CaseId, nowUtc, cancellationToken).ConfigureAwait(false);
 
             var caseName = await db.Cases.Where(c => c.Id == job.CaseId).Select(c => c.Name).FirstAsync(cancellationToken).ConfigureAwait(false);
             if (end.IsTruncated)

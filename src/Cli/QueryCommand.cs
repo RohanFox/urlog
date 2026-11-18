@@ -5,11 +5,12 @@ using Urlog.Query;
 namespace Urlog.Cli;
 
 /// <summary>
-/// <c>urlog query --case &lt;id&gt; [--from t] [--to t] [--tz zone] [--now t] [--sql] [--explain] '&lt;spl&gt;'</c>:
+/// <c>urlog query --case &lt;id&gt; [--db metadata.db] [--from t] [--to t] [--tz zone] [--now t] [--sql] [--explain] '&lt;spl&gt;'</c>:
 /// transpile, run over HTTP as the read-only user with <c>SQL_allowed_cases</c> per request, print an aligned
 /// table, the row count and the elapsed time. <c>--sql</c> prints the SQL and parameters and stops;
-/// <c>--explain</c> prints <c>EXPLAIN indexes = 1</c> after the table. The default range is the case's span
-/// (its visible events through <c>events_v</c>), never "last 24 h".
+/// <c>--explain</c> prints <c>EXPLAIN indexes = 1</c> after the table. The default range is the case's span,
+/// never "last 24 h": with <c>--db</c> the span the metadata file records for the case (read only), without it
+/// the span of the case's visible events through <c>events_v</c>, times before 1980 left out.
 /// </summary>
 internal static class QueryCommand
 {
@@ -104,9 +105,21 @@ internal static class QueryCommand
         {
             throw new CliException("--from and --to go together");
         }
+        else if (args.Option("db") is { } db)
+        {
+            // The case's recorded span, from its file records: what the API uses as the default range.
+            var recorded = await Urlog.Core.Metadata.CaseStatsOperations.ReadSpanAsync(db, checked((long)caseId), ct).ConfigureAwait(false)
+                ?? throw new CliException($"{db} has no case {caseId} with a recorded span (no such file or case, or a metadata file from before the span was recorded)");
+            (from, to) = recorded.DefaultRange ?? throw new CliException($"case {caseId} has no event with a usable time; give --from and --to");
+            if (recorded.UndatedEvents > 0 || recorded.FutureEvents > 0)
+            {
+                Console.Error.WriteLine($"range     outside the case span: {recorded.UndatedEvents:N0} event(s) without a usable time, {recorded.FutureEvents:N0} dated after their file arrived; --from and --to reach them");
+            }
+        }
         else
         {
-            var span = await client.CaseSpanAsync(caseId, ct).ConfigureAwait(false) ?? throw new CliException($"case {caseId} has no visible events (nothing ingested, or not committed)");
+            // No metadata file: the span of the visible events, times below the floor left out.
+            var span = await client.CaseSpanAsync(caseId, ct).ConfigureAwait(false) ?? throw new CliException($"case {caseId} has no visible events with a usable time (nothing ingested, or not committed)");
             (from, to) = span;
         }
 

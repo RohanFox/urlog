@@ -39,6 +39,15 @@ public sealed class IngestService(MetadataStore store, IJobEventStore events, St
                 ScheduledPurge = lifecycle.ScheduledPurge,
                 SweepAtUtc = lifecycle.SweepAtUtc,
             },
+            Stats = new FieldStatsOptions
+            {
+                Fields = ingest.Stats.Enabled ? Urlog.Query.FieldStats.TaskFields(Urlog.Query.FieldCatalog.Embedded) : [],
+                QuietPeriod = ingest.Stats.QuietPeriod,
+                TimeLimit = ingest.Stats.TimeLimit,
+                MaxThreads = ingest.Stats.MaxThreads,
+                MaxMemoryBytes = ingest.Stats.MaxMemoryBytes,
+                MaxCaseRows = ingest.Stats.MaxCaseRows,
+            },
         };
 
         var catalog = new SourceCatalog();

@@ -79,4 +79,10 @@ internal static partial class JobLog
 
     [LoggerMessage(EventId = 135, Level = LogLevel.Information, Message = "nightly backup {Path}, sha256 {Sha256}")]
     public static partial void BackupTaken(ILogger logger, string path, string sha256);
+
+    [LoggerMessage(EventId = 140, Level = LogLevel.Information, Message = "field statistics of case {CaseId}: {Events} events in {Seconds:F2} s")]
+    public static partial void StatsDone(ILogger logger, long caseId, long events, double seconds);
+
+    [LoggerMessage(EventId = 141, Level = LogLevel.Warning, Message = "field statistics of case {CaseId} {State}: {Reason}")]
+    public static partial void StatsNotDone(ILogger logger, long caseId, string state, string reason);
 }

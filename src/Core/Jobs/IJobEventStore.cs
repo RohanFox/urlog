@@ -54,6 +54,13 @@ public interface IJobEventStore : IStoreIdentitySource
     /// <summary>Removes the case's field statistics. Returns when they are gone.</summary>
     Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Computes the field statistics of the case over its visible rows and replaces its set with one stamped
+    /// <paramref name="computedAt"/>. Nothing is written when the run fails or passes its time limit
+    /// (<see cref="FieldStatsTimeoutException"/>).
+    /// </summary>
+    Task<FieldStatsSet> RefreshFieldStatsAsync(ulong caseId, IReadOnlyList<StatsField> fields, FieldStatsLimits limits, DateTime computedAt, CancellationToken cancellationToken);
+
     /// <summary>Removes the generation rows of the file ids. Returns when the delete is applied.</summary>
     Task ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken);
 
@@ -127,6 +134,15 @@ public sealed class ClickHouseJobEventStore(Func<ClickHouseTcpClient> control, N
 
     public Task DeleteCaseFieldStatsAsync(ulong caseId, CancellationToken cancellationToken) =>
         WithAsync(admin => admin.DeleteCaseFieldStatsAsync(caseId, cancellationToken).AsTask());
+
+    public async Task<FieldStatsSet> RefreshFieldStatsAsync(ulong caseId, IReadOnlyList<StatsField> fields, FieldStatsLimits limits, DateTime computedAt, CancellationToken cancellationToken)
+    {
+        await using var client = control();
+        var task = new FieldStatsTask(client);
+        var set = await task.ComputeAsync(caseId, fields, limits, cancellationToken).ConfigureAwait(false);
+        await task.WriteAsync(caseId, set, computedAt, cancellationToken).ConfigureAwait(false);
+        return set;
+    }
 
     public Task ClearFileGenerationsAsync(IReadOnlyList<ulong> fileIds, CancellationToken cancellationToken) =>
         WithAsync(admin => admin.ClearFileGenerationsAsync(fileIds, cancellationToken).AsTask());

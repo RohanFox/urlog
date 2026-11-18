@@ -30,6 +30,9 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         Assert.True(records.Count > 5, "the nested archive has members of its own");
         Assert.True(before.Rows > 0);
         Assert.Equal(before.Rows, records.Sum(r => r.RowCount));
+        // The scene's worker computed the case's field statistics behind its parses.
+        var statsBefore = await h.FieldStatsAsync(scene.CaseId);
+        Assert.Equal(before.Rows, statsBefore.Single(r => r.Field.Length == 0).Count);
 
         // Archive.
         var archive = await scene.CliAsync("case", "archive", "--case", scene.Case);
@@ -47,6 +50,7 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         // No part of the case in the store, nothing to read, its directory empty, its cache gone; the neighbour whole.
         Assert.Empty(await scene.PartitionsAsync(scene.CaseId));
         Assert.Equal(0, (await h.VisibleAsync(scene.CaseId)).Rows);
+        Assert.Empty(await h.FieldStatsAsync(scene.CaseId));
         Assert.Empty(Directory.EnumerateFileSystemEntries(scene.CaseDirectory));
         Assert.False(Directory.Exists(CaseFolders.CaseDirectory(scene.Evidence + "-cache", scene.CaseId)));
         Assert.Equal(Scene.KeptRows, (await h.VisibleAsync(scene.Kept)).Rows);
@@ -77,8 +81,16 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         Assert.Equal(records.Select(r => (r.Id, r.Sha256, r.Size, r.StoredPath, r.ParentFileId, r.State, r.RowCount)), after.Select(r => (r.Id, r.Sha256, r.Size, r.StoredPath, r.ParentFileId, r.State, r.RowCount)));
         var visible = await h.VisibleAsync(scene.CaseId);
         Assert.Equal((before.Rows, 1L), (visible.Rows, visible.Generations));
+        // The statistics went with the partitions and are rebuilt from the re-imported rows by the same runner:
+        // the same values and counts, in a newer set.
+        var statsAfter = await h.FieldStatsAsync(scene.CaseId);
+        Assert.Equal(statsBefore.Select(r => (r.Field, r.Value, r.Count)), statsAfter.Select(r => (r.Field, r.Value, r.Count)));
+        Assert.True(statsAfter[0].ComputedAt > statsBefore[0].ComputedAt, $"{statsAfter[0].ComputedAt:O} after {statsBefore[0].ComputedAt:O}");
         await using (var db = h.Store.CreateDbContext())
         {
+            var state = await db.CaseStats.AsNoTracking().SingleAsync(s => s.CaseId == scene.CaseId, Ct);
+            Assert.Equal((CaseStatsState.Ok, before.Rows), (state.State, state.Events));
+            Assert.Null(state.DirtySince);
             var row = await db.Audit.AsNoTracking().SingleAsync(a => a.Action == AuditActions.CaseReimport, Ct);
             Assert.Contains("\"failed_files\":[]", row.DetailsJson, StringComparison.Ordinal);
             Assert.Contains("\"row_differences\":[]", row.DetailsJson, StringComparison.Ordinal);

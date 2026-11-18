@@ -49,9 +49,11 @@ public sealed class UploadOptions
 }
 
 /// <summary>
-/// Where the event store is and the ingest account the backend's write path connects as (<c>URLOG_CH_HOST</c>,
-/// <c>URLOG_CH_TCP_PORT</c>, <c>URLOG_CH_USER</c>, <c>URLOG_CH_PASSWORD</c>). The defaults are the development
-/// stack's stubs; a deployment takes the password from a secret. Never the admin account.
+/// Where the event store is and the two accounts the backend holds: the ingest account of its write path
+/// (<c>URLOG_CH_HOST</c>, <c>URLOG_CH_TCP_PORT</c>, <c>URLOG_CH_USER</c>, <c>URLOG_CH_PASSWORD</c>) and the
+/// read-only query account its reads go through, over HTTP (<c>URLOG_CH_HTTP_PORT</c>, <c>URLOG_CH_QUERY_USER</c>,
+/// <c>URLOG_CH_QUERY_PASSWORD</c>). The defaults are the development stack's stubs; a deployment takes the
+/// passwords from secrets. Never the admin account.
 /// </summary>
 public sealed class ClickHouseOptions
 {
@@ -62,6 +64,12 @@ public sealed class ClickHouseOptions
     public string User { get; set; } = "urlog_ingest";
 
     public string Password { get; set; } = "urlog_ingest";
+
+    public int HttpPort { get; set; } = 8123;
+
+    public string QueryUser { get; set; } = "urlog_query";
+
+    public string QueryPassword { get; set; } = "urlog_query";
 
     /// <summary>How often the store identity comparison is tried again while it has not passed.</summary>
     public TimeSpan RetryInterval { get; set; } = TimeSpan.FromSeconds(5);
@@ -102,6 +110,31 @@ public sealed class IngestOptions
 
     /// <summary>Where backups go; empty is <c>backups</c> next to the metadata file.</summary>
     public string BackupDirectory { get; set; } = "";
+
+    public FieldStatsSettings Stats { get; set; } = new();
+}
+
+/// <summary>
+/// <c>Urlog:Ingest:Stats</c>: the per-case field statistics the job runner computes after a case's parses
+/// (design record, "Query language", Autocomplete). The defaults are the runner's.
+/// </summary>
+public sealed class FieldStatsSettings
+{
+    /// <summary>False: this deployment computes no field statistics; autocomplete offers the catalog alone.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>How long after a case's last commit a run may start.</summary>
+    public TimeSpan QuietPeriod { get; set; } = new Urlog.Core.Jobs.FieldStatsOptions().QuietPeriod;
+
+    /// <summary>For one run. A run that passes it writes nothing and the case says so.</summary>
+    public TimeSpan TimeLimit { get; set; } = new Urlog.Core.Jobs.FieldStatsOptions().TimeLimit;
+
+    public int MaxThreads { get; set; } = new Urlog.Core.Jobs.FieldStatsOptions().MaxThreads;
+
+    public long MaxMemoryBytes { get; set; } = new Urlog.Core.Jobs.FieldStatsOptions().MaxMemoryBytes;
+
+    /// <summary>A case with more events than this gets no statistics, and says why.</summary>
+    public long MaxCaseRows { get; set; } = new Urlog.Core.Jobs.FieldStatsOptions().MaxCaseRows;
 }
 
 /// <summary><c>Urlog:Lifecycle</c>: the purge window and approval, and the integrity sweep (design record, "Case lifecycle").</summary>

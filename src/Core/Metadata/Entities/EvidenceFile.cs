@@ -136,6 +136,12 @@ public sealed class EvidenceFile
 
     public DateTime? TsMax { get; set; }
 
+    /// <summary>Rows of the committed parse whose time is below <see cref="EventTime.Floor"/>; outside <see cref="TsMin"/> and <see cref="TsMax"/>.</summary>
+    public long UndatedRows { get; set; }
+
+    /// <summary>Rows of the committed parse dated later than <see cref="ReceivedAt"/> plus <see cref="EventTime.FutureMargin"/>; outside the range too.</summary>
+    public long FutureRows { get; set; }
+
     public long RowCount { get; set; }
 
     public long RejectCount { get; set; }

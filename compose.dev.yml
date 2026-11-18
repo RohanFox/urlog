@@ -11,7 +11,7 @@ services:
       # The image entrypoint creates the admin user from these. Dev stub only.
       # Accounts on this stack (deploy/clickhouse/users.d/urlog.xml):
       #   default         admin: `urlog migrate`, benches' scratch tables, definer of events_v (never drop or rename)
-      #   urlog_query     read-only: SELECT on events_v and field_stats; `urlog query`, the API's search
+      #   urlog_query     read-only: SELECT on events_v and field_stats_v; `urlog query`, the API's search
       #   urlog_ingest    write path: INSERT/SELECT/ALTER DELETE on events and on file_generation, INSERT/ALTER DELETE on field_stats, SELECT on store_identity; `urlog ingest`
       # The two backend accounts' ::/0 network and password = name are dev stubs as well.
       CLICKHOUSE_USER: default

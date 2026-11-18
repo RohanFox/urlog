@@ -45,12 +45,13 @@ public sealed class CaseAccessTests
     public void TheRouteTableHasTheCaseRoutes()
     {
         var routes = CaseRoutes().Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
-        Assert.True(routes.Count == 11, string.Join(" | ", routes));
+        Assert.True(routes.Count == 12, string.Join(" | ", routes));
         Assert.Equal(
         [
             "DELETE /api/v1/cases/{caseId:long}/members/{userId:long}",
             "DELETE /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "GET /api/v1/cases/{caseId:long}",
+            "GET /api/v1/cases/{caseId:long}/fields",
             "GET /api/v1/cases/{caseId:long}/members",
             "GET /api/v1/cases/{caseId:long}/uploads/{uploadId}",
             "HEAD /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",

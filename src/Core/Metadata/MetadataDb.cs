@@ -29,6 +29,8 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
 
     public DbSet<CaseTask> CaseTasks => Set<CaseTask>();
 
+    public DbSet<CaseStats> CaseStats => Set<CaseStats>();
+
     public DbSet<AuditRow> Audit => Set<AuditRow>();
 
     public DbSet<Session> Sessions => Set<Session>();
@@ -168,6 +170,16 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.Property(x => x.Message).HasMaxLength(4000);
             e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.CaseId, x.State });
+        });
+
+        modelBuilder.Entity<CaseStats>(e =>
+        {
+            e.ToTable("case_stats", t => t.HasCheckConstraint("ck_case_stats_state", Names.EnumCheck<CaseStatsState>("state")));
+            e.HasKey(x => x.CaseId);
+            e.Property(x => x.CaseId).ValueGeneratedNever();
+            e.Property(x => x.State).HasConversion(EnumText<CaseStatsState>()).HasMaxLength(16);
+            e.Property(x => x.Message).HasMaxLength(4000);
+            e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AuditRow>(e =>

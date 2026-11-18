@@ -187,3 +187,22 @@ passes on the dev box: p95 206 / 217 / 212 ms against 200 / 205 / 206 ms for the
 p50 191 to 193 ms for both. `EXPLAIN indexes = 1` on a case and time query: partition pruning to the case's month
 and primary-key use on `case_id` and `ts`, as in decision 2 above. The set costs one small aggregation over
 `file_generation` (one row per file) per query.
+
+## Amendment, 2026-11-18: the field statistics are read through a view
+
+The decision above gave `urlog_query` two grants, `SELECT` on `events_v` and on `field_stats`, and the gate allowed
+both names. `field_stats` is a plain table keyed by case with no filter of its own, so a query could read the
+statistics of any case whatever case list its request carried: `SELECT * FROM field_stats` passed the gate and the
+grant. Nothing was exposed, because nothing wrote the table until the statistics task existed.
+
+**Now** (migration 0008): `field_stats_v`, `SQL SECURITY DEFINER` like `events_v`, filtered on the same
+`SQL_allowed_cases` setting, showing for each case its newest set only. The query account's second grant is on that
+view. It holds nothing on `field_stats`, and the gate has the table in its denied relations and the view in its
+allowed ones. The mechanism is the one of decision 1, applied to a second relation; the two grants are now two
+views.
+
+**What pins it.** `GrantTests`: the grant list, `SELECT count() FROM field_stats` as the query user is 497, both
+views carry the definer clause. `RawSqlGateTests`: the table read directly, in a join, in a subquery and behind a
+CTE named like its view is refused; a join to the view passes and stays case-filtered. `FieldStatsTests`: the view
+asked for a case outside the list returns zero rows by name, by negation, by value, through a subquery and through
+a join; with two cases in the list it shows both; without a list it shows nothing.

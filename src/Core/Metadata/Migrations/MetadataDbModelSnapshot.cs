@@ -140,6 +140,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("deleted_at");
 
+                    b.Property<long>("FutureRows")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("future_rows");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -170,6 +174,18 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("state");
 
+                    b.Property<DateTime?>("TsMax")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ts_max");
+
+                    b.Property<DateTime?>("TsMin")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ts_min");
+
+                    b.Property<long>("UndatedRows")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("undated_rows");
+
                     b.HasKey("Id")
                         .HasName("pk_cases");
 
@@ -182,6 +198,52 @@ namespace Urlog.Core.Metadata.Migrations
                     b.ToTable("cases", null, t =>
                         {
                             t.HasCheckConstraint("ck_cases_state", "state IN ('active', 'closed', 'archived', 'soft_deleted', 'purging', 'purged')");
+                        });
+                });
+
+            modelBuilder.Entity("Urlog.Core.Metadata.CaseStats", b =>
+                {
+                    b.Property<long>("CaseId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTime?>("ComputedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("computed_at");
+
+                    b.Property<DateTime?>("DirtySince")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("dirty_since");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<long>("Events")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("events");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("message");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
+
+                    b.HasKey("CaseId")
+                        .HasName("pk_case_stats");
+
+                    b.ToTable("case_stats", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_case_stats_state", "state IN ('none', 'ok', 'skipped', 'timed_out', 'failed')");
                         });
                 });
 
@@ -362,6 +424,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("file_time");
 
+                    b.Property<long>("FutureRows")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("future_rows");
+
                     b.Property<bool>("HashOfStoredBytes")
                         .HasColumnType("INTEGER")
                         .HasColumnName("hash_of_stored_bytes");
@@ -498,6 +564,10 @@ namespace Urlog.Core.Metadata.Migrations
                     b.Property<DateTime?>("TsMin")
                         .HasColumnType("TEXT")
                         .HasColumnName("ts_min");
+
+                    b.Property<long>("UndatedRows")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("undated_rows");
 
                     b.Property<string>("UnreadableReason")
                         .HasMaxLength(512)
@@ -876,6 +946,16 @@ namespace Urlog.Core.Metadata.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_cases_users_owner_id");
+                });
+
+            modelBuilder.Entity("Urlog.Core.Metadata.CaseStats", b =>
+                {
+                    b.HasOne("Urlog.Core.Metadata.CaseRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_case_stats_cases_case_id");
                 });
 
             modelBuilder.Entity("Urlog.Core.Metadata.CaseTask", b =>

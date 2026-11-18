@@ -56,6 +56,58 @@ public sealed partial class CaseScopedEventsQueryTests
     public void AFragmentCannotWidenTheRead(string projection, string? filter, string? tail) =>
         Assert.ThrowsAny<ArgumentException>(() => CaseScopedEventsQuery.Build(1, projection, filter, tail));
 
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public void AReadOfTheVisibleRowsCarriesTheCaseThenTheCommittedGenerations(string projection, string? filter, string? tail)
+    {
+        var limits = new StatementLimits(37, 4, 2_000_000_000);
+        foreach (var caseId in new ulong[] { 1, 7, 18_446_744_073_709_551_615 })
+        {
+            var sql = CaseScopedEventsQuery.BuildVisible(caseId, projection, filter, tail, limits);
+            var head = $"SELECT {projection} FROM events WHERE case_id = {caseId} AND {CaseScopedEventsQuery.CommittedGenerations}";
+            Assert.StartsWith(head, sql, StringComparison.Ordinal);
+            const string settings = " SETTINGS max_execution_time = 37, max_threads = 4, max_memory_usage = 2000000000";
+            Assert.EndsWith(settings, sql, StringComparison.Ordinal);
+            var rest = sql[head.Length..^settings.Length];
+            Assert.True(rest.Length == 0 || rest.StartsWith(" AND (", StringComparison.Ordinal) || rest == " " + tail, rest);
+            Assert.Single(FromEvents().Matches(sql));
+            Assert.Single(Where().Matches(sql));
+
+            var pairs = CaseScopedEventsQuery.BuildVisible(caseId, "k, count() AS c", "notEmpty(v)", "GROUP BY k", extrasPairs: true);
+            Assert.StartsWith($"SELECT k, count() AS c FROM events ARRAY JOIN mapKeys(extras) AS k, mapValues(extras) AS v WHERE case_id = {caseId} AND {CaseScopedEventsQuery.CommittedGenerations} AND (notEmpty(v))", pairs, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("count()", "1) OR (1", null)]
+    [InlineData("count()", "1 OR case_id IN (SELECT case_id FROM events)", null)]
+    [InlineData("count()", null, "UNION ALL SELECT count() FROM events")]
+    [InlineData("count()", null, "SETTINGS max_execution_time = 0")]
+    [InlineData("count()", "1 -- x", null)]
+    public void AFragmentCannotWidenAReadOfTheVisibleRows(string projection, string? filter, string? tail) =>
+        Assert.ThrowsAny<ArgumentException>(() => CaseScopedEventsQuery.BuildVisible(1, projection, filter, tail, new StatementLimits(1, 1, 1)));
+
+    [Fact]
+    public void TheGenerationFilterIsTheViewsOwnText()
+    {
+        // events_v is defined by migration 0006. The statistics count the rows that view shows, so the filter the
+        // builder writes is the one in that file, compared with all whitespace runs taken as one space.
+        var migration = File.ReadAllText(Path.Combine(RepoRoot, "migrations", "clickhouse", "0006_events_v_hide_uncommitted.sql"));
+        Assert.Contains(Squeeze(CaseScopedEventsQuery.CommittedGenerations), Squeeze(migration), StringComparison.Ordinal);
+
+        static string Squeeze(string text) => Spaces().Replace(text, " ").Replace("( ", "(", StringComparison.Ordinal).Replace(" )", ")", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AStatisticsFieldNamesNothingButAColumnOrAKey()
+    {
+        Assert.Throws<ArgumentException>(() => new StatsField("host.name", StatsFieldKind.Column, "host FROM events", "host", null, true).Checked());
+        Assert.Throws<ArgumentException>(() => new StatsField("x", StatsFieldKind.Extra, "k') OR ('1", null, null, true).Checked());
+        Assert.Throws<ArgumentException>(() => new StatsField("bad name", StatsFieldKind.Column, "host", "host", null, true).Checked());
+        Assert.Throws<ArgumentException>(() => new StatsField("host.name", StatsFieldKind.Column, "host", null, null, true).Checked());
+        Assert.NotNull(new StatsField("network.forwarded_ip", StatsFieldKind.Extra, "network.forwarded_ip", null, null, true).Checked());
+    }
+
     [Fact]
     public void CaseZeroIsRefused() => Assert.Throws<ArgumentOutOfRangeException>(() => CaseScopedEventsQuery.Build(0, "count()"));
 
@@ -120,6 +172,9 @@ public sealed partial class CaseScopedEventsQueryTests
 
     [GeneratedRegex(@"\bWHERE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Where();
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex Spaces();
 
     [GeneratedRegex(@"\b(FROM|JOIN)\s+(default\.)?`?events`?(?![\w.])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ReadsEvents();

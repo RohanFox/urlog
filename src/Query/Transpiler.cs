@@ -430,13 +430,9 @@ public sealed class Transpiler
     /// (<see cref="FieldDef.ZeroIsAbsent"/>); the columns are not nullable, so a source without the field stores
     /// exactly those.
     /// </summary>
-    private string? HasValue(Operand operand) => operand.Type switch
-    {
-        FieldType.Keyword or FieldType.Verbatim or FieldType.Text or FieldType.Extra => $"notEmpty({operand.Expression})",
-        FieldType.Ip => $"{operand.Expression} != toIPv6({{{Add("String", "::")}:String}})",
-        FieldType.Number when operand.Field?.ZeroIsAbsent == true => $"{operand.Expression} != 0",
-        _ => null,
-    };
+    private string? HasValue(Operand operand) => operand.Type == FieldType.Ip
+        ? FieldDef.HasValue(operand.Type, false, operand.Expression, $"{{{Add("String", "::")}:String}}")
+        : FieldDef.HasValue(operand.Type, operand.Field?.ZeroIsAbsent == true, operand.Expression, string.Empty);
 
     private string NextAlias() => Quote(Names.Generated(_generated++));
 

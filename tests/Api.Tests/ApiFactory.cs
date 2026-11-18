@@ -54,6 +54,9 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
     /// <summary>The intake volume as the upload gate sees it; roomy unless a test says otherwise.</summary>
     public FakeDiskProbe Disk { get; } = new();
 
+    /// <summary>The field statistics the host reads in place of the event store's; empty unless a test fills it.</summary>
+    public FakeFieldStats FieldStats { get; } = new();
+
     /// <summary>Every row of the metadata file as it was when the host was built, for tests that assert the host wrote nothing.</summary>
     public string MetadataAtStart { get; private set; } = string.Empty;
 
@@ -105,6 +108,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             services.AddSingleton<ILoggerProvider>(Logs);
             services.AddSingleton<Urlog.Core.Jobs.IStoreIdentitySource>(EventStore);
             services.AddSingleton<Urlog.Core.Jobs.IDiskProbe>(Disk);
+            services.AddSingleton<Urlog.Api.Endpoints.IFieldStatsSource>(FieldStats);
             services.AddTransient<IStartupFilter, TestClientAddressFilter>();
         });
     }
@@ -321,4 +325,26 @@ internal sealed class ApiClient(HttpClient http, string address) : IDisposable
     }
 
     public void Dispose() => Http.Dispose();
+}
+
+/// <summary>Field statistics per case as a test sets them, with a record of every case the host asked for.</summary>
+internal sealed class FakeFieldStats : Urlog.Api.Endpoints.IFieldStatsSource
+{
+    public ConcurrentDictionary<ulong, Urlog.Query.CaseFieldStats> Sets { get; } = new();
+
+    public ConcurrentQueue<ulong> Asked { get; } = new();
+
+    /// <summary>Thrown by every read while set: the event store is away.</summary>
+    public Exception? Failure { get; set; }
+
+    public Task<Urlog.Query.CaseFieldStats> ReadAsync(ulong caseId, CancellationToken cancellationToken)
+    {
+        Asked.Enqueue(caseId);
+        if (Failure is { } failure)
+        {
+            throw failure;
+        }
+
+        return Task.FromResult(Sets.TryGetValue(caseId, out var set) ? set : new Urlog.Query.CaseFieldStats(caseId, null, 0, new Dictionary<string, Urlog.Query.FieldStat>()));
+    }
 }

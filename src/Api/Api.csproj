@@ -14,6 +14,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Core/Core.csproj" />
+    <!-- The field catalog and the query account's client. -->
+    <ProjectReference Include="../Query/Query.csproj" />
     <!-- The job runner the backend hosts parses with every registered source. -->
     <ProjectReference Include="../Sources/Sources.csproj" />
   </ItemGroup>

@@ -65,6 +65,9 @@ public sealed partial class Parser
         ["append"] = null,
     };
 
+    /// <summary>The verbs after a pipe, as <see cref="ParseCommand"/> takes them; what autocomplete offers there.</summary>
+    public static ImmutableArray<string> Verbs { get; } = ["where", "stats", "sort", "head", "table", "rex", "timechart"];
+
     private bool _inWhere;
     private bool _afterAggregate;
 

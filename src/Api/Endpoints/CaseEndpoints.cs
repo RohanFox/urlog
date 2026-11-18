@@ -27,6 +27,7 @@ public static class CaseEndpoints
         one.MapPost("/members", AddMemberAsync).RequireCaseRole(MemberRole.Owner).WithName("AddCaseMember");
         one.MapPut("/members/{userId:long}", ChangeMemberRoleAsync).RequireCaseRole(MemberRole.Owner).WithName("ChangeCaseMemberRole");
         one.MapDelete("/members/{userId:long}", RemoveMemberAsync).RequireCaseRole(MemberRole.Owner).WithName("RemoveCaseMember");
+        FieldEndpoints.Map(one);
         Uploads.UploadEndpoints.Map(one);
     }
 
@@ -117,5 +118,5 @@ public static class CaseEndpoints
     }
 
     internal static CaseResponse Response(CaseRecord @case, string owner, int members, MemberRole myRole) =>
-        new(@case.Id, @case.Name, @case.State, owner, UserResponse.Utc(@case.CreatedAt)!.Value, UserResponse.Utc(@case.ClosedAt), UserResponse.Utc(@case.ArchivedAt), members, myRole);
+        new(@case.Id, @case.Name, @case.State, owner, UserResponse.Utc(@case.CreatedAt)!.Value, UserResponse.Utc(@case.ClosedAt), UserResponse.Utc(@case.ArchivedAt), members, myRole, SpanResponse.Of(@case));
 }
