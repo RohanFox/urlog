@@ -146,9 +146,10 @@ public sealed record FieldStatsOptions
 
     /// <summary>
     /// For one run, all statements together. A run that passes it writes nothing. Also the longest a file queued
-    /// behind a run can wait for its slot. Measured: 3.1 s for 25.2 M rows (design record, Field statistics).
+    /// behind a run can wait for its slot. Measured: 10.7 s for 100.8 M rows, linear from 25 M (design record,
+    /// Field statistics); the default is 2.25 times the run of a case at <see cref="MaxCaseRows"/>.
     /// </summary>
-    public TimeSpan TimeLimit { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan TimeLimit { get; init; } = TimeSpan.FromSeconds(600);
 
     /// <summary>
     /// Server threads one statement of a run may use: half of the reference box's cores, so a search beside a
@@ -164,10 +165,14 @@ public sealed record FieldStatsOptions
 
     /// <summary>
     /// A case with more rows than this (the sum of its files' row counts) is not read at all: its statistics are
-    /// removed and the case says why. At the measured rate a case of this size is a run of about half
-    /// <see cref="TimeLimit"/>; that is an extrapolation from 25.2 M rows, not a measurement.
+    /// removed and the case says why. The default covers a syslog case of 300 GB. At the measured rate
+    /// (<see cref="MeasuredSecondsPerMillionRows"/>) a case of this size is a run of about 266 s; that is an
+    /// extrapolation from 100.8 M rows, 25 times the measured size, not a measurement.
     /// </summary>
-    public long MaxCaseRows { get; init; } = 250_000_000;
+    public long MaxCaseRows { get; init; } = 2_500_000_000;
+
+    /// <summary>Seconds of a run per million rows at 4 threads on the development box: 10,726 ms for 100,835,963 rows.</summary>
+    public const double MeasuredSecondsPerMillionRows = 0.1064;
 
     public Urlog.Core.Ingest.FieldStatsLimits Limits => new(TimeLimit, MaxThreads, MaxMemoryBytes);
 

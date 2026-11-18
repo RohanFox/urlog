@@ -20,6 +20,19 @@ public sealed class FieldStatsRunnerTests
     private static JobRunnerOptions WithStats(long maxCaseRows = 1_000_000) =>
         RunnerHarness.Options() with { Stats = new FieldStatsOptions { Fields = Fields, MaxCaseRows = maxCaseRows } };
 
+    [Fact]
+    public void TheDefaultsCoverABillionRowCaseWithTwiceItsRunInTheTimeLimit()
+    {
+        var defaults = new FieldStatsOptions();
+
+        // A 120 GB syslog case is about a billion rows; the default must not skip it.
+        Assert.True(defaults.MaxCaseRows >= 2_000_000_000);
+
+        // The run of the largest case the defaults read, at the measured rate, fits twice into the time limit.
+        var largestRun = TimeSpan.FromSeconds(defaults.MaxCaseRows / 1e6 * FieldStatsOptions.MeasuredSecondsPerMillionRows);
+        Assert.True(largestRun * 2 <= defaults.TimeLimit, $"{largestRun.TotalSeconds:0} s twice is over {defaults.TimeLimit.TotalSeconds:0} s");
+    }
+
     private static byte[] Lines(int count, int seed)
     {
         var at = DateTimeOffset.UtcNow.AddDays(-30).ToUnixTimeMilliseconds();
