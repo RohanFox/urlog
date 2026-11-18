@@ -20,6 +20,12 @@ internal static partial class Log
     [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "not serving, only the health route answers: {Reason}")]
     public static partial void StoreMismatch(ILogger logger, string reason);
 
+    [LoggerMessage(EventId = 39, Level = LogLevel.Error, Message = "a search of case {Case} failed outside the query itself")]
+    public static partial void SearchFailed(ILogger logger, long @case, Exception exception);
+
+    [LoggerMessage(EventId = 40, Level = LogLevel.Error, Message = "the audit row of a query on case {Case} could not be written after its answer was sent")]
+    public static partial void QueryAuditFailed(ILogger logger, long @case, Exception exception);
+
     [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "field statistics of case {Case} could not be read: {Reason}")]
     public static partial void FieldStatsUnavailable(ILogger logger, long @case, string reason);
 

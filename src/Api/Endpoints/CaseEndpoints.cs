@@ -28,6 +28,7 @@ public static class CaseEndpoints
         one.MapPut("/members/{userId:long}", ChangeMemberRoleAsync).RequireCaseRole(MemberRole.Owner).WithName("ChangeCaseMemberRole");
         one.MapDelete("/members/{userId:long}", RemoveMemberAsync).RequireCaseRole(MemberRole.Owner).WithName("RemoveCaseMember");
         FieldEndpoints.Map(one);
+        SearchEndpoints.Map(one);
         Uploads.UploadEndpoints.Map(one);
     }
 

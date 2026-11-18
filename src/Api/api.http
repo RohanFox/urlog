@@ -138,3 +138,32 @@ GET {{baseUrl}}/cases/1/uploads/{{upload}}
 DELETE {{baseUrl}}/cases/1/uploads/{{upload}}
 Tus-Resumable: 1.0.0
 X-CSRF-Token: {{csrf}}
+
+### Search: the first request answers as a stream of events (meta, then histogram, page and counts as each is ready, then done).
+### No range: the case's recorded span. No tz: UTC. A member the route does not know is refused.
+POST {{baseUrl}}/cases/1/search
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{"query": "src_ip=10.0.0.5 status=404", "from": "-7d@d", "tz": "Europe/Bucharest"}
+
+### Search: the next page (the cursor is the page event's "next"; the query text is that of the first request)
+POST {{baseUrl}}/cases/1/search
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{"query": "src_ip=10.0.0.5 status=404", "cursor": "{{cursor}}"}
+
+### Search: the result as a file, csv or json (one object a line), up to the export limit.
+### formula_guard=true (csv only) prefixes cells a spreadsheet would read as a formula and says so in the first line
+GET {{baseUrl}}/cases/1/search/export?format=csv&query=src_ip%3D10.0.0.5%20%7C%20table%20_time%20user.name%20message
+
+### Raw SQL: one table of the route's case; a refused text answers 400 with the gate's reason
+POST {{baseUrl}}/cases/1/sql
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{"sql": "SELECT host, count() AS c FROM events_v GROUP BY host ORDER BY c DESC"}
+
+### Raw SQL: the result as a file
+GET {{baseUrl}}/cases/1/sql/export?format=json&sql=SELECT%20host%2C%20count()%20FROM%20events_v%20GROUP%20BY%20host

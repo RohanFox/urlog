@@ -69,6 +69,15 @@ public static class ApiHost
             return new Urlog.Query.ClickHouseQueryClient(clickHouse.Host, clickHouse.HttpPort, clickHouse.QueryUser, clickHouse.QueryPassword);
         });
         services.AddSingleton<Endpoints.IFieldStatsSource, Endpoints.QueryFieldStatsSource>();
+        services.AddSingleton<Search.ISearchBackend, Search.QuerySearchBackend>();
+        services.AddSingleton<Search.IStoredHistogram, Search.NoStoredHistogram>();
+        services.AddSingleton<Search.QueryAudit>();
+        services.AddSingleton(sp =>
+        {
+            var query = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.Query;
+            query.Validate();
+            return new Search.QuerySlots(query.UserSlots, query.TotalSlots, query.SlotWait);
+        });
         services.AddSingleton<StoreReadiness>();
         services.AddHostedService<StoreReadinessService>();
         if (builder.Configuration.GetValue($"{UrlogOptions.Section}:Ingest:Enabled", true))

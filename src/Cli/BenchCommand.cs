@@ -25,9 +25,15 @@ internal static class BenchCommand
             return await StatsAsync(args, ct).ConfigureAwait(false);
         }
 
+        if (args.Positional.Count >= 1 && args.Positional[0].Equals("search", StringComparison.OrdinalIgnoreCase))
+        {
+            args.Positional.RemoveAt(0);
+            return await SearchAsync(args, ct).ConfigureAwait(false);
+        }
+
         if (args.Positional.Count == 0 || !args.Positional[0].Equals("query", StringComparison.OrdinalIgnoreCase))
         {
-            throw new CliException("usage: urlog bench query --case <id> [--runs 20] [--cold] '<spl>' | urlog bench stats --case <id> [--runs 5]  (throughput benches: dotnet run --project bench)");
+            throw new CliException("usage: urlog bench query --case <id> [--runs 20] [--cold] '<spl>' | urlog bench stats --case <id> [--runs 5] | urlog bench search --url <api> --case <id> --name <user> [--runs 20] [--export csv|json] '<spl>'  (throughput benches: dotnet run --project bench)");
         }
 
         args.Positional.RemoveAt(0);
@@ -137,6 +143,114 @@ internal static class BenchCommand
         totals.Sort();
         Console.WriteLine($"total ms: min {totals[0]:N0}, median {Percentile(totals, 0.50):N0}, max {totals[^1]:N0} ({runs} runs, ingest account, native)");
         return 0;
+    }
+
+    /// <summary>
+    /// <c>urlog bench search --url &lt;api&gt; --case &lt;id&gt; --name &lt;user&gt; [--runs 20] [--export csv|json] '&lt;spl&gt;'</c>:
+    /// a search through the running API as a logged-in user (the password from <c>URLOG_PASSWORD</c>), timed at
+    /// the client: from the request to each kind of event of the stream, and to its end. With <c>--export</c> the
+    /// export route instead: the time to the last byte and the bytes. Two unmeasured runs come first.
+    /// </summary>
+    private static async Task<int> SearchAsync(CliArgs args, CancellationToken ct)
+    {
+        var caseId = args.ULong("case", 0);
+        var runs = args.Int("runs", 20);
+        var url = args.Option("url") ?? "http://127.0.0.1:5080";
+        var password = Environment.GetEnvironmentVariable("URLOG_PASSWORD");
+        if (caseId == 0 || runs < 1 || args.Positional.Count != 1 || string.IsNullOrEmpty(password))
+        {
+            throw new CliException("usage: urlog bench search --url <api> --case <id> --name <user> [--runs 20] [--export csv|json] '<spl>'  (the password is read from URLOG_PASSWORD)");
+        }
+
+        var spl = args.Positional[0];
+        var export = args.Option("export");
+        using var handler = new SocketsHttpHandler { UseCookies = false };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri(url.TrimEnd('/') + "/"), Timeout = TimeSpan.FromMinutes(10) };
+        using var login = await http.PostAsync("api/v1/auth/login", System.Net.Http.Json.JsonContent.Create(new { name = args.Required("name"), password }), ct).ConfigureAwait(false);
+        if (!login.IsSuccessStatusCode)
+        {
+            throw new CliException($"login answered {(int)login.StatusCode}");
+        }
+
+        var cookie = login.Headers.GetValues("Set-Cookie").First().Split(';')[0];
+        using var session = System.Text.Json.JsonDocument.Parse(await login.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        var csrf = session.RootElement.GetProperty("csrf_token").GetString();
+
+        var times = new Dictionary<string, List<double>>(StringComparer.Ordinal);
+        long bytes = 0;
+        for (var i = -2; i < runs; i++)
+        {
+            using var request = export is null
+                ? new HttpRequestMessage(HttpMethod.Post, $"api/v1/cases/{caseId}/search") { Content = System.Net.Http.Json.JsonContent.Create(new { query = spl }) }
+                : new HttpRequestMessage(HttpMethod.Get, $"api/v1/cases/{caseId}/search/export?format={Uri.EscapeDataString(export)}&query={Uri.EscapeDataString(spl)}");
+            request.Headers.Add("Cookie", cookie);
+            request.Headers.Add("X-CSRF-Token", csrf);
+            var sw = Stopwatch.StartNew();
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new CliException($"the API answered {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false)}");
+            }
+
+            using var body = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            if (export is not null)
+            {
+                var buffer = new byte[1 << 16];
+                bytes = 0;
+                int read;
+                while ((read = await body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                {
+                    bytes += read;
+                }
+
+                Note(times, "end", sw, i);
+                continue;
+            }
+
+            using var reader = new StreamReader(body);
+            while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+            {
+                if (line.StartsWith("event: ", StringComparison.Ordinal))
+                {
+                    var kind = line["event: ".Length..];
+                    if (kind == "error")
+                    {
+                        throw new CliException("the stream ended in an error: " + await reader.ReadLineAsync(ct).ConfigureAwait(false));
+                    }
+
+                    Note(times, kind, sw, i);
+                }
+            }
+        }
+
+        Console.WriteLine($"case {caseId}, {runs} runs after 2 unmeasured, {(export is null ? "search" : "export " + export)} through {url} (client wall time from the request)");
+        foreach (var (kind, list) in times)
+        {
+            list.Sort();
+            Console.WriteLine($"  {kind,-10} ms: min {list[0]:N0}, p50 {Percentile(list, 0.50):N0}, p95 {Percentile(list, 0.95):N0}, max {list[^1]:N0}");
+        }
+
+        if (export is not null)
+        {
+            Console.WriteLine($"  {bytes:N0} bytes a run");
+        }
+
+        return 0;
+
+        static void Note(Dictionary<string, List<double>> times, string kind, Stopwatch sw, int run)
+        {
+            if (run < 0)
+            {
+                return;
+            }
+
+            if (!times.TryGetValue(kind, out var list))
+            {
+                times[kind] = list = [];
+            }
+
+            list.Add(sw.Elapsed.TotalMilliseconds);
+        }
     }
 
     private static double Percentile(List<double> sorted, double p)

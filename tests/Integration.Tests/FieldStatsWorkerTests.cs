@@ -72,6 +72,14 @@ public sealed class FieldStatsWorkerTests(ClickHouseFixture ch, ITestOutputHelpe
         Assert.Equal(rows, stats.Single(r => r.Field.Length == 0).Count);
         Assert.Equal(rows, (await h.VisibleAsync(@case.Id)).Rows);
 
+        // A row is the only one with its file and offset, for both sources: the order a listing is paged in is
+        // total because of it (design record, "Query language", The search API).
+        await using (var admin = h.Admin())
+        {
+            var keys = Convert.ToInt64(await admin.ExecuteScalarAsync($"SELECT uniqExact((file_id, file_offset)) FROM events WHERE case_id = {@case.Id}", cancellationToken: Ct), CultureInfo.InvariantCulture);
+            Assert.Equal(rows, keys);
+        }
+
         // http.response.status_code -> 200 (n), 404 (n): the totals of the nginx fixture's expected rows. A syslog
         // line has no status and adds nothing, and 0 is not a value of this field.
         var expectedNginx = Expected("nginx");

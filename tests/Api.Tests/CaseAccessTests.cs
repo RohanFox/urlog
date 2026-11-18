@@ -45,7 +45,7 @@ public sealed class CaseAccessTests
     public void TheRouteTableHasTheCaseRoutes()
     {
         var routes = CaseRoutes().Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
-        Assert.True(routes.Count == 12, string.Join(" | ", routes));
+        Assert.True(routes.Count == 16, string.Join(" | ", routes));
         Assert.Equal(
         [
             "DELETE /api/v1/cases/{caseId:long}/members/{userId:long}",
@@ -53,11 +53,15 @@ public sealed class CaseAccessTests
             "GET /api/v1/cases/{caseId:long}",
             "GET /api/v1/cases/{caseId:long}/fields",
             "GET /api/v1/cases/{caseId:long}/members",
+            "GET /api/v1/cases/{caseId:long}/search/export",
+            "GET /api/v1/cases/{caseId:long}/sql/export",
             "GET /api/v1/cases/{caseId:long}/uploads/{uploadId}",
             "HEAD /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "OPTIONS /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "PATCH /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "POST /api/v1/cases/{caseId:long}/members",
+            "POST /api/v1/cases/{caseId:long}/search",
+            "POST /api/v1/cases/{caseId:long}/sql",
             "POST /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "PUT /api/v1/cases/{caseId:long}/members/{userId:long}",
         ], routes);
@@ -106,7 +110,14 @@ public sealed class CaseAccessTests
         using var c = factory.Client();
         await c.LoginAsync("carol", Password);
         var asReader = await c.SendAsync(http, path, body);
-        if (needs == "ro")
+        if (needs == "ro" && (route.Contains("/search", StringComparison.Ordinal) || route.Contains("/sql", StringComparison.Ordinal)))
+        {
+            // A search route lets a reader in. The theory sends no query, so what answers is the route's own
+            // refusal of the request, which a caller who was stopped at the door never sees.
+            Assert.Equal(HttpStatusCode.BadRequest, asReader.StatusCode);
+            Assert.Contains("bad_request", await asReader.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        }
+        else if (needs == "ro")
         {
             Assert.Equal(HttpMethod.Get, http);
             Assert.Equal(HttpStatusCode.OK, asReader.StatusCode);

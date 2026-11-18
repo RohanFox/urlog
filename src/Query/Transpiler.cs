@@ -12,6 +12,14 @@ public sealed record TranspileOptions(ulong CaseId, DateTimeOffset RangeFrom, Da
 {
     /// <summary>Cases the user may name with <c>index=</c>; <see cref="CaseId"/> is always allowed.</summary>
     public IReadOnlySet<ulong>? AllowedCases { get; init; }
+
+    /// <summary>
+    /// True: the rows of an aggregation come in an order that is the same on every run. After the keys of
+    /// <c>sort</c>, if any, the order goes on through the by fields and then the aggregate columns, so two groups
+    /// with equal counts never change places. The search API asks for it; a result that is paged, cut at a
+    /// limit or exported has to be the same result twice.
+    /// </summary>
+    public bool TotalOrder { get; init; }
 }
 
 /// <summary>One bound parameter: the <c>{name:Type}</c> placeholder in the SQL and its value as the HTTP interface takes it.</summary>
@@ -40,6 +48,26 @@ public enum ResultKind
 /// </summary>
 public sealed record TimechartShape(int Time, int Value, int? InTop, int? Series);
 
+/// <summary>One key of a listing's <c>sort</c>: SQL the transpiler wrote, its direction, and the type its values compare as.</summary>
+public sealed record ListingSortKey(string Name, string Expression, bool Descending, FieldType Type);
+
+/// <summary>A rex group of a listing: its name and the SQL that extracts it.</summary>
+public sealed record ListingColumn(string Name, string Expression);
+
+/// <summary>
+/// What an event listing is made of, for the statements a search builds beside the query's own (a page behind a
+/// cursor, the histogram, the counts): the filter with the case and the range first, the sort keys, the rex
+/// groups, and the <c>head</c> when the query wrote one. Every text is SQL the transpiler wrote, and its
+/// parameters are among the result's.
+/// </summary>
+/// <param name="Select">The columns the query's own statement selects, without the keyword.</param>
+/// <param name="Where">The filter, without the keyword.</param>
+/// <param name="Sort">The keys of <c>sort</c>; empty for the default order, newest first.</param>
+/// <param name="Head">The count of <c>head</c>, null when the query has none.</param>
+/// <param name="Rex">The groups the query's rex verbs define, in order.</param>
+/// <param name="Filtered">False when the query narrows nothing but the range.</param>
+public sealed record ListingParts(string Select, string Where, ImmutableArray<ListingSortKey> Sort, int? Head, ImmutableArray<ListingColumn> Rex, bool Filtered);
+
 public sealed record TranspileResult(
     string Sql,
     ImmutableArray<QueryParameter> Parameters,
@@ -67,6 +95,9 @@ public sealed record TranspileResult(
     public ImmutableArray<int> ValuesColumns { get; init; } = [];
 
     public TimechartShape? Timechart { get; init; }
+
+    /// <summary>The parts of an event listing; null for an aggregation.</summary>
+    public ListingParts? Listing { get; init; }
 }
 
 /// <summary>
@@ -191,14 +222,24 @@ public sealed class Transpiler
         var built = pipeline.Timechart is not null ? BuildTimechart(pipeline, where, from, to)
             : pipeline.Stats is not null ? BuildStats(pipeline, where)
             : BuildListing(pipeline, where);
-        // A column that table left out takes its parameters with it: only what the text names is bound.
-        _parameters.RemoveAll(p => !built.Sql.Contains("{" + p.Name + ":", StringComparison.Ordinal));
+        ListingParts? listing = null;
+        if (built.Kind == ResultKind.Events)
+        {
+            var filtered = pipeline.Before.Count > 0 || (query.Search is not null && query.Search is not AndNode { Terms.Length: 0 });
+            listing = new ListingParts(built.Select, where.ToString(), [.. built.Sort], pipeline.Head?.Count, [.. _rexOrder.Select(g => new ListingColumn(g.Name, g.Expression))], filtered);
+        }
+
+        // A column that table left out takes its parameters with it: only what a text names is bound. The rex
+        // groups stay bound for a listing, whose page carries every group whatever table lists.
+        var texts = listing is null ? built.Sql : built.Sql + " " + string.Join(" ", listing.Rex.Select(g => g.Expression));
+        _parameters.RemoveAll(p => !texts.Contains("{" + p.Name + ":", StringComparison.Ordinal));
         return new TranspileResult(built.Sql, [.. _parameters], [.. _warnings], [.. _fields.Values], built.Kind != ResultKind.Events, caseId, from, to)
         {
             Columns = [.. built.Columns],
             Kind = built.Kind,
             ValuesColumns = [.. built.ValuesColumns],
             Timechart = built.Timechart,
+            Listing = listing,
         };
     }
 
@@ -213,7 +254,12 @@ public sealed class Transpiler
         SortNode? Sort,
         HeadNode? Head);
 
-    private sealed record Built(string Sql, ResultKind Kind, List<string> Columns, List<int> ValuesColumns, TimechartShape? Timechart = null);
+    private sealed record Built(string Sql, ResultKind Kind, List<string> Columns, List<int> ValuesColumns, TimechartShape? Timechart = null)
+    {
+        public List<ListingSortKey> Sort { get; init; } = [];
+
+        public string Select { get; init; } = string.Empty;
+    }
 
     /// <summary>
     /// Which verb may follow which: <c>search, (rex | where)*, [stats | timechart], where*, [table], [sort], [head]</c>,
@@ -515,19 +561,27 @@ public sealed class Transpiler
             sql.Append(string.Join(", ", items));
         }
 
+        var select = sql.ToString()["SELECT ".Length..];
         sql.Append(" FROM events_v WHERE ").Append(where).Append(" ORDER BY ");
+        var sort = new List<ListingSortKey>();
         if (pipeline.Sort is null)
         {
             sql.Append("ts DESC");
         }
         else
         {
-            sql.Append(string.Join(", ", pipeline.Sort.Keys.Select(k => Resolve(k.Field, k.Span).Expression + (k.Descending ? " DESC" : " ASC"))));
+            foreach (var key in pipeline.Sort.Keys)
+            {
+                var operand = Resolve(key.Field, key.Span);
+                sort.Add(new ListingSortKey(operand.Name, operand.Expression, key.Descending, operand.Type));
+            }
+
+            sql.Append(string.Join(", ", sort.Select(k => k.Expression + (k.Descending ? " DESC" : " ASC"))));
         }
 
         _parameters.Add(new QueryParameter("limit", "UInt64", (pipeline.Head?.Count ?? Parser.DefaultHead).ToString(CultureInfo.InvariantCulture)));
         sql.Append(" LIMIT {limit:UInt64}");
-        return new Built(sql.ToString(), ResultKind.Events, columns, []);
+        return new Built(sql.ToString(), ResultKind.Events, columns, []) { Sort = sort, Select = select };
     }
 
     // ---- stats --------------------------------------------------------------------------------------------------
@@ -616,9 +670,31 @@ public sealed class Transpiler
             sql.Append(" HAVING ").Append(string.Join(" AND ", having));
         }
 
+        var order = new List<string>();
+        var ordered = new HashSet<Output>();
         if (pipeline.Sort is not null)
         {
-            sql.Append(" ORDER BY ").Append(string.Join(", ", pipeline.Sort.Keys.Select(k => FindOutput(k.Field, k.Span).Reference + (k.Descending ? " DESC" : " ASC"))));
+            foreach (var key in pipeline.Sort.Keys)
+            {
+                var output = FindOutput(key.Field, key.Span);
+                order.Add(output.Reference + (key.Descending ? " DESC" : " ASC"));
+                ordered.Add(output);
+            }
+        }
+
+        if (_current!.TotalOrder)
+        {
+            // The tie-break: every by field, then every aggregate, in the order written. A group is the only one
+            // with its by fields, so the order is total; a result without by fields is one row.
+            foreach (var output in outputs.Where(ordered.Add))
+            {
+                order.Add(output.Reference + " ASC");
+            }
+        }
+
+        if (order.Count > 0)
+        {
+            sql.Append(" ORDER BY ").Append(string.Join(", ", order));
         }
 
         if (pipeline.Head is not null)
@@ -758,38 +834,59 @@ public sealed class Transpiler
             throw new QueryException(chart.SpanSpan, $"timechart: this span cuts the range into {buckets:N0} buckets, more than {MaxBuckets:N0}: use a longer span or a shorter range");
         }
 
-        _parameters.Add(new QueryParameter("span", "UInt32", chart.SpanCount.ToString(CultureInfo.InvariantCulture)));
-        const string Span = "{span:UInt32}";
-        switch (chart.SpanUnit)
+        var zone = _current!.DisplayZone;
+        return BucketExpression(chart.SpanCount, chart.SpanUnit, zone, _parameters, string.Empty)
+            ?? throw new QueryException(chart.SpanSpan, $"timechart: a span of a day or more is cut in the display timezone, and '{zone.Id}' is neither an IANA zone (Europe/Bucharest) nor an offset (+02:00)");
+    }
+
+    /// <summary>
+    /// The bucket expression for a span of <paramref name="count"/> units (<c>s m h d w</c>), with its parameters
+    /// added to <paramref name="parameters"/> under names that start with <paramref name="prefix"/>. Null when the
+    /// span is a day or more and the zone is neither an IANA zone nor a fixed offset, so the server cannot cut it;
+    /// nothing is added then.
+    /// </summary>
+    internal static string? BucketExpression(int count, char unit, TimeZoneInfo zone, ICollection<QueryParameter> parameters, string prefix)
+    {
+        var span = "{" + prefix + "span:UInt32}";
+        var spanParameter = new QueryParameter(prefix + "span", "UInt32", count.ToString(CultureInfo.InvariantCulture));
+        switch (unit)
         {
             case 's':
-                return $"toStartOfInterval(ts, toIntervalSecond({Span}))";
+                parameters.Add(spanParameter);
+                return $"toStartOfInterval(ts, toIntervalSecond({span}))";
             case 'm':
-                return $"toStartOfInterval(ts, toIntervalMinute({Span}))";
+                parameters.Add(spanParameter);
+                return $"toStartOfInterval(ts, toIntervalMinute({span}))";
             case 'h':
-                return $"toStartOfInterval(ts, toIntervalHour({Span}))";
+                parameters.Add(spanParameter);
+                return $"toStartOfInterval(ts, toIntervalHour({span}))";
         }
 
-        var zone = _current!.DisplayZone;
-        var week = chart.SpanUnit == 'w';
-        var interval = week ? $"toIntervalWeek({Span})" : $"toIntervalDay({Span})";
-        _parameters.Add(new QueryParameter("utc", "String", "UTC"));
+        var week = unit == 'w';
+        var interval = week ? $"toIntervalWeek({span})" : $"toIntervalDay({span})";
+        var utc = "{" + prefix + "utc:String}";
         if (FixedOffset(zone) is { } offset)
         {
             // The server loads IANA zones only: an offset is applied by hand around the cut.
-            _parameters.Add(new QueryParameter("shift", "Int64", ((long)offset.TotalSeconds).ToString(CultureInfo.InvariantCulture)));
-            var shifted = $"toStartOfInterval(addSeconds(ts, {{shift:Int64}}), {interval}, {{utc:String}})";
-            return $"subtractSeconds({(week ? $"toDateTime({shifted}, {{utc:String}})" : shifted)}, {{shift:Int64}})";
+            var shift = "{" + prefix + "shift:Int64}";
+            parameters.Add(spanParameter);
+            parameters.Add(new QueryParameter(prefix + "utc", "String", "UTC"));
+            parameters.Add(new QueryParameter(prefix + "shift", "Int64", ((long)offset.TotalSeconds).ToString(CultureInfo.InvariantCulture)));
+            var shifted = $"toStartOfInterval(addSeconds(ts, {shift}), {interval}, {utc})";
+            return $"subtractSeconds({(week ? $"toDateTime({shifted}, {utc})" : shifted)}, {shift})";
         }
 
         if ((zone.Equals(TimeZoneInfo.Utc) ? "UTC" : IanaId(zone)) is not { } iana)
         {
-            throw new QueryException(chart.SpanSpan, $"timechart: a span of a day or more is cut in the display timezone, and '{zone.Id}' is neither an IANA zone (Europe/Bucharest) nor an offset (+02:00)");
+            return null;
         }
 
-        _parameters.Add(new QueryParameter("tz", "String", iana));
-        var local = $"toStartOfInterval(ts, {interval}, {{tz:String}})";
-        return $"toTimeZone({(week ? $"toDateTime({local}, {{tz:String}})" : local)}, {{utc:String}})";
+        var tz = "{" + prefix + "tz:String}";
+        parameters.Add(spanParameter);
+        parameters.Add(new QueryParameter(prefix + "utc", "String", "UTC"));
+        parameters.Add(new QueryParameter(prefix + "tz", "String", iana));
+        var local = $"toStartOfInterval(ts, {interval}, {tz})";
+        return $"toTimeZone({(week ? $"toDateTime({local}, {tz})" : local)}, {utc})";
     }
 
     /// <summary>The offset of a zone <see cref="TimeZones.Find"/> built from one (<c>+02:00</c>); null for UTC and for a real zone.</summary>

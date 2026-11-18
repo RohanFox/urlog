@@ -24,6 +24,62 @@ public sealed class UrlogOptions
     public LifecycleSettings Lifecycle { get; set; } = new();
 
     public UploadOptions Upload { get; set; } = new();
+
+    public QueryOptions Query { get; set; } = new();
+}
+
+/// <summary>
+/// <c>Urlog:Query</c>: the limits of the search routes (design record, "Query language", The search API). All of
+/// them are the server's: no request carries one.
+/// </summary>
+public sealed class QueryOptions
+{
+    /// <summary>Events in one page of a listing.</summary>
+    public int PageSize { get; set; } = 200;
+
+    /// <summary>How far a listing is paged. Past it the search is narrowed, or exported.</summary>
+    public int MaxPagedRows { get; set; } = 10_000;
+
+    /// <summary>Rows of an aggregation or of a raw query in one response.</summary>
+    public int MaxTableRows { get; set; } = 10_000;
+
+    /// <summary>Rows of one export.</summary>
+    public long MaxExportRows { get; set; } = 1_000_000;
+
+    /// <summary>Characters of a query in the query language. A raw query has the gate's own bound.</summary>
+    public int MaxQueryLength { get; set; } = 8_000;
+
+    /// <summary>
+    /// Statements one user may have in flight on the event store: a search (histogram, page and counts at once)
+    /// and one more request beside it.
+    /// </summary>
+    public int UserSlots { get; set; } = 4;
+
+    /// <summary>Statements all users together may have in flight: three analysts at their limit.</summary>
+    public int TotalSlots { get; set; } = 12;
+
+    /// <summary>How long a request waits for its slots before it is answered 429; also the <c>Retry-After</c>, rounded up to a second.</summary>
+    public TimeSpan SlotWait { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// The event store's own limit for the query account (<c>max_concurrent_queries_for_user</c> in its profile).
+    /// It is the backstop and has to be above <see cref="TotalSlots"/>, since reads outside the slots (the field
+    /// statistics, <c>urlog query</c> on the box) use the same account. The host refuses to start otherwise.
+    /// </summary>
+    public const int ServerBackstop = 16;
+
+    public void Validate()
+    {
+        if (PageSize < 1 || MaxPagedRows < PageSize || MaxTableRows < 1 || MaxExportRows < 1 || MaxQueryLength < 1 || UserSlots < 3 || TotalSlots < UserSlots || SlotWait < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException("Urlog:Query: the limits are positive, a user has at least the three slots of one search, and the total is at least a user's");
+        }
+
+        if (TotalSlots >= ServerBackstop)
+        {
+            throw new InvalidOperationException($"Urlog:Query:TotalSlots must stay below {ServerBackstop}, the event store's limit for the query account");
+        }
+    }
 }
 
 /// <summary>Web upload (<c>/api/v1/cases/{caseId}/uploads</c>). The files land under <see cref="IngestOptions.EvidenceRoot"/>.</summary>

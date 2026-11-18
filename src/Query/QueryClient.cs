@@ -49,6 +49,9 @@ public sealed record QueryTable(IReadOnlyList<string> Columns, IReadOnlyList<str
     public bool ValuesCapped => CappedRows.Count > 0;
 }
 
+/// <summary>Rows of a statement with their cells as the driver decoded them, and whether reading stopped at the caller's row limit.</summary>
+public sealed record QueryRows(IReadOnlyList<string> Columns, IReadOnlyList<object?[]> Rows, bool Truncated, TimeSpan Elapsed);
+
 /// <summary>
 /// The query path's transport (ADR 0003): the driver's HTTP client as the read-only user, with the allowed-case
 /// list sent as the per-request custom setting <c>SQL_allowed_cases</c> and every value as a <c>param_*</c> request
@@ -212,6 +215,137 @@ public sealed class ClickHouseQueryClient
             AllowedCases([caseId]),
             cancellationToken).ConfigureAwait(false);
         return FieldStats.Read(caseId, table.Rows);
+    }
+
+    /// <summary>
+    /// One statement of a search, gated, with its cells as the driver decoded them. Reading stops after
+    /// <paramref name="maxRows"/> rows; <see cref="QueryRows.Truncated"/> says whether there were more.
+    /// </summary>
+    public async Task<QueryRows> RunAsync(SearchStatement statement, IReadOnlyCollection<ulong> allowedCases, int maxRows, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(statement);
+        ArgumentNullException.ThrowIfNull(allowedCases);
+        var cases = AllowedCases(allowedCases);
+        await EnsureAllowedAsync(statement.Sql, statement.Parameters, cases, cancellationToken).ConfigureAwait(false);
+        return await CollectAsync(statement.Sql, statement.Parameters, cases, maxRows, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The raw-SQL tab's text, gated, as <see cref="RunAsync(SearchStatement, IReadOnlyCollection{ulong}, int, CancellationToken)"/> returns a statement.</summary>
+    public async Task<QueryRows> RunSqlAsync(string sql, IReadOnlyCollection<ulong> allowedCases, int maxRows, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        ArgumentNullException.ThrowIfNull(allowedCases);
+        var text = RawSqlGate.Normalise(sql);
+        var cases = AllowedCases(allowedCases);
+        await EnsureAllowedAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
+        return await CollectAsync(text, [], cases, maxRows, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A statement read row by row, gated: <paramref name="onColumns"/> once with the column names, then
+    /// <paramref name="onRow"/> for each row as it is decoded, until it returns false or the rows end. Nothing is
+    /// kept here, so the caller's memory is its own row. Returns the rows handed over.
+    /// </summary>
+    public async Task<long> StreamAsync(SearchStatement statement, IReadOnlyCollection<ulong> allowedCases, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(statement);
+        ArgumentNullException.ThrowIfNull(allowedCases);
+        var cases = AllowedCases(allowedCases);
+        await EnsureAllowedAsync(statement.Sql, statement.Parameters, cases, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(statement.Sql, statement.Parameters, cases, onColumns, onRow, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The raw-SQL tab's text read row by row, gated.</summary>
+    public async Task<long> StreamSqlAsync(string sql, IReadOnlyCollection<ulong> allowedCases, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        ArgumentNullException.ThrowIfNull(allowedCases);
+        var text = RawSqlGate.Normalise(sql);
+        var cases = AllowedCases(allowedCases);
+        await EnsureAllowedAsync(text, [], cases, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(text, [], cases, onColumns, onRow, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<QueryRows> CollectAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, int maxRows, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxRows);
+        var sw = Stopwatch.StartNew();
+        IReadOnlyList<string> columns = [];
+        var rows = new List<object?[]>();
+        var truncated = false;
+        await ReadAsync(
+            sql,
+            parameters,
+            allowedCases,
+            names => columns = names,
+            row =>
+            {
+                if (rows.Count == maxRows)
+                {
+                    truncated = true;
+                    return ValueTask.FromResult(false);
+                }
+
+                rows.Add(row);
+                return ValueTask.FromResult(true);
+            },
+            cancellationToken).ConfigureAwait(false);
+        return new QueryRows(columns, rows, truncated, sw.Elapsed);
+    }
+
+    /// <summary>A gated text, run and handed over a row at a time; a server refusal is the caller's query error.</summary>
+    private async Task<long> ReadAsync(string sql, IReadOnlyList<QueryParameter> parameters, string allowedCases, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(onColumns);
+        ArgumentNullException.ThrowIfNull(onRow);
+        try
+        {
+            await using var connection = new ClickHouseConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.CustomSettings["SQL_allowed_cases"] = allowedCases;
+            foreach (var p in parameters)
+            {
+                var parameter = (ClickHouseDbParameter)command.CreateParameter();
+                parameter.ParameterName = p.Name;
+                parameter.ClickHouseType = p.Type;
+                parameter.Value = Typed(p);
+                command.Parameters.Add(parameter);
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            var columns = new string[reader.FieldCount];
+            for (var i = 0; i < columns.Length; i++)
+            {
+                columns[i] = reader.GetName(i);
+            }
+
+            onColumns(columns);
+            long count = 0;
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var row = new object?[columns.Length];
+                for (var i = 0; i < row.Length; i++)
+                {
+                    var value = reader.GetValue(i);
+                    row[i] = value is DBNull ? null : value;
+                }
+
+                if (!await onRow(row).ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                count++;
+            }
+
+            return count;
+        }
+        catch (ClickHouseServerException e)
+        {
+            throw new QueryFailedException(e.ErrorCode, e.Message.Split((char)10, 2)[0], e);
+        }
     }
 
     private static string AllowedCases(IReadOnlyCollection<ulong> cases) => "[" + string.Join(",", cases.Select(c => c.ToString(CultureInfo.InvariantCulture))) + "]";

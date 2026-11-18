@@ -57,6 +57,9 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
     /// <summary>The field statistics the host reads in place of the event store's; empty unless a test fills it.</summary>
     public FakeFieldStats FieldStats { get; } = new();
 
+    /// <summary>The event store behind the search routes; empty and open unless a test fills or closes it.</summary>
+    public FakeSearchBackend Search { get; } = new();
+
     /// <summary>Every row of the metadata file as it was when the host was built, for tests that assert the host wrote nothing.</summary>
     public string MetadataAtStart { get; private set; } = string.Empty;
 
@@ -109,6 +112,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             services.AddSingleton<Urlog.Core.Jobs.IStoreIdentitySource>(EventStore);
             services.AddSingleton<Urlog.Core.Jobs.IDiskProbe>(Disk);
             services.AddSingleton<Urlog.Api.Endpoints.IFieldStatsSource>(FieldStats);
+            services.AddSingleton<Urlog.Api.Search.ISearchBackend>(Search);
             services.AddTransient<IStartupFilter, TestClientAddressFilter>();
         });
     }

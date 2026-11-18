@@ -80,8 +80,10 @@
             <max_memory_usage>4000000000</max_memory_usage>
             <max_result_rows>1000000</max_result_rows>
             <result_overflow_mode>break</result_overflow_mode>
-            <!-- 1-3 analysts, a search is at most three server queries in flight; the API answers 429 above it. -->
-            <max_concurrent_queries_for_user>4</max_concurrent_queries_for_user>
+            <!-- The backstop, not the working limit. The account is one for all analysts, and the API bounds what
+                 it runs itself: 4 statements a user, 12 in all (Urlog:Query), answering 429 above that. This number
+                 stays above the API's total, with room for the reads outside it (field statistics, `urlog query`). -->
+            <max_concurrent_queries_for_user>16</max_concurrent_queries_for_user>
             <!-- A query whose client has closed the connection (a cancelled request, a closed tab) is stopped
                  instead of running to max_execution_time. Off by default on the server. -->
             <cancel_http_readonly_queries_on_client_close>1</cancel_http_readonly_queries_on_client_close>

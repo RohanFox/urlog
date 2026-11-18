@@ -153,9 +153,10 @@ too. The row policy therefore buys nothing over the view and the gate, and the f
 - The migrator's admin account is the definer of `events_v`; dropping or renaming it breaks every query. The
   deployment notes must say so.
 - The design record's Security section states the measured mechanism, the gate rules and the grants list.
-- Open questions: the gate's rejection reasons are the messages the raw tab shows; the audit row for a query
-  (text, SHA-256, user, case, duration) is written whether the gate accepted it or not, so a rejected query is
-  visible in the audit chain.
+- Settled with the search API (design record, "Query language", The search API): the gate's rejection reason is
+  the `detail` of the raw route's 400, word for word; the audit row for a query (text, SHA-256, user, case,
+  duration, outcome) is written whether the gate accepted it or not, so a rejected query is visible in the
+  audit chain; and a raw query's allowed-case list is the one case of its route.
 
 ## Amendment, 2026-11-12: the generation filter is a per-query set, the dictionary is gone
 

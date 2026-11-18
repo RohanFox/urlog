@@ -17,7 +17,18 @@ public sealed class LifecycleIdleTests
     private static CancellationToken Ct => RunnerHarness.Ct;
 
     [Fact]
-    public async Task ATickWithNothingToDoTakesNoWriteLockAndChangesNothing()
+    public Task ATickWithNothingToDoTakesNoWriteLockAndChangesNothing() => TwentyIdleTicksAsync(timed: false);
+
+    /// <summary>
+    /// The same ticks against the clock: none of them may wait for the lock either. A wall-clock bound fails on a
+    /// loaded box, so this one runs from <c>tools/timing-tests.ps1</c> alone; the test above still fails when a
+    /// tick tries to write, since the write is refused after the store's one-second busy timeout.
+    /// </summary>
+    [Fact(Explicit = true)]
+    [Trait("Category", "Timing")]
+    public Task TwentyIdleTicksBehindAHeldWriteLockTakeUnderASecond() => TwentyIdleTicksAsync(timed: true);
+
+    private static async Task TwentyIdleTicksAsync(bool timed)
     {
         await using var h = await RunnerHarness.CreateAsync();
         // Cases in every state the loop looks at, none with work that is due: an open case with a file that
@@ -59,7 +70,7 @@ public sealed class LifecycleIdleTests
             Assert.Equal((0, 0, 0, 0L, true), (report.Ok, report.Mismatched, report.Missing, report.Bytes, report.Complete));
         }
 
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), $"twenty idle ticks took {watch.Elapsed.TotalMilliseconds:F0} ms behind a held write lock: something waited for it");
+        Assert.True(!timed || watch.Elapsed < TimeSpan.FromSeconds(1), $"twenty idle ticks took {watch.Elapsed.TotalMilliseconds:F0} ms behind a held write lock: something waited for it");
         await ExecuteAsync(holder, "ROLLBACK");
         Assert.Equal(before, await ScalarAsync(holder, "PRAGMA data_version"));
         Assert.Equal(rows, await ScalarAsync(holder, "SELECT (SELECT count(*) FROM audit) + (SELECT count(*) FROM case_tasks)"));

@@ -90,6 +90,7 @@ static void Usage()
                      [--min-free-gb 20] [--min-free-percent 10] [--two-person] [--no-sweep] [--archive-root dir]
         urlog query  --case <id> [--from t --to t] [--tz zone] [--now t] [--sql] [--explain] '<spl>'
         urlog bench  query --case <id> [--runs 20] [--cold] '<spl>'
+        urlog bench  search --url <api> --case <id> --name <user> [--runs 20] [--export csv|json] '<spl>'
         urlog verify-audit --db <metadata.db> [--head] [--expect <seq>:<hash>] [--backup <file>] [--json]
         urlog backup --db <metadata.db> [--dir <dir>] [--reason manual] [--actor <name>]
         urlog user create --db <metadata.db> --name <name> [--admin] [--password-stdin]

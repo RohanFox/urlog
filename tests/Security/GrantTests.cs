@@ -54,7 +54,7 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     {
         var limits = await QueryAsync("SELECT toString(getSetting('max_execution_time')), toString(getSetting('max_memory_usage')), toString(getSetting('max_result_rows')), toString(getSetting('readonly')), toString(getSetting('allow_ddl')), toString(getSetting('max_concurrent_queries_for_user')), toString(getSetting('cancel_http_readonly_queries_on_client_close'))");
         output.WriteLine(string.Join(" / ", limits[0]));
-        Assert.Equal(["60", "4000000000", "1000000", "2", "false", "4", "true"], limits[0]);
+        Assert.Equal(["60", "4000000000", "1000000", "2", "false", "16", "true"], limits[0]);
         // Lowering a limit is allowed (a client may ask for less); the constraint is readonly, so even that is refused.
         var lower = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT 1", new() { ["max_result_rows"] = "10" }));
         Assert.Equal(SettingConstraintViolation, lower.ErrorCode);
@@ -200,29 +200,31 @@ public sealed class GrantTests(ClickHouseFixture ch, ITestOutputHelper output) :
     }
 
     [Fact]
-    public async Task TheFifthConcurrentQueryOfTheQueryUserIsRefused()
+    public async Task TheQueryUsersConcurrentQueriesStopAtTheBackstop()
     {
-        // max_concurrent_queries_for_user = 4: four queries held open by sleep(3), seen in flight by the admin,
-        // then a fifth. The API answers 429 before this; this is the server-side guard.
-        var held = Enumerable.Range(0, 4).Select(_ => QueryAsync("SELECT sleep(3)")).ToArray();
+        // max_concurrent_queries_for_user = 16: that many queries held open by sleep(3), seen in flight by the
+        // admin, then one more. The API bounds its own statements below this (12 in all) and answers 429 there;
+        // this is the server-side backstop for everything that uses the account.
+        const ulong Backstop = 16;
+        var held = Enumerable.Range(0, (int)Backstop).Select(_ => QueryAsync("SELECT sleep(3)")).ToArray();
         await using (var admin = ch.Admin())
         {
             var inFlight = 0UL;
-            for (var i = 0; i < 100 && inFlight < 4; i++)
+            for (var i = 0; i < 100 && inFlight < Backstop; i++)
             {
                 inFlight = Convert.ToUInt64(await admin.ExecuteScalarAsync("SELECT count() FROM system.processes WHERE user = 'urlog_query' AND query LIKE 'SELECT sleep(3)%'", cancellationToken: Ct), CultureInfo.InvariantCulture);
-                if (inFlight < 4)
+                if (inFlight < Backstop)
                 {
                     await Task.Delay(20, Ct);
                 }
             }
 
-            Assert.Equal(4UL, inFlight);
+            Assert.Equal(Backstop, inFlight);
         }
 
-        var fifth = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT 1"));
-        output.WriteLine($"fifth query with four in flight -> {fifth.ErrorCode}: {First(fifth)}");
-        Assert.Equal(TooManySimultaneousQueries, fifth.ErrorCode);
+        var over = await Assert.ThrowsAsync<ClickHouseServerException>(() => QueryAsync("SELECT 1"));
+        output.WriteLine($"one more query with {Backstop} in flight -> {over.ErrorCode}: {First(over)}");
+        Assert.Equal(TooManySimultaneousQueries, over.ErrorCode);
         await Task.WhenAll(held);
         Assert.Equal("1", (await QueryAsync("SELECT 1"))[0][0]);
     }

@@ -83,6 +83,7 @@ public sealed class ClickHouseFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await _container.StartAsync();
+        await WaitForNativeAsync();
         await using var admin = Admin();
         await new ClickHouseMigrator(admin).ApplyAsync(MigrationSet.Embedded());
         foreach (var caseId in Cases)
@@ -103,6 +104,30 @@ public sealed class ClickHouseFixture : IAsyncLifetime
     }
 
     public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+
+    /// <summary>
+    /// The container counts as started when its HTTP port answers; the native port can follow a moment later, and
+    /// with one container a test class starting together that moment is long enough to refuse the first
+    /// connection or leave it without an answer. Each try has its own five seconds, sixty seconds in all.
+    /// </summary>
+    private async Task WaitForNativeAsync()
+    {
+        var until = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            try
+            {
+                using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await using var probe = Admin();
+                await probe.ExecuteScalarAsync("SELECT 1", cancellationToken: attempt.Token);
+                return;
+            }
+            catch (Exception e) when (e is not OutOfMemoryException && DateTime.UtcNow < until)
+            {
+                await Task.Delay(250);
+            }
+        }
+    }
 
     /// <summary>
     /// Writes <paramref name="rows"/> rows into one (case, month) partition through the real insert path
