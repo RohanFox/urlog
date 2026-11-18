@@ -10,7 +10,8 @@ namespace Urlog.Security.Tests;
 /// refuses those inputs or binds them as parameters, and the statement such an input once produced, sent as it was,
 /// still reads nothing outside the allowed cases, because the view and the gate never depended on the transpiler.
 /// </summary>
-public sealed class IdentifierInjectionTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
+[Collection(SeedReaders.Name)]
+public sealed class IdentifierInjectionTests(ClickHouseFixture ch, ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

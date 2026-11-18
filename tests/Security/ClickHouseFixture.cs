@@ -11,12 +11,29 @@ using Testcontainers.ClickHouse;
 namespace Urlog.Security.Tests;
 
 /// <summary>
-/// One ClickHouse container per test class: the pinned image, the same config.d/users.d overrides the dev stack
-/// mounts (so the grants and constraints under test are the deployed ones), the migrations applied as the admin
-/// account, and a small seed written as <c>urlog_ingest</c>: cases 1, 2 and 3 with a known number of rows each, across two months so partition pruning is visible.
+/// A ClickHouse container for a test class, or for the classes of <see cref="SeedReaders"/> together: the pinned
+/// image, the same config.d/users.d overrides the dev stack mounts (so the grants and constraints under test are
+/// the deployed ones), the migrations applied as the admin account, and a small seed written as
+/// <c>urlog_ingest</c>: cases 1, 2 and 3 with a known number of rows each, across two months so partition pruning
+/// is visible.
+/// <para>
+/// At most <see cref="StartsAtOnce"/> of them start at a time, and one counts as ready only when the server has
+/// answered a native handshake and each of the three accounts has run a statement the way the tests reach it. The
+/// container library calls a container started when its HTTP port answers, and that says nothing about the native
+/// port the insert path and the migrations use.
+/// </para>
 /// </summary>
 public sealed class ClickHouseFixture : IAsyncLifetime
 {
+    /// <summary>
+    /// Containers that may be between their start and their seed at one time. Measured on the Linux test VM (8
+    /// cores, 12 GB): one container answers 4.5 s after its start, four at once 5.1 s, eight 5.9 s, twelve 7.0 s.
+    /// Four costs a start a tenth of its time and leaves half of the cores to the tests already running.
+    /// </summary>
+    public const int StartsAtOnce = 4;
+
+    private static readonly SemaphoreSlim Starting = new(StartsAtOnce, StartsAtOnce);
+
     public const string Image = "clickhouse/clickhouse-server:26.8.36.3";
     public const string AdminUser = "default";
     public const string AdminPassword = "clickhouse";
@@ -82,6 +99,19 @@ public sealed class ClickHouseFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
+        await Starting.WaitAsync();
+        try
+        {
+            await StartAndSeedAsync();
+        }
+        finally
+        {
+            Starting.Release();
+        }
+    }
+
+    private async Task StartAndSeedAsync()
+    {
         await _container.StartAsync();
         await WaitForNativeAsync();
         await using var admin = Admin();
@@ -101,14 +131,24 @@ public sealed class ClickHouseFixture : IAsyncLifetime
         {
             await store.CommitFileGenerationAsync(caseId, 1);
         }
+
+        // Ready is what the tests will do, done once: the ingest account over the native port, as the write path
+        // connects, and the query account through the gated HTTP client, reading the seed through the view.
+        await ingest.ExecuteScalarAsync("SELECT 1");
+        var seeded = await QueryClient().RunSqlAsync("SELECT count() FROM events_v", Cases);
+        if (seeded.Rows[0][0] != (Cases.Length * RowsPerCase).ToString(CultureInfo.InvariantCulture))
+        {
+            throw new InvalidOperationException($"the seed is {seeded.Rows[0][0]} rows through events_v, not {Cases.Length * RowsPerCase}");
+        }
     }
 
     public async ValueTask DisposeAsync() => await _container.DisposeAsync();
 
     /// <summary>
-    /// The container counts as started when its HTTP port answers; the native port can follow a moment later, and
-    /// with one container a test class starting together that moment is long enough to refuse the first
-    /// connection or leave it without an answer. Each try has its own five seconds, sixty seconds in all.
+    /// A native handshake as the admin account, which the migrations need next. The container library has seen the
+    /// HTTP port answer by now; the native port is another published port and has been seen refusing connections
+    /// after that, for a moment and once for the whole minute. Each try has its own five seconds, sixty seconds in
+    /// all, and a start that fails says what the container looked like (<see cref="DescribeAsync"/>).
     /// </summary>
     private async Task WaitForNativeAsync()
     {
@@ -126,7 +166,49 @@ public sealed class ClickHouseFixture : IAsyncLifetime
             {
                 await Task.Delay(250);
             }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                throw new InvalidOperationException(await DescribeAsync(e), e);
+            }
         }
+    }
+
+    /// <summary>
+    /// What the container looked like when its native port did not answer: its state, whether the server answers
+    /// a client inside the container, the ports the engine says it published, and the end of its log. A start that
+    /// fails says which side failed, the server or the way to it.
+    /// </summary>
+    private async Task<string> DescribeAsync(Exception failure)
+    {
+        var text = new System.Text.StringBuilder();
+        text.Append(CultureInfo.InvariantCulture, $"the native port of the ClickHouse container did not answer within 60 s: {failure.Message}. ");
+        try
+        {
+            text.Append(CultureInfo.InvariantCulture, $"State {_container.State}, health {_container.Health}; published native {Host}:{NativePort}, http {Host}:{HttpPort}. ");
+            var inside = await _container.ExecAsync(["clickhouse-client", "--password", AdminPassword, "--query", "SELECT 'answers inside', version(), uptime()"]);
+            text.Append(CultureInfo.InvariantCulture, $"A client inside the container: exit {inside.ExitCode}, '{inside.Stdout.Trim()}' '{inside.Stderr.Trim()}'. ");
+            var listening = await _container.ExecAsync(["sh", "-c", "(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -E ':(9000|8123) ' ; ps -eo pid,etimes,args | grep -v grep | grep -E 'clickhouse|entrypoint'"]);
+            text.Append("Listening and processes: ").Append(listening.Stdout.Trim()).Append(". ");
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            try
+            {
+                text.Append(CultureInfo.InvariantCulture, $"The published HTTP port now: {(int)(await http.GetAsync(new Uri($"http://{Host}:{HttpPort}/ping"))).StatusCode}. ");
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                text.Append(CultureInfo.InvariantCulture, $"The published HTTP port now: {e.Message}. ");
+            }
+
+            var (stdout, stderr) = await _container.GetLogsAsync();
+            var log = (stdout + stderr).Split('\n');
+            text.Append("Last log lines: ").Append(string.Join(" | ", log.Skip(Math.Max(0, log.Length - 25)).Select(l => l.Trim())));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            text.Append(CultureInfo.InvariantCulture, $"(the container could not be asked: {e.Message})");
+        }
+
+        return text.ToString();
     }
 
     /// <summary>
@@ -180,4 +262,16 @@ public sealed class ClickHouseFixture : IAsyncLifetime
             buffers.Batches.Dispose();
         }
     }
+}
+
+/// <summary>
+/// The test classes that only read the seed, as the query account, and so can share one server: none of them
+/// inserts a row, creates an account or changes a setting, and the row counts they assert are the seed's. Classes
+/// of one collection run one after another, which these do in a few seconds; every other class of the project
+/// writes to its server and keeps a server of its own.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class SeedReaders : ICollectionFixture<ClickHouseFixture>
+{
+    public const string Name = "seed readers";
 }

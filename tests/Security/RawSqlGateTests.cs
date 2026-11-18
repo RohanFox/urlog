@@ -10,7 +10,8 @@ namespace Urlog.Security.Tests;
 /// gate's (<see cref="RawSqlRejectedException"/>), except where the server itself refuses the text first (a
 /// SETTINGS clause that violates a constraint, a multi-statement): those are rejections too, and recorded as such.
 /// </summary>
-public sealed class RawSqlGateTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
+[Collection(SeedReaders.Name)]
+public sealed class RawSqlGateTests(ClickHouseFixture ch, ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

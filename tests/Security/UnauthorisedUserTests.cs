@@ -9,7 +9,8 @@ namespace Urlog.Security.Tests;
 /// returns zero events, and (c) as that user through the raw-SQL tab, zero events. The scenarios are SPL over the
 /// fixture's seed; <c>scenarios/</c> (the end-to-end suite) plugs in here when it exists.
 /// </summary>
-public sealed class UnauthorisedUserTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
+[Collection(SeedReaders.Name)]
+public sealed class UnauthorisedUserTests(ClickHouseFixture ch, ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

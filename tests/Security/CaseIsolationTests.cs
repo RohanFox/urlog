@@ -10,7 +10,8 @@ namespace Urlog.Security.Tests;
 /// partitions on <c>case_id</c>. Everything here goes through the real query path (<see cref="ClickHouseQueryClient"/>:
 /// HTTP, <c>urlog_query</c>, gated), except the one harness request that sends no setting at all.
 /// </summary>
-public sealed class CaseIsolationTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
+[Collection(SeedReaders.Name)]
+public sealed class CaseIsolationTests(ClickHouseFixture ch, ITestOutputHelper output)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

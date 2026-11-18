@@ -12,7 +12,8 @@ namespace Urlog.Security.Tests;
 /// no status) answers what a row without a value does, what a pattern that does not match does, where the values
 /// cap falls, how the series outside the top ten fold into one, and where a day starts when the clocks change.
 /// </summary>
-public sealed class QueryVerbTests(ClickHouseFixture ch, ITestOutputHelper output) : IClassFixture<ClickHouseFixture>
+[Collection(SeedReaders.Name)]
+public sealed class QueryVerbTests(ClickHouseFixture ch, ITestOutputHelper output)
 {
     private const ulong Case = 1;
     private static readonly DateTimeOffset From = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
