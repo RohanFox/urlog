@@ -19,9 +19,8 @@ public sealed class CaseSettingsTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    // With invariant globalization Windows resolves its own zone ids only.
-    private static readonly string Berlin = OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin";
-    private static readonly string Tokyo = OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo";
+    private const string Berlin = "Europe/Berlin";
+    private const string Tokyo = "Asia/Tokyo";
 
     private static JobOutcome Whole => new(Urlog.Core.Pipeline.InputEnd.Complete(100, 100));
 

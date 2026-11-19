@@ -95,7 +95,7 @@ public sealed class CatalogTests
     public void SnappingUsesTheDisplayZone()
     {
         var now = DateTimeOffset.Parse("2026-03-15T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
-        var plusTwo = TimeZones.Find("+02:00"); // Europe/Bucharest in March, as a fixed offset: IANA ids need ICU, which the invariant build lacks on Windows
+        var plusTwo = TimeZones.Find("+02:00"); // Europe/Bucharest in March, as a fixed offset
         var instant = TimeExpr.Parse("@d", now, plusTwo, out _);
         Assert.Equal(DateTimeOffset.Parse("2026-03-14T22:00:00Z", System.Globalization.CultureInfo.InvariantCulture), instant); // local midnight, UTC+2
     }

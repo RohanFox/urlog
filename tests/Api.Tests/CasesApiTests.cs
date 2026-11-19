@@ -19,8 +19,7 @@ public sealed class CasesApiTests(ITestOutputHelper output)
 {
     private const string Password = "correct horse battery staple";
 
-    // With invariant globalization Windows resolves its own zone ids only.
-    private static readonly string Berlin = OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin";
+    private const string Berlin = "Europe/Berlin";
 
     private static readonly long[] SecondFile = [2];
 

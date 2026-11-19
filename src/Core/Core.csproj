@@ -21,6 +21,8 @@
     <PackageReference Include="System.IO.Hashing" />
     <!-- Control-plane client and the LZ4 block codec for the Native writer. -->
     <PackageReference Include="ClickHouse.Driver" />
+    <!-- The table of IANA and Windows zone ids (ZoneIds). No zone arithmetic is done with it. -->
+    <PackageReference Include="NodaTime" />
     <!-- The metadata store: SQLite via EF Core, schema kept Postgres-portable (tests/Metadata.Tests). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <!-- Design-time only, for the dotnet-ef tool (manifest in .config/): see Metadata/DesignTimeFactory.cs for the command. -->

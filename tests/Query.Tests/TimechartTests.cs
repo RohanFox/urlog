@@ -41,24 +41,20 @@ public sealed class TimechartTests
     }
 
     [Fact]
-    public void AnIanaZoneResolvesWhereTheRuntimeHasTheZoneDatabase()
+    public void AnIanaZoneResolvesOnLinuxAndOnWindows()
     {
-        // The build runs with invariant globalization. On Linux, the deployment target, zone ids are IANA ids read
-        // from the system's zone database, so the display zone the UI sends resolves and an unknown one is refused
-        // before the transpiler sees it. On Windows the runtime needs ICU to map an IANA id to a Windows zone and
-        // invariant globalization leaves ICU out, so the same id is refused there: this half of the test says so,
-        // and fails the day that changes.
-        if (OperatingSystem.IsWindows())
-        {
-            Assert.Throws<ArgumentException>(() => TimeZones.Find("Europe/Bucharest"));
-        }
-        else
-        {
-            var zone = TimeZones.Find("Europe/Bucharest");
-            Assert.True(zone.SupportsDaylightSavingTime);
-            var day = Transpile("| timechart span=1d count", zone);
-            Assert.Contains(day.Parameters, p => p is { Name: "tz", Value: "Europe/Bucharest" });
-        }
+        // The build runs with invariant globalization. On Linux the id is read from the system's zone database. On
+        // Windows the runtime would need ICU to map it to a Windows zone, so the id goes through the table of zone
+        // ids instead. Either way the display zone the UI sends resolves, keeps its id on the way to the event
+        // store, and an unknown one is refused before the transpiler sees it.
+        var zone = TimeZones.Find("Europe/Bucharest");
+        Assert.True(zone.SupportsDaylightSavingTime);
+        Assert.Equal(TimeSpan.FromHours(3), zone.GetUtcOffset(new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc)));
+        Assert.Equal(TimeSpan.FromHours(2), zone.GetUtcOffset(new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc)));
+        var day = Transpile("| timechart span=1d count", zone);
+        Assert.Contains(day.Parameters, p => p is { Name: "tz", Value: "Europe/Bucharest" });
+        var unknown = Assert.Throws<ArgumentException>(() => TimeZones.Find("Mars/Olympus"));
+        Assert.Contains("unknown timezone 'Mars/Olympus'", unknown.Message, StringComparison.Ordinal);
 
         Assert.Throws<ArgumentException>(() => TimeZones.Find("Nowhere/Atlantis"));
     }

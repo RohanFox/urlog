@@ -377,7 +377,7 @@ public sealed class UploadTests
         Assert.Contains("Upload-Metadata filename: not valid UTF-8", await notUtf8.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
 
         var year = (h.Factory.Clock.GetUtcNow().Year + 1).ToString(CultureInfo.InvariantCulture);
-        var zone = OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin";
+        var zone = "Europe/Berlin";
         var good = await CreateAsync(h.Alice, 10, Metadata(
             ("filename", new string('n', 251) + ".log"), ("host", "2001:db8::1"), ("timezone", zone), ("year", year),
             ("nginx_log_format", "$remote_addr - $remote_user [$time_local] \"$request\" $status")));

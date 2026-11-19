@@ -2,6 +2,8 @@
   <!-- Central package pins. Bump here, never in a csproj. -->
   <ItemGroup>
     <PackageVersion Include="ClickHouse.Driver" Version="1.5.0" />
+    <!-- The version ClickHouse.Driver 1.5.0 already brings in; named here because ZoneIds reads its table of zone ids. -->
+    <PackageVersion Include="NodaTime" Version="3.2.3" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Testcontainers.ClickHouse" Version="4.16.0" />

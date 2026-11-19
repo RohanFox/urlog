@@ -152,7 +152,6 @@ public sealed partial class SearchPlanTests
         Assert.Equal("3", hours.Parameters.Single(p => p.Name == "s_h_span").Value);
 
         // A day is cut on the display zone's calendar, by the timechart's own rule.
-        // (A zone object with an IANA id: the build's invariant globalization cannot look one up on Windows.)
         var bucharest = TimeZoneInfo.CreateCustomTimeZone("Europe/Bucharest", TimeSpan.FromHours(2), "Europe/Bucharest", "EET");
         var days = Plan("", bucharest).Histogram(new HistogramSpan(1, 'd'));
         Assert.Contains("toTimeZone(toStartOfInterval(ts, toIntervalDay({s_h_span:UInt32}), {s_h_tz:String}), {s_h_utc:String})", days.Sql, StringComparison.Ordinal);

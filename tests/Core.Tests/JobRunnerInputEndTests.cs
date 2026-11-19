@@ -13,7 +13,7 @@ namespace Urlog.Core.Tests;
 /// </summary>
 public sealed class JobRunnerInputEndTests
 {
-    private static readonly string Berlin = OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin";
+    private const string Berlin = "Europe/Berlin";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

@@ -3,9 +3,9 @@ using System.Globalization;
 namespace Urlog.Query;
 
 /// <summary>
-/// The display timezone the UI (or the CLI's <c>--tz</c>) sends: an IANA or Windows zone id when the runtime knows
-/// it, else a fixed offset (<c>+02:00</c>, <c>-0500</c>, <c>UTC+2</c>). The build runs with invariant globalization,
-/// so IANA ids resolve on Linux (the deploy target) and on Windows only where ICU is available; a fixed offset always works.
+/// The display timezone the UI (or the CLI's <c>--tz</c>) sends: an IANA zone id, on Linux and on Windows alike
+/// (<see cref="Urlog.Core.ZoneIds"/>), or a fixed offset (<c>+02:00</c>, <c>-0500</c>, <c>UTC+2</c>). An id that names
+/// no zone is refused with the same message on both systems.
 /// </summary>
 public static class TimeZones
 {
@@ -24,18 +24,9 @@ public static class TimeZones
             return TimeZoneInfo.CreateCustomTimeZone(name, offset, name, name);
         }
 
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(text);
-        }
-        catch (TimeZoneNotFoundException e)
-        {
-            throw new ArgumentException($"unknown timezone '{id}': use an IANA id like Europe/Bucharest or an offset like +02:00", nameof(id), e);
-        }
-        catch (InvalidTimeZoneException e)
-        {
-            throw new ArgumentException($"unusable timezone '{id}'", nameof(id), e);
-        }
+        return Urlog.Core.ZoneIds.TryFind(text, out var zone)
+            ? zone
+            : throw new ArgumentException($"unknown timezone '{id}': use an IANA id like Europe/Bucharest or an offset like +02:00", nameof(id));
     }
 
     private static bool TryParseOffset(string text, out TimeSpan offset)

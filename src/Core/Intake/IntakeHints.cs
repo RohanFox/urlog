@@ -18,7 +18,7 @@ public static class IntakeHints
     /// the file's own time, so a file is read with the offset that held when it was written. One offset per file;
     /// a file that spans a transition is flagged by <see cref="SpansTransition"/>.
     /// </summary>
-    /// <exception cref="TimeZoneNotFoundException">The id is not an offset and the system does not know it.</exception>
+    /// <exception cref="TimeZoneNotFoundException">The id is not an offset and no zone is known by it (<see cref="ZoneIds"/>).</exception>
     public static TimeSpan OffsetAt(string? zone, DateTime atUtc)
     {
         if (IsFixed(zone, out var offset))
@@ -26,26 +26,13 @@ public static class IntakeHints
             return offset;
         }
 
-        return TimeZoneInfo.FindSystemTimeZoneById(zone!).GetUtcOffset(DateTime.SpecifyKind(atUtc, DateTimeKind.Utc));
+        return ZoneIds.Find(zone).GetUtcOffset(DateTime.SpecifyKind(atUtc, DateTimeKind.Utc));
     }
 
     /// <summary>True for an id <see cref="OffsetAt"/> can resolve.</summary>
     public static bool IsKnownZone(string? zone)
     {
-        if (IsFixed(zone, out _))
-        {
-            return true;
-        }
-
-        try
-        {
-            TimeZoneInfo.FindSystemTimeZoneById(zone!);
-            return true;
-        }
-        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            return false;
-        }
+        return IsFixed(zone, out _) || ZoneIds.TryFind(zone, out _);
     }
 
     /// <summary>
@@ -59,12 +46,7 @@ public static class IntakeHints
             return false;
         }
 
-        TimeZoneInfo info;
-        try
-        {
-            info = TimeZoneInfo.FindSystemTimeZoneById(zone!);
-        }
-        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
+        if (!ZoneIds.TryFind(zone, out var info))
         {
             return false;
         }

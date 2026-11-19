@@ -9,11 +9,9 @@ public sealed class IntakeHintsTests
 
     private static readonly DateTime Winter = new(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
 
-    // The build runs with invariant globalization, and without ICU Windows resolves only its own zone ids. IANA
-    // ids are what a Linux deployment takes, and the Linux run of this class covers them.
-    private static readonly string Berlin = OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin";
+    private const string Berlin = "Europe/Berlin";
 
-    private static readonly string Tokyo = OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo";
+    private const string Tokyo = "Asia/Tokyo";
 
     [Theory]
     [InlineData(null, 0)]
