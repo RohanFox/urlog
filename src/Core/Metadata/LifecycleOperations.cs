@@ -49,7 +49,7 @@ public static class LifecycleOperations
         CloseCoreAsync(db, audit, actor, caseId, () => nowUtc, cancellationToken);
 
     private static Task<CaseRecord> CloseCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, Func<DateTime> now, CancellationToken cancellationToken) =>
-        MoveAsync(db, audit, actor, caseId, CaseState.Closed, now, async (@case, details, _) =>
+        MoveAsync(db, audit, actor, caseId, CaseState.Closed, CaseLifecycle.Close, now, async (@case, details, _) =>
         {
             await RequireNoRunningJobAsync(db, @case, "closed", cancellationToken).ConfigureAwait(false);
             details["queued_jobs_held"] = await db.Jobs.CountAsync(j => j.CaseId == caseId && j.State == JobState.Queued, cancellationToken).ConfigureAwait(false);
@@ -67,7 +67,7 @@ public static class LifecycleOperations
         ReopenCoreAsync(db, audit, actor, caseId, () => nowUtc, cancellationToken);
 
     private static Task<CaseRecord> ReopenCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, Func<DateTime> now, CancellationToken cancellationToken) =>
-        MoveAsync(db, audit, actor, caseId, CaseState.Active, now, (_, _, _) => Task.CompletedTask, cancellationToken);
+        MoveAsync(db, audit, actor, caseId, CaseState.Active, CaseLifecycle.Reopen, now, (_, _, _) => Task.CompletedTask, cancellationToken);
 
     /// <summary>
     /// To <c>soft_deleted</c> from active, closed or archived. <paramref name="typedName"/> is what the person
@@ -85,7 +85,7 @@ public static class LifecycleOperations
         SoftDeleteCoreAsync(db, audit, actor, caseId, typedName, purgeAfter, () => nowUtc, cancellationToken);
 
     private static Task<CaseRecord> SoftDeleteCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, string typedName, TimeSpan purgeAfter, Func<DateTime> now, CancellationToken cancellationToken) =>
-        MoveAsync(db, audit, actor, caseId, CaseState.SoftDeleted, now, async (@case, details, nowUtc) =>
+        MoveAsync(db, audit, actor, caseId, CaseState.SoftDeleted, CaseLifecycle.SoftDelete, now, async (@case, details, nowUtc) =>
         {
             if (!string.Equals(typedName, @case.Name, StringComparison.Ordinal))
             {
@@ -488,7 +488,7 @@ public static class LifecycleOperations
             s => s.SetProperty(j => j.State, JobState.Cancelled).SetProperty(j => j.FinishedAt, nowUtc).SetProperty(j => j.Message, reason),
             cancellationToken);
 
-    private static async Task<CaseRecord> MoveAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, CaseState to, Func<DateTime> now, Func<CaseRecord, Dictionary<string, object?>, DateTime, Task> check, CancellationToken cancellationToken)
+    private static async Task<CaseRecord> MoveAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, CaseState to, string expected, Func<DateTime> now, Func<CaseRecord, Dictionary<string, object?>, DateTime, Task> check, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -502,6 +502,13 @@ public static class LifecycleOperations
             if (!CaseLifecycle.CanTransition(@case, to, out var operation))
             {
                 throw new InvalidCaseTransitionException(@case.State, to, @case.PriorState);
+            }
+
+            // The table allows other ways into the same state (an archived case becomes closed by a re-import, a
+            // soft-deleted one active by a restore). Those have operations of their own; this one is only itself.
+            if (!string.Equals(operation, expected, StringComparison.Ordinal))
+            {
+                throw new InvalidCaseTransitionException($"a case in state {Names.Of(@case.State)} cannot be {Verb(expected)}: it becomes {Names.Of(to)} by a {operation!.Replace('_', ' ')} only");
             }
 
             await AuthoriseAsync(db, actor, @case, operation!, cancellationToken).ConfigureAwait(false);
@@ -527,6 +534,14 @@ public static class LifecycleOperations
             throw;
         }
     }
+
+    private static string Verb(string operation) => operation switch
+    {
+        CaseLifecycle.Close => "closed",
+        CaseLifecycle.Reopen => "reopened",
+        CaseLifecycle.SoftDelete => "deleted",
+        _ => operation.Replace('_', ' '),
+    };
 
     private static async Task<CaseRecord> LoadAsync(MetadataDb db, long caseId, CancellationToken cancellationToken)
     {

@@ -79,6 +79,84 @@ public sealed class LifecycleOperationsTests
         Assert.True((await AuditVerifier.VerifyAsync(temp.Path, Ct)).Ok);
     }
 
+    /// <summary>
+    /// What each operation a person asks for does in each state a case can be in: the state it leaves, or null for a
+    /// refusal. An operation carries out its own transition only. The table of transitions also holds archived to
+    /// closed (a re-import) and soft-deleted to active (a restore), and a close or a reopen is neither.
+    /// </summary>
+    public static TheoryData<string, CaseState, CaseState?> OperationsByState => new()
+    {
+        { CaseLifecycle.Close, CaseState.Active, CaseState.Closed },
+        { CaseLifecycle.Close, CaseState.Closed, null },
+        { CaseLifecycle.Close, CaseState.Archived, null },
+        { CaseLifecycle.Close, CaseState.SoftDeleted, null },
+        { CaseLifecycle.Close, CaseState.Purging, null },
+        { CaseLifecycle.Reopen, CaseState.Active, null },
+        { CaseLifecycle.Reopen, CaseState.Closed, CaseState.Active },
+        { CaseLifecycle.Reopen, CaseState.Archived, null },
+        { CaseLifecycle.Reopen, CaseState.SoftDeleted, null },
+        { CaseLifecycle.Reopen, CaseState.Purging, null },
+        { CaseLifecycle.SoftDelete, CaseState.Active, CaseState.SoftDeleted },
+        { CaseLifecycle.SoftDelete, CaseState.Closed, CaseState.SoftDeleted },
+        { CaseLifecycle.SoftDelete, CaseState.Archived, CaseState.SoftDeleted },
+        { CaseLifecycle.SoftDelete, CaseState.SoftDeleted, null },
+        { CaseLifecycle.SoftDelete, CaseState.Purging, null },
+        { CaseLifecycle.Restore, CaseState.Active, null },
+        { CaseLifecycle.Restore, CaseState.Closed, null },
+        { CaseLifecycle.Restore, CaseState.Archived, null },
+        { CaseLifecycle.Restore, CaseState.SoftDeleted, CaseState.Closed },
+        { CaseLifecycle.Restore, CaseState.Purging, null },
+    };
+
+    [Theory]
+    [MemberData(nameof(OperationsByState))]
+    public async Task AnOperationCarriesOutItsOwnTransitionAndNoOtherThatEndsInTheSameState(string operation, CaseState from, CaseState? expected)
+    {
+        await using var temp = await TempDb.CreateAsync();
+        await using var db = temp.Open();
+        var @case = await TempDb.AddCaseAsync(db, await TempDb.AddUserAsync(db));
+        // A soft-deleted case in this table was closed when it was deleted, so a restore has one answer.
+        await PutInStateAsync(db, @case.Id, from, CaseState.Closed);
+        var rows = await db.Audit.CountAsync(Ct);
+        var audit = temp.Store.Audit;
+
+        Task<CaseRecord> Ask() => operation switch
+        {
+            CaseLifecycle.Close => LifecycleOperations.CloseAsync(db, audit, TempDb.Alice, @case.Id, Now, Ct),
+            CaseLifecycle.Reopen => LifecycleOperations.ReopenAsync(db, audit, TempDb.Alice, @case.Id, Now, Ct),
+            CaseLifecycle.SoftDelete => LifecycleOperations.SoftDeleteAsync(db, audit, TempDb.Alice, @case.Id, "incident 1", Week, Now, Ct),
+            _ => LifecycleOperations.RestoreAsync(db, audit, TempDb.Alice, @case.Id, Now, Ct),
+        };
+
+        if (expected is { } to)
+        {
+            Assert.Equal(to, (await Ask()).State);
+            var row = await db.Audit.AsNoTracking().OrderBy(a => a.Seq).LastAsync(Ct);
+            Assert.Equal((AuditActions.ForCaseOperation(operation), rows + 1), (row.Action, await db.Audit.CountAsync(Ct)));
+            return;
+        }
+
+        var refused = await Assert.ThrowsAsync<InvalidCaseTransitionException>(Ask);
+        Assert.Contains(Names.Of(from), refused.Message, StringComparison.Ordinal);
+        Assert.Equal((from, rows), ((await db.Cases.AsNoTracking().SingleAsync(c => c.Id == @case.Id, Ct)).State, await db.Audit.CountAsync(Ct)));
+    }
+
+    [Fact]
+    public async Task AReopenOfASoftDeletedCaseThatWasActiveIsNoRestore()
+    {
+        await using var temp = await TempDb.CreateAsync();
+        await using var db = temp.Open();
+        var @case = await TempDb.AddCaseAsync(db, await TempDb.AddUserAsync(db));
+        await PutInStateAsync(db, @case.Id, CaseState.SoftDeleted, CaseState.Active);
+        var rows = await db.Audit.CountAsync(Ct);
+
+        var refused = await Assert.ThrowsAsync<InvalidCaseTransitionException>(() => LifecycleOperations.ReopenAsync(db, temp.Store.Audit, TempDb.Alice, @case.Id, Now, Ct));
+        Assert.Contains("cannot be reopened", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("restore", refused.Message, StringComparison.Ordinal);
+        Assert.Equal((CaseState.SoftDeleted, rows), ((await db.Cases.AsNoTracking().SingleAsync(c => c.Id == @case.Id, Ct)).State, await db.Audit.CountAsync(Ct)));
+        Assert.Equal(CaseState.Active, (await LifecycleOperations.RestoreAsync(db, temp.Store.Audit, TempDb.Alice, @case.Id, Now, Ct)).State);
+    }
+
     [Fact]
     public async Task CloseWaitsForARunningJobHoldsTheQueuedOnesAndReopenLetsThemRun()
     {
