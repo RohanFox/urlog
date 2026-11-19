@@ -68,8 +68,9 @@ public sealed class WorkerCrashTests(ClickHouseFixture ch, ITestOutputHelper out
                 break;
 
             default:
-                // The commit is written once every INSERT is acknowledged and the hash agrees, and it is held.
-                await pause.HeldAsync(first.Process, "its commit", Ct);
+                // The commit is written once every INSERT is acknowledged, the hash agrees and the stored histogram
+                // is filled, and it is held. Known by that state: every row in the table, the histogram written.
+                await pause.HeldAsync(first.Process, "its commit", async () => await h.StoredRowsAsync(@case.Id) == fixture.Lines && await h.HistogramRowsAsync(@case.Id) > 0, Ct);
                 Assert.Equal(fixture.Lines, await h.StoredRowsAsync(@case.Id)); // every row is in the table
                 seen = await h.JobAsync(job.Id);
                 await first.KillAsync();
@@ -77,6 +78,7 @@ public sealed class WorkerCrashTests(ClickHouseFixture ch, ITestOutputHelper out
         }
 
         await pause.DisarmAsync(Ct);
+        Note(pause, point);
 
         // What the kill left: the job still in parsing, rows in the table, none of them visible.
         var left = await h.JobAsync(job.Id);
@@ -117,5 +119,14 @@ public sealed class WorkerCrashTests(ClickHouseFixture ch, ITestOutputHelper out
 
         var chain = await AuditVerifier.VerifyAsync(h.Store.Path, Ct);
         Assert.True(chain.Ok, chain.Detail);
+    }
+
+    /// <summary>Says when the pause point met what it is built to stand: a long lock before the point, a disarm that had to be tried again.</summary>
+    private void Note(PausePoint pause, string point)
+    {
+        if (pause.LongLocksBeforeThePoint > 0 || pause.DisarmRetries.Count > 0)
+        {
+            output.WriteLine($"{point}: {pause.LongLocksBeforeThePoint} long lock(s) before the point; disarm retried {pause.DisarmRetries.Count} time(s): {string.Join(" | ", pause.DisarmRetries)}");
+        }
     }
 }

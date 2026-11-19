@@ -202,9 +202,20 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         };
         var pause = await PausePoint.ArmAsync(h.Store.Path, table, when, Ct);
         var command = h.StartCli("case", reimport ? "reimport" : "archive", "--db", h.Store.Path, "--case", scene.Case, "--evidence-root", scene.Evidence, "--archive-root", scene.Archives);
+        // The state each held point is known by: what the step before the held write leaves, read from the disk,
+        // the store and the committed rows. It is asserted again below as a fact.
+        Func<Task<bool>> reached = point switch
+        {
+            "archive-built" => () => Task.FromResult(Directory.Exists(archives) && Directory.EnumerateDirectories(archives, "*.partial").Any() && Directory.EnumerateFiles(archives, ArchiveManifest.ManifestName, SearchOption.AllDirectories).Any()),
+            "archive-commit" => () => Task.FromResult(Directory.Exists(archives) && Directory.EnumerateDirectories(archives).Any(d => !d.EndsWith(".partial", StringComparison.Ordinal))),
+            "archive-store-done" => async () => await scene.StateAsync() == CaseState.Archived && (await scene.PartitionsAsync(scene.CaseId)).Count == 0,
+            "archive-files-done" => async () => await scene.StateAsync() == CaseState.Archived && !Directory.EnumerateFileSystemEntries(scene.CaseDirectory).Any(),
+            "reimport-verified" => () => Task.FromResult(Directory.Exists(staging) && Directory.EnumerateFiles(staging).Count() == 6),
+            _ => () => Task.FromResult(!Directory.Exists(staging) && File.Exists(Path.Combine(scene.CaseDirectory, "big.log"))),
+        };
         if (held)
         {
-            await pause.HeldAsync(command.Process, point, Ct);
+            await pause.HeldAsync(command.Process, point, reached, Ct);
         }
         else
         {
@@ -238,6 +249,11 @@ public sealed class ArchiveTests(ClickHouseFixture ch, ITestOutputHelper output)
         Assert.False(command.Process.HasExited, "the command ended before the kill: " + command.Output);
         await command.KillAsync();
         await pause.DisarmAsync(Ct);
+        if (pause.LongLocksBeforeThePoint > 0 || pause.DisarmRetries.Count > 0)
+        {
+            output.WriteLine($"{point}: {pause.LongLocksBeforeThePoint} long lock(s) before the point; disarm retried {pause.DisarmRetries.Count} time(s): {string.Join(" | ", pause.DisarmRetries)}");
+        }
+
 
         // What the kill left behind.
         var state = await scene.StateAsync();

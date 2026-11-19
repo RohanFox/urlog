@@ -148,9 +148,17 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
         };
         var pause = await PausePoint.ArmAsync(h.Store.Path, table, when, Ct);
         var purge = h.StartCli("case", "purge", "--db", h.Store.Path, "--case", Text(scene.Purged), "--evidence-root", scene.Evidence);
+        // The state each held point is known by: what the step before the held write leaves.
+        Func<Task<bool>> reached = point switch
+        {
+            // The backup is a file and a committed audit row; the row is written after the file is whole.
+            "backup" => async () => Directory.Exists(scene.Backups) && Directory.EnumerateFiles(scene.Backups, "*.sqlite").Any() && await scene.BackupRecordedAsync(),
+            "store-done" => async () => await scene.StateAsync() == CaseState.Purging && (await scene.PartitionsAsync(scene.Purged)).Count == 0 && await scene.GenerationRowsAsync() == 0,
+            _ => async () => await scene.StateAsync() == CaseState.Purging && !Directory.Exists(scene.CaseDirectory),
+        };
         if (held)
         {
-            await pause.HeldAsync(purge.Process, point, Ct);
+            await pause.HeldAsync(purge.Process, point, reached, Ct);
         }
         else
         {
@@ -175,6 +183,11 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
         Assert.False(purge.Process.HasExited, "the command ended before the kill: " + purge.Output);
         await purge.KillAsync();
         await pause.DisarmAsync(Ct);
+        if (pause.LongLocksBeforeThePoint > 0 || pause.DisarmRetries.Count > 0)
+        {
+            output.WriteLine($"{point}: {pause.LongLocksBeforeThePoint} long lock(s) before the point; disarm retried {pause.DisarmRetries.Count} time(s): {string.Join(" | ", pause.DisarmRetries)}");
+        }
+
 
         // What the kill left behind.
         var state = await scene.StateAsync();
@@ -318,6 +331,13 @@ public sealed class PurgeTests(ClickHouseFixture ch, ITestOutputHelper output) :
         {
             await using var db = _h.Store.CreateDbContext();
             return await db.Cases.AsNoTracking().Where(c => c.Id == Purged).Select(c => (CaseState?)c.State).SingleOrDefaultAsync(Ct);
+        }
+
+        /// <summary>True once a backup's audit row is committed: the file it names is whole.</summary>
+        public async Task<bool> BackupRecordedAsync()
+        {
+            await using var db = _h.Store.CreateDbContext();
+            return await db.Audit.AsNoTracking().AnyAsync(a => a.Action == AuditActions.Backup, Ct);
         }
 
         public async Task<CaseTask?> TaskAsync()
