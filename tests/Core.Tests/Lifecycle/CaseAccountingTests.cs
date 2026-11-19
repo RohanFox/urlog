@@ -49,4 +49,109 @@ public sealed class CaseAccountingTests
         var bare = await CaseAccounting.MeasureAsync(db, h.Events, new LifecyclePaths(null, null, paths.BackupDirectory), one.Id, Ct);
         Assert.Equal((1000L, 0L, 0L, 0L, 150L), (bare!.RecordedBytes, bare.IntakeBytes, bare.UploadBytes, bare.CacheBytes, bare.StoreRows));
     }
+
+    [Fact]
+    public async Task TheWalkCountsNothingBehindALink()
+    {
+        var root = Directory.CreateTempSubdirectory("urlog-walk-links-");
+        var outside = Directory.CreateTempSubdirectory("urlog-walk-outside-");
+        try
+        {
+            await File.WriteAllBytesAsync(Path.Combine(outside.FullName, "big.bin"), new byte[50_000], Ct);
+            var web = Directory.CreateDirectory(Path.Combine(root.FullName, "7", "web"));
+            await File.WriteAllBytesAsync(Path.Combine(web.FullName, "a"), new byte[300], Ct);
+            var linked = TryDirectoryLink(Path.Combine(root.FullName, "7", "elsewhere"), outside.FullName);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.CreateSymbolicLink(Path.Combine(web.FullName, "file-link"), Path.Combine(outside.FullName, "big.bin"));
+                linked = true;
+            }
+
+            if (!linked)
+            {
+                Assert.Skip("this account cannot create a link here");
+            }
+
+            // The directory link is not entered and the file link is not followed: only the stored file counts.
+            Assert.Equal(300, CaseAccounting.DirectoryBytes(Path.Combine(root.FullName, "7")));
+            // A case directory that is itself a link counts as nothing.
+            Assert.Equal(0, CaseAccounting.DirectoryBytes(Path.Combine(root.FullName, "7", "elsewhere")));
+        }
+        finally
+        {
+            // The link first, so removing the tree does not reach through it.
+            var link = Path.Combine(root.FullName, "7", "elsewhere");
+            if (Directory.Exists(link))
+            {
+                Directory.Delete(link);
+            }
+
+            root.Delete(recursive: true);
+            outside.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>A directory link: a symbolic link where the account may make one, a junction on Windows otherwise.</summary>
+    private static bool TryDirectoryLink(string link, string target)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+        }
+
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false })!;
+        process.WaitForExit();
+        return process.ExitCode == 0;
+    }
+
+    /// <summary>
+    /// The walk the dashboard's disk use costs for a case of 10,000 stored files: counted right, and timed over 20
+    /// passes for the record (written out, and appended to the file URLOG_API_TIMING names when set; no bound is asserted).
+    /// </summary>
+    [Fact]
+    public async Task TheWalkOverTenThousandStoredFilesCountsEveryByte()
+    {
+        const int Files = 10_000;
+        var root = Directory.CreateTempSubdirectory("urlog-walk-");
+        try
+        {
+            var web = Directory.CreateDirectory(Path.Combine(root.FullName, "7", "web"));
+            var content = new byte[100];
+            for (var i = 0; i < Files; i++)
+            {
+                await File.WriteAllBytesAsync(Path.Combine(web.FullName, i.ToString("x32", System.Globalization.CultureInfo.InvariantCulture)), content, Ct);
+            }
+
+            var times = new List<double>();
+            for (var pass = 0; pass < 21; pass++)
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                Assert.Equal(Files * 100L, CaseAccounting.DirectoryBytes(Path.Combine(root.FullName, "7")));
+                if (pass > 0)
+                {
+                    times.Add(clock.Elapsed.TotalMilliseconds);
+                }
+            }
+
+            times.Sort();
+            var line = $"disk-use walk over {Files:N0} stored files, 20 passes after one unmeasured: p50 {times[9]:F1} ms, p95 {times[18]:F1} ms";
+            TestContext.Current.TestOutputHelper?.WriteLine(line);
+            if (Environment.GetEnvironmentVariable("URLOG_API_TIMING") is { Length: > 0 } path)
+            {
+                await File.AppendAllTextAsync(path, line + Environment.NewLine, Ct);
+            }
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
 }

@@ -101,6 +101,37 @@ public sealed class HostInference
     }
 
     /// <summary>
+    /// A selection of files by where they sat, in the syntax of the host patterns without <c>{host}</c>:
+    /// <c>*</c> stays inside one path segment, <c>**</c> crosses segments, <c>{a,b}</c> is alternation, <c>!</c>
+    /// follows an archive name. The result says whether a path (an archive path, or a bare file name) matches.
+    /// </summary>
+    /// <exception cref="ArgumentException">The pattern is empty, has an unclosed brace or holds <c>{host}</c>.</exception>
+    public static Func<string, bool> CompileSelector(string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        var compiled = Expand(pattern.Trim()).Select(plain => Pattern.Compile(plain, pattern, hostCount: 0)).ToArray();
+        return path =>
+        {
+            var segments = Split(path);
+            if (segments.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var one in compiled)
+            {
+                string? ignored = null;
+                if (Match(one.Segments, 0, segments, 0, ref ignored))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+    }
+
+    /// <summary>
     /// RFC 1123 labels (underscore tolerated, Windows names have it) with a letter somewhere, or an IPv4 address;
     /// 2 to 253 characters; not on the stop list. Dates and plain numbers have no letter and fail.
     /// </summary>
@@ -304,7 +335,7 @@ public sealed class HostInference
 
     private sealed record Pattern(PatternSegment[] Segments, string Source)
     {
-        public static Pattern Compile(string plain, string source)
+        public static Pattern Compile(string plain, string source, int hostCount = 1)
         {
             var segments = new List<PatternSegment>();
             var hosts = 0;
@@ -336,9 +367,9 @@ public sealed class HostInference
                 start = i + 1;
             }
 
-            if (hosts != 1)
+            if (hosts != hostCount)
             {
-                throw new ArgumentException($"host pattern '{source}' must hold {Placeholder} exactly once", nameof(source));
+                throw new ArgumentException(hostCount == 1 ? $"host pattern '{source}' must hold {Placeholder} exactly once" : $"pattern '{source}' selects files and may not hold {Placeholder}", nameof(source));
             }
 
             return new Pattern([.. segments], source);

@@ -22,11 +22,18 @@ public static class CaseAcl
     /// <summary>Owner includes rw, rw includes ro: true when <paramref name="actual"/> grants at least <paramref name="minimum"/>.</summary>
     public static bool Satisfies(MemberRole actual, MemberRole minimum) => Rank(actual) >= Rank(minimum);
 
+    /// <summary>The visible states and <c>soft_deleted</c>: what the restore of a case reaches. Never <c>purging</c>.</summary>
+    public static IReadOnlyList<CaseState> RestorableStates { get; } = [CaseState.Active, CaseState.Closed, CaseState.Archived, CaseState.SoftDeleted];
+
     /// <summary>The membership of <paramref name="userId"/> in <paramref name="caseId"/>, or null when there is none or the case is hidden.</summary>
-    public static async Task<CaseMembership?> MembershipAsync(MetadataDb db, long userId, long caseId, CancellationToken cancellationToken = default)
+    public static Task<CaseMembership?> MembershipAsync(MetadataDb db, long userId, long caseId, CancellationToken cancellationToken = default) =>
+        MembershipAsync(db, userId, caseId, VisibleStates, cancellationToken);
+
+    /// <summary>As the overload without states, for a case in one of <paramref name="states"/>.</summary>
+    public static async Task<CaseMembership?> MembershipAsync(MetadataDb db, long userId, long caseId, IReadOnlyList<CaseState> states, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var visible = VisibleStates;
+        var visible = states;
         var row = await db.CaseMembers.AsNoTracking()
             .Where(m => m.UserId == userId && m.CaseId == caseId)
             .Join(db.Cases.AsNoTracking().Where(c => visible.Contains(c.State)), m => m.CaseId, c => c.Id, (m, c) => new { Case = c, m.Role })
@@ -45,6 +52,17 @@ public static class CaseAcl
             .OrderBy(x => x.Case.Id)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.Select(r => new CaseMembership(r.Case, r.Role)).ToList();
+    }
+
+    /// <summary>The soft-deleted cases the user owns, by case id: what the user can still restore.</summary>
+    public static async Task<IReadOnlyList<CaseRecord>> DeletedOwnedAsync(MetadataDb db, long userId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return await db.CaseMembers.AsNoTracking()
+            .Where(m => m.UserId == userId && m.Role == MemberRole.Owner)
+            .Join(db.Cases.AsNoTracking().Where(c => c.State == CaseState.SoftDeleted), m => m.CaseId, c => c.Id, (m, c) => c)
+            .OrderBy(c => c.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The ids that go into <c>SQL_allowed_cases</c> for this user: memberships in a queryable state, ascending.</summary>

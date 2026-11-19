@@ -17,5 +17,6 @@ TestResults/
 *.user
 bench/*.log
 src/Api/data/
+appsettings.Local.json
 src/Api/wwwroot/
 .local/

@@ -54,6 +54,33 @@ public static class AuditActions
     public const string FileDuplicate = "file_duplicate";
     public const string FileOverride = "file_override";
 
+    /// <summary>A person changed a file's host, zone or year: each with its old and new value, and the re-parse it queued.</summary>
+    public const string FileUpdate = "file_update";
+
+    /// <summary>One call gave many files a host. The target is the case; the row lists every changed file with its SHA-256.</summary>
+    public const string FileBulkHost = "file_bulk_host";
+
+    /// <summary>One call set the override of many files. The target is the case; the row lists every changed file.</summary>
+    public const string FileBulkOverride = "file_bulk_override";
+
+    /// <summary>One call asked for many files to be detected again. The target is the case.</summary>
+    public const string FileBulkRedetect = "file_bulk_redetect";
+
+    /// <summary>A file was detected again: the result before and after. The record now holds the new one.</summary>
+    public const string FileRedetect = "file_redetect";
+
+    /// <summary>A host was added to a case by a person. The target is the case; the host's id and name are in the details.</summary>
+    public const string HostCreate = "host_create";
+
+    /// <summary>A host's name, zone or default source options changed: old and new values, and the re-parses queued.</summary>
+    public const string HostUpdate = "host_update";
+
+    /// <summary>A host was merged into another one of its case: both names and ids, and the number of files moved.</summary>
+    public const string HostMerge = "host_merge";
+
+    /// <summary>A person queued the work of a failed or cancelled job again: the old job and the new one. The target is the file.</summary>
+    public const string JobRetry = "job_retry";
+
     /// <summary>
     /// A file was refused and nothing of it is stored (a packet capture, alone or inside an archive): its name,
     /// size, SHA-256 and what it was taken for. The target is the case, since no file record exists.
@@ -85,6 +112,9 @@ public static class AuditActions
 
     /// <summary>An admin or the CLI set a new password; the hash is never in the details.</summary>
     public const string UserPasswordReset = "user_password_reset";
+
+    /// <summary>A user changed their own password, knowing the current one; neither is in the details.</summary>
+    public const string UserPasswordChange = "user_password_change";
 
     /// <summary>Query execution: text and its SHA-256, case, user, duration, whether the gate accepted it; never results.</summary>
     public const string Query = "query";

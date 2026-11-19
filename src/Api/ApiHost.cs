@@ -25,9 +25,16 @@ public static class ApiHost
 {
     public const string AdminPolicy = "admin";
 
+    /// <summary>The setting that names the local settings file; empty turns it off.</summary>
+    public const string LocalSettingsKey = "Urlog:LocalSettings";
+
+    /// <summary>The local settings file when the setting does not name another: beside appsettings.json, never tracked.</summary>
+    public const string LocalSettingsFile = "appsettings.Local.json";
+
     public static void ConfigureServices(WebApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        AddLocalSettings(builder.Configuration, builder.Environment.ContentRootPath, builder.Configuration[LocalSettingsKey] ?? LocalSettingsFile);
         ((IConfigurationBuilder)builder.Configuration).Add(new UrlogEnvironment());
         if (!builder.Environment.IsDevelopment())
         {
@@ -89,13 +96,20 @@ public static class ApiHost
 
         // Web upload: the bytes land under the evidence root and reach the records through the intake pipeline alone.
         services.AddSingleton(sp => new UploadFolders(EvidenceRoot(sp.GetRequiredService<IOptions<UrlogOptions>>().Value, builder.Environment)));
-        services.AddSingleton(sp =>
+        services.AddSingleton(_ =>
         {
             var catalog = new SourceCatalog();
             catalog.Add(Urlog.Sources.LogSourceRegistry.Registrations);
+            return catalog;
+        });
+        // What the hosts and files routes ask about the sources: ids, who reads a zone, and whether a set of options is one a source takes.
+        services.AddSingleton(sp => new SourceRules(sp.GetRequiredService<SourceCatalog>(), SourceOptionChecks.Check));
+        services.AddSingleton<ICaseUsageSource, CaseUsageSource>();
+        services.AddSingleton(sp =>
+        {
             // The record of an upload waits for a locked metadata file as the job runner's commit does.
             var retry = new BusyRetry { Timeout = sp.GetRequiredService<IOptions<UrlogOptions>>().Value.Upload.HandOverBusyTimeout };
-            return new IntakePipeline(sp.GetRequiredService<MetadataStore>(), catalog, sp.GetRequiredService<UploadFolders>().Root, recordRetry: retry);
+            return new IntakePipeline(sp.GetRequiredService<MetadataStore>(), sp.GetRequiredService<SourceCatalog>(), sp.GetRequiredService<UploadFolders>().Root, recordRetry: retry);
         });
         services.AddSingleton<IDiskProbe, DriveDiskProbe>();
         services.AddSingleton(sp =>
@@ -127,6 +141,44 @@ public static class ApiHost
         services.AddValidation();
         services.AddProblemDetails();
         services.AddExceptionHandler<ApiExceptionHandler>();
+    }
+
+    /// <summary>
+    /// Adds the settings of this one box: an optional JSON file, <c>appsettings.Local.json</c> in the content root
+    /// unless <paramref name="file"/> names another, that git ignores. It is read after the tracked appsettings
+    /// files and before everything that comes after them (user secrets, the environment, the command line), so it
+    /// changes a tracked default and an environment variable still has the last word. A file that is not there is
+    /// no error. An empty name adds nothing.
+    /// </summary>
+    public static void AddLocalSettings(IConfigurationBuilder configuration, string contentRoot, string? file)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(contentRoot);
+        if (string.IsNullOrWhiteSpace(file))
+        {
+            return;
+        }
+
+        var path = Path.GetFullPath(Path.IsPathRooted(file) ? file : Path.Combine(contentRoot, file));
+        var source = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource { Path = path, Optional = true, ReloadOnChange = false };
+        source.ResolveFileProvider();
+        var after = -1;
+        for (var i = 0; i < configuration.Sources.Count; i++)
+        {
+            if (configuration.Sources[i] is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource { Path: { } tracked } && Path.GetFileName(tracked).StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase))
+            {
+                after = i;
+            }
+        }
+
+        if (after < 0)
+        {
+            // No appsettings file in front of it: the local file is the first word, and every other source still follows.
+            configuration.Sources.Insert(0, source);
+            return;
+        }
+
+        configuration.Sources.Insert(after + 1, source);
     }
 
     public static void ConfigurePipeline(WebApplication app)

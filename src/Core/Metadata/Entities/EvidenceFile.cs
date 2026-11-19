@@ -84,7 +84,7 @@ public sealed class EvidenceFile
     /// True when a person gave <see cref="YearHint"/>; false when it was derived from the file's own time or the
     /// arrival date. A given year holds for every member of an archive, like the zone; a derived one does not.
     /// </summary>
-    public bool YearGiven { get; init; }
+    public bool YearGiven { get; set; }
 
     /// <summary>True when nothing but the arrival date supports <see cref="YearHint"/>.</summary>
     public bool YearAssumed { get; set; }
@@ -127,6 +127,22 @@ public sealed class EvidenceFile
 
     /// <summary>JSON object of per-file options (<c>nginx.log_format</c>, <c>csv.delimiter</c>, ...); null when none.</summary>
     public string? OverrideOptions { get; set; }
+
+    /// <summary>
+    /// Raised by every change that alters what a parse of this file writes: its host, zone, year or override, and
+    /// the zone, the name or the default options of its host. The claim of a job stamps the job with it, and a job
+    /// that ends under an older value is followed by another parse. A write that names an older value is refused.
+    /// </summary>
+    public int SettingsVersion { get; set; } = 1;
+
+    /// <summary>The <see cref="SettingsVersion"/> the committed parse was made under; null while nothing is committed or for a parse from before the column.</summary>
+    public int? ParsedSettingsVersion { get; set; }
+
+    /// <summary>
+    /// The detector version and the source ids the detection record was made with, as <c>DetectionResult.RegistryKey</c>
+    /// writes them. A value other than the running build's makes the record stale.
+    /// </summary>
+    public string? DetectionRegistry { get; set; }
 
     public int ParseGeneration { get; set; } = 1;
 

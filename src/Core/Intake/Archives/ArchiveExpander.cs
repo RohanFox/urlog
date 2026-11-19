@@ -267,6 +267,7 @@ public sealed class ArchiveExpander
             DetectedConfidence = detection.Confidence,
             DetectedLayout = detection.Layout,
             Detection = detection.ToJson(),
+            DetectionRegistry = detection.RegistryKey,
             FileTime = entry.ModifiedUtc,
             State = state,
             ContainerCut = entry.Cut,

@@ -5,9 +5,15 @@ using Microsoft.AspNetCore.Routing.Patterns;
 namespace Urlog.Api.Auth;
 
 /// <summary>Endpoint metadata: the caller must be a member of the route's case with at least this role.</summary>
-public sealed class CaseAccessRequirement(MemberRole minimum)
+public sealed class CaseAccessRequirement(MemberRole minimum, bool admitsSoftDeleted = false)
 {
     public MemberRole Minimum { get; } = minimum;
+
+    /// <summary>
+    /// True on the one route that acts on a soft-deleted case, the restore: a member with the role reaches it
+    /// there, and to everyone else the case stays as hidden as on every other route.
+    /// </summary>
+    public bool AdmitsSoftDeleted { get; } = admitsSoftDeleted;
 }
 
 /// <summary>The case the request is about and the caller's role in it, on <c>HttpContext.Features</c> for the handler.</summary>
@@ -20,6 +26,13 @@ public static class CaseAccessExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.WithMetadata(new CaseAccessRequirement(minimum));
+    }
+
+    /// <summary>As <see cref="RequireCaseRole"/>, for the route that restores a soft-deleted case: the case is reached in that state too.</summary>
+    public static TBuilder RequireCaseRoleOnDeleted<TBuilder>(this TBuilder builder, MemberRole minimum) where TBuilder : IEndpointConventionBuilder
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithMetadata(new CaseAccessRequirement(minimum, admitsSoftDeleted: true));
     }
 }
 
@@ -69,8 +82,11 @@ public sealed class CaseAccessMiddleware(RequestDelegate next, ILogger<CaseAcces
         }
 
         var db = context.RequestServices.GetRequiredService<MetadataDb>();
-        var membership = await CaseAcl.MembershipAsync(db, session.User.Id, caseId, context.RequestAborted).ConfigureAwait(false);
-        if (membership is null)
+        var membership = requirement.AdmitsSoftDeleted
+            ? await CaseAcl.MembershipAsync(db, session.User.Id, caseId, CaseAcl.RestorableStates, context.RequestAborted).ConfigureAwait(false)
+            : await CaseAcl.MembershipAsync(db, session.User.Id, caseId, context.RequestAborted).ConfigureAwait(false);
+        // A soft-deleted case is hidden from a member below the role: the same 404, never a 403 that says it exists.
+        if (membership is null || (membership.Case.State == CaseState.SoftDeleted && !CaseAcl.Satisfies(membership.Role, requirement.Minimum)))
         {
             await Problems.WriteAsync(context, problem.Status!.Value, problem.Title!, problem.Type).ConfigureAwait(false);
             return;

@@ -25,9 +25,14 @@ internal sealed class ApiExceptionHandler : IExceptionHandler
             Uploads.UploadPendingException p => Problems.UploadPending(p.RetryAfterSeconds),
             BadHttpRequestException bad => Problems.Make(bad.StatusCode, "malformed request", "https://urlog/problems/bad-request"),
             CaseNotFoundException => Problems.CaseNotFound(),
-            UserNotFoundException or NotAMemberException => Problems.NotFound(exception.Message),
+            UserNotFoundException or NotAMemberException or RecordNotFoundException => Problems.NotFound(exception.Message),
+            StaleWriteException stale => Problems.Stale(stale.Message, stale.Current),
+            Auth.PreconditionRequiredException => Problems.PreconditionRequired(exception.Message),
+            SelectionTooLargeException => Problems.Make(StatusCodes.Status422UnprocessableEntity, exception.Message, "https://urlog/problems/selection-too-large"),
+            LifecycleRoleException => Problems.Make(StatusCodes.Status403Forbidden, exception.Message, "https://urlog/problems/forbidden"),
             UserNameTakenException or AlreadyMemberException or LastAdminException or LastOwnerException
-                or InvalidCaseTransitionException or CaseNotActiveException => Problems.Conflict(exception.Message),
+                or InvalidCaseTransitionException or CaseNotActiveException or CaseFrozenException or SettingsRefusedException
+                or LifecycleRefusedException or JobRefusedException or JobStateException => Problems.Conflict(exception.Message),
             InvalidUserNameException or ArgumentException => Problems.BadRequest(exception.Message),
             _ => null,
         };
@@ -36,12 +41,12 @@ internal sealed class ApiExceptionHandler : IExceptionHandler
             return ValueTask.FromResult(false);
         }
 
-        return Write(httpContext, problem.Status!.Value, problem.Title!, problem.Type, problem.Detail);
+        return Write(httpContext, problem);
     }
 
-    private static async ValueTask<bool> Write(HttpContext httpContext, int status, string title, string? type, string? detail)
+    private static async ValueTask<bool> Write(HttpContext httpContext, Microsoft.AspNetCore.Mvc.ProblemDetails problem)
     {
-        await Problems.WriteAsync(httpContext, status, title, type, detail).ConfigureAwait(false);
+        await Problems.WriteAsync(httpContext, problem).ConfigureAwait(false);
         return true;
     }
 }

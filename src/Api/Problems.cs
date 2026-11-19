@@ -18,6 +18,14 @@ internal static class Problems
         return context.Response.WriteAsJsonAsync(Make(status, title, type, detail), options: null, ContentType, context.RequestAborted);
     }
 
+    /// <summary>Writes the problem as it is, its extension members included.</summary>
+    public static Task WriteAsync(HttpContext context, ProblemDetails problem)
+    {
+        context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = ContentType;
+        return context.Response.WriteAsJsonAsync(problem, options: null, ContentType, context.RequestAborted);
+    }
+
     public static ProblemDetails Make(int status, string title, string? type = null, string? detail = null) => new()
     {
         Status = status,
@@ -39,6 +47,17 @@ internal static class Problems
     public static ProblemDetails NotFound(string title) => Make(StatusCodes.Status404NotFound, title, "https://urlog/problems/not-found");
 
     public static ProblemDetails Conflict(string title) => Make(StatusCodes.Status409Conflict, title, "https://urlog/problems/conflict");
+
+    /// <summary>412: the request names a version that is no longer current; <c>current</c> is the one to repeat it with.</summary>
+    public static ProblemDetails Stale(string title, string? current)
+    {
+        var problem = Make(StatusCodes.Status412PreconditionFailed, title, "https://urlog/problems/stale");
+        problem.Extensions["current"] = current;
+        return problem;
+    }
+
+    /// <summary>428: a change to a versioned record without <c>If-Match</c>.</summary>
+    public static ProblemDetails PreconditionRequired(string what) => Make(StatusCodes.Status428PreconditionRequired, $"If-Match is required: {what}", "https://urlog/problems/precondition-required");
 
     public static ProblemDetails BadRequest(string title) => Make(StatusCodes.Status400BadRequest, title, "https://urlog/problems/bad-request");
 

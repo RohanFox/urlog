@@ -74,6 +74,15 @@ internal static partial class Log
     [LoggerMessage(EventId = 38, Level = LogLevel.Warning, Message = "upload {Upload} of case {Case}: the metadata file stayed locked for {Waited} s; the bytes are stored, the record is tried again every {Retry} s")]
     public static partial void UploadPending(ILogger logger, string upload, long @case, int waited, double retry);
 
+    [LoggerMessage(EventId = 60, Level = LogLevel.Warning, Message = "disk use of case {Case} could not be measured: {Reason}")]
+    public static partial void UsageUnavailable(ILogger logger, long @case, string reason);
+
+    [LoggerMessage(EventId = 61, Level = LogLevel.Information, Message = "'{Name}' changed their password; {Sessions} other session(s) ended")]
+    public static partial void PasswordChanged(ILogger logger, string name, int sessions);
+
+    [LoggerMessage(EventId = 62, Level = LogLevel.Information, Message = "'{Name}' gave a wrong current password while changing it, from {Address}")]
+    public static partial void PasswordChangeRefused(ILogger logger, string name, string address);
+
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "logout '{Name}'")]
     public static partial void Logout(ILogger logger, string name);
 }

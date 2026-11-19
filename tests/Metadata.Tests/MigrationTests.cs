@@ -42,7 +42,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         await using var db = temp.Open();
         var pending = await db.Database.GetPendingMigrationsAsync(Ct);
         Assert.Empty(pending);
-        Assert.Equal(["20261106171503_Initial", "20261106175518_AuditTriggers", "20261111172457_Sessions", "20261112151235_DetectionRecord", "20261113061516_IntakeMembers", "20261113082434_StoreIdentity", "20261113210427_CaseTasks", "20261114111744_ArchiveVerifiedAt", "20261118055202_CaseSpanAndStats", "20261118125222_StoredHistogram"], await db.Database.GetAppliedMigrationsAsync(Ct));
+        Assert.Equal(["20261106171503_Initial", "20261106175518_AuditTriggers", "20261111172457_Sessions", "20261112151235_DetectionRecord", "20261113061516_IntakeMembers", "20261113082434_StoreIdentity", "20261113210427_CaseTasks", "20261114111744_ArchiveVerifiedAt", "20261118055202_CaseSpanAndStats", "20261118125222_StoredHistogram", "20261118192450_CasesApi"], await db.Database.GetAppliedMigrationsAsync(Ct));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class MigrationTests(ITestOutputHelper output)
         await using var temp = await TempDb.CreateAsync();
         await temp.Store.MigrateAsync(Ct);
         await using var db = temp.Open();
-        Assert.Equal(10, (await db.Database.GetAppliedMigrationsAsync(Ct)).Count());
+        Assert.Equal(11, (await db.Database.GetAppliedMigrationsAsync(Ct)).Count());
     }
 
     [Fact]

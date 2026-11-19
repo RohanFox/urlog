@@ -135,4 +135,5 @@ public sealed record ChangeMemberRoleRequest
 }
 
 /// <summary>A case as the admin routes show it: metadata and the member list, never events or field statistics.</summary>
-public sealed record AdminCaseResponse(long Id, string Name, CaseState State, string Owner, DateTimeOffset CreatedAt, DateTimeOffset? ClosedAt, DateTimeOffset? ArchivedAt, DateTimeOffset? DeletedAt, IReadOnlyList<MemberResponse> Members);
+/// <param name="Task">Lifecycle work that has not ended: for a soft-deleted case, the purge that was asked for and who asked.</param>
+public sealed record AdminCaseResponse(long Id, string Name, CaseState State, string Owner, DateTimeOffset CreatedAt, DateTimeOffset? ClosedAt, DateTimeOffset? ArchivedAt, DateTimeOffset? DeletedAt, IReadOnlyList<MemberResponse> Members, CaseTaskResponse? Task);

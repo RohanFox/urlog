@@ -168,6 +168,8 @@ public static class JobOperations
             var used = await db.Jobs.Where(j => j.FileId == job.FileId).MaxAsync(j => (int?)j.Generation, cancellationToken).ConfigureAwait(false) ?? 0;
 
             job.State = JobState.Parsing;
+            // The settings this attempt reads. A change that arrives while it runs moves the file's value past this one.
+            job.SettingsVersion = job.Kind == JobKind.Expand ? 0 : file.SettingsVersion;
             job.Generation = Math.Max(used, committed) + 1;
             job.Worker = worker;
             job.StartedAt = nowUtc;
@@ -257,6 +259,8 @@ public static class JobOperations
             file.UndatedRows = outcome.UndatedRows;
             file.FutureRows = outcome.FutureRows;
             file.HistogramGeneration = outcome.HistogramFilled ? job.Generation : null;
+            file.ParsedSettingsVersion = job.SettingsVersion == 0 ? null : job.SettingsVersion;
+            FollowUp(db, job, file, nowUtc);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             // The case's span and the mark that its field statistics are out of date, with the rows they describe.
             await CaseStatsOperations.OnCommitAsync(db, job.CaseId, nowUtc, cancellationToken).ConfigureAwait(false);
@@ -678,7 +682,7 @@ public static class JobOperations
     public static async Task<Dictionary<long, int>> CommittedGenerationsAsync(MetadataDb db, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var rows = await db.Jobs.Where(j => j.State == JobState.Done && !db.Cases.Any(c => c.Id == j.CaseId && c.State == CaseState.Purging)).GroupBy(j => j.FileId).Select(g => new { FileId = g.Key, Generation = g.Max(j => j.Generation) }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await db.Jobs.Where(j => j.State == JobState.Done && j.Generation > 0 && !db.Cases.Any(c => c.Id == j.CaseId && c.State == CaseState.Purging)).GroupBy(j => j.FileId).Select(g => new { FileId = g.Key, Generation = g.Max(j => j.Generation) }).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.ToDictionary(r => r.FileId, r => r.Generation);
     }
 
@@ -739,14 +743,237 @@ public static class JobOperations
         job.State = JobState.Failed;
         job.FinishedAt = nowUtc;
         job.Message = Trim(message);
-        if (await CommittedGenerationAsync(db, job.FileId, cancellationToken).ConfigureAwait(false) == 0)
+        var file = await db.Files.FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
+        await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        if (file.State == FileState.Received && await CommittedGenerationAsync(db, job.FileId, cancellationToken).ConfigureAwait(false) == 0)
         {
+            file.State = FileState.Failed;
+        }
+
+        // The settings it failed under are no longer the file's: the new ones get their own attempt.
+        FollowUp(db, job, file, nowUtc);
+    }
+
+    /// <summary>
+    /// Inside the transaction that ends a parse: when the file's settings changed while the job ran, the parse the
+    /// change called for is queued now. A file never has a second job waiting beside a running one, and a parse
+    /// under old settings is never the last one.
+    /// </summary>
+    private static void FollowUp(MetadataDb db, Job job, EvidenceFile file, DateTime nowUtc)
+    {
+        if (job.Kind == JobKind.Expand || job.SettingsVersion == 0 || job.SettingsVersion == file.SettingsVersion || !ReparsePlanner.Parseable(file))
+        {
+            return;
+        }
+
+        db.Jobs.Add(new Job { CaseId = file.CaseId, FileId = file.Id, Kind = file.State == FileState.Parsed ? JobKind.Reparse : JobKind.Parse, CreatedAt = nowUtc });
+    }
+
+    /// <summary>The options of a job that detects its file again before it parses it.</summary>
+    public const string RedetectOptions = "{\"redetect\":true}";
+
+    /// <summary>True for a job queued by <see cref="FileSettingsOperations.RedetectAsync"/>.</summary>
+    public static bool IsRedetect(Job job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        return string.Equals(job.Options, RedetectOptions, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A person cancels a queued job of a case that is active or closed (a closed case holds its queued jobs), with
+    /// a <c>job_cancelled</c> row on the file. A job that runs or has ended is refused.
+    /// </summary>
+    /// <exception cref="JobStateException">The job is not <c>queued</c>.</exception>
+    public static async Task<Job> CancelAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, long jobId, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(clock);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var nowUtc = clock.GetUtcNow().UtcDateTime;
+            var @case = await db.Cases.AsNoTracking().FirstOrDefaultAsync(c => c.Id == caseId, cancellationToken).ConfigureAwait(false) ?? throw new CaseNotFoundException(caseId);
+            if (@case.State is not (CaseState.Active or CaseState.Closed))
+            {
+                throw new CaseFrozenException(caseId, @case.State);
+            }
+
+            var job = await db.Jobs.FirstOrDefaultAsync(j => j.Id == jobId && j.CaseId == caseId, cancellationToken).ConfigureAwait(false) ?? throw new RecordNotFoundException("job", jobId, caseId);
+            await db.Entry(job).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            if (job.State != JobState.Queued)
+            {
+                throw new JobStateException($"job {jobId} is {Names.Of(job.State)}; only a queued job can be cancelled");
+            }
+
+            job.State = JobState.Cancelled;
+            job.FinishedAt = nowUtc;
+            job.Message = Trim($"cancelled by {actor.Name}");
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var file = await db.Files.AsNoTracking().FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
+            var details = actor.Stamp(new Dictionary<string, object?> { ["job_id"] = job.Id, ["kind"] = Names.Of(job.Kind), ["reason"] = "cancelled by a person" });
+            await audit.AppendAsync(db, AuditEntry.ForFile(actor.Name, actor.UserId, AuditActions.JobCancelled, file, @case.Name, details), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return job;
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// A person queues the work of a failed or cancelled job again, as a new job with a <c>job_retry</c> row on the
+    /// file. Only the newest job of a file can be retried, and only while the case is active. An archive whose
+    /// expansion failed is run again with the limits of the configuration.
+    /// </summary>
+    /// <exception cref="JobStateException">The job is not <c>failed</c> or <c>cancelled</c>, or is not the file's newest.</exception>
+    /// <exception cref="JobRefusedException">The file is never parsed (quarantined, an artifact).</exception>
+    public static async Task<Job> RetryAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, long jobId, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(clock);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var nowUtc = clock.GetUtcNow().UtcDateTime;
+            var @case = await FileSettingsOperations.ActiveCaseAsync(db, caseId, cancellationToken).ConfigureAwait(false);
+            var old = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId && j.CaseId == caseId, cancellationToken).ConfigureAwait(false) ?? throw new RecordNotFoundException("job", jobId, caseId);
+            if (old.State is not (JobState.Failed or JobState.Cancelled))
+            {
+                throw new JobStateException($"job {jobId} is {Names.Of(old.State)}; only a failed or a cancelled job is run again");
+            }
+
+            var newest = await db.Jobs.Where(j => j.FileId == old.FileId).MaxAsync(j => j.Id, cancellationToken).ConfigureAwait(false);
+            if (newest != jobId)
+            {
+                throw new JobStateException($"job {jobId} is not the newest job of file {old.FileId} (job {newest} is); there is nothing of it left to run again");
+            }
+
+            var file = await db.Files.FirstAsync(f => f.Id == old.FileId, cancellationToken).ConfigureAwait(false);
+            await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            if (file.State is FileState.Quarantined or FileState.Artifact or FileState.Archived or FileState.Expanded or FileState.Unreadable)
+            {
+                throw new JobRefusedException($"file {file.Id} is {Names.Of(file.State)} and is never parsed");
+            }
+
+            if (file.State == FileState.Failed)
+            {
+                file.State = FileState.Received;
+            }
+
+            var kind = old.Kind == JobKind.Expand ? JobKind.Expand : file.State == FileState.Parsed ? JobKind.Reparse : JobKind.Parse;
+            var job = new Job { CaseId = caseId, FileId = file.Id, Kind = kind, CreatedAt = nowUtc, Options = IsRedetect(old) ? RedetectOptions : null };
+            db.Jobs.Add(job);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var details = actor.Stamp(new Dictionary<string, object?> { ["job_id"] = job.Id, ["after_job_id"] = old.Id, ["after_state"] = Names.Of(old.State), ["after_message"] = old.Message, ["kind"] = Names.Of(kind) });
+            await audit.AppendAsync(db, AuditEntry.ForFile(actor.Name, actor.UserId, AuditActions.JobRetry, file, @case.Name, details), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return job;
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// A running job detected its file again. The new result replaces the detection record, and
+    /// <c>file_redetect</c> keeps what the record said before beside what it says now. An override is not touched.
+    /// A file that is now a log and was only kept until now waits for its parse from here.
+    /// </summary>
+    /// <returns>The file as it is after the write.</returns>
+    /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
+    public static async Task<EvidenceFile> RecordRedetectAsync(MetadataDb db, IAuditWriter audit, long jobId, string worker, Urlog.Core.Detection.DetectionResult detection, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(detection);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
             var file = await db.Files.FirstAsync(f => f.Id == job.FileId, cancellationToken).ConfigureAwait(false);
             await db.Entry(file).ReloadAsync(cancellationToken).ConfigureAwait(false);
-            if (file.State == FileState.Received)
+            var before = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                file.State = FileState.Failed;
+                ["kind"] = file.DetectedKind is { } kind ? Names.Of(kind) : null,
+                ["source"] = file.DetectedSource,
+                ["confidence_per_mille"] = file.DetectedConfidence is { } c ? (long)Math.Round(c * 1000) : null,
+                ["layout"] = file.DetectedLayout,
+                ["registry"] = file.DetectionRegistry,
+            };
+            var changed = file.DetectedKind != detection.Kind || !string.Equals(file.DetectedSource, detection.SourceId, StringComparison.Ordinal) || !string.Equals(file.DetectedLayout, detection.Layout, StringComparison.Ordinal);
+            file.DetectedKind = detection.Kind;
+            file.DetectedSource = detection.SourceId;
+            file.DetectedConfidence = detection.Confidence;
+            file.DetectedLayout = detection.Layout;
+            file.Detection = detection.ToJson();
+            file.DetectionRegistry = detection.RegistryKey;
+            if (detection.Kind == Urlog.Core.Detection.FileKind.Log && file.State == FileState.Artifact)
+            {
+                file.State = FileState.Received;
             }
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var caseName = await db.Cases.Where(c => c.Id == job.CaseId).Select(c => c.Name).FirstAsync(cancellationToken).ConfigureAwait(false);
+            var details = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["from"] = before,
+                ["to"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["kind"] = Names.Of(detection.Kind),
+                    ["source"] = detection.SourceId,
+                    ["confidence_per_mille"] = (long)Math.Round(detection.Confidence * 1000),
+                    ["layout"] = detection.Layout,
+                    ["registry"] = detection.RegistryKey,
+                },
+                ["changed"] = changed,
+                ["job_id"] = job.Id,
+            };
+            await audit.AppendAsync(db, AuditEntry.ForFile(AuditActions.SystemActor, null, AuditActions.FileRedetect, file, caseName, details), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return file;
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Ends a job that detected its file again and found nothing to parse: the file is still not a log, or its
+    /// parser is the one its visible rows were written by. The job is <c>done</c> with the reason and no
+    /// generation, so the committed parse of the file stays the one it was.
+    /// </summary>
+    /// <exception cref="JobStateException">The job is not in <c>parsing</c> for this worker.</exception>
+    public static async Task CompleteWithoutParseAsync(MetadataDb db, long jobId, string worker, string reason, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(clock);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var nowUtc = clock.GetUtcNow().UtcDateTime;
+            var job = await RequireParsingAsync(db, jobId, worker, cancellationToken).ConfigureAwait(false);
+            job.State = JobState.Done;
+            // The committed generation of a file is the highest among its done jobs: this one wrote none.
+            job.Generation = 0;
+            job.FinishedAt = nowUtc;
+            job.Message = Trim(reason);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
         }
     }
 

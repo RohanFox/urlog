@@ -45,26 +45,58 @@ public sealed class CaseAccessTests
     public void TheRouteTableHasTheCaseRoutes()
     {
         var routes = CaseRoutes().Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
-        Assert.True(routes.Count == 16, string.Join(" | ", routes));
+        Assert.True(routes.Count == 39, string.Join(" | ", routes));
         Assert.Equal(
         [
+            "DELETE /api/v1/cases/{caseId:long}/files/{fileId:long}/override",
             "DELETE /api/v1/cases/{caseId:long}/members/{userId:long}",
             "DELETE /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "GET /api/v1/cases/{caseId:long}",
+            "GET /api/v1/cases/{caseId:long}/dashboard",
             "GET /api/v1/cases/{caseId:long}/fields",
+            "GET /api/v1/cases/{caseId:long}/files",
+            "GET /api/v1/cases/{caseId:long}/files/{fileId:long}",
+            "GET /api/v1/cases/{caseId:long}/hosts",
+            "GET /api/v1/cases/{caseId:long}/jobs",
+            "GET /api/v1/cases/{caseId:long}/jobs/{jobId:long}",
             "GET /api/v1/cases/{caseId:long}/members",
             "GET /api/v1/cases/{caseId:long}/search/export",
             "GET /api/v1/cases/{caseId:long}/sql/export",
             "GET /api/v1/cases/{caseId:long}/uploads/{uploadId}",
             "HEAD /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
             "OPTIONS /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
+            "PATCH /api/v1/cases/{caseId:long}/files/{fileId:long}",
+            "PATCH /api/v1/cases/{caseId:long}/hosts/{hostId:long}",
             "PATCH /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
+            "POST /api/v1/cases/{caseId:long}/archive",
+            "POST /api/v1/cases/{caseId:long}/close",
+            "POST /api/v1/cases/{caseId:long}/delete",
+            "POST /api/v1/cases/{caseId:long}/files/assign-host",
+            "POST /api/v1/cases/{caseId:long}/files/override",
+            "POST /api/v1/cases/{caseId:long}/files/redetect",
+            "POST /api/v1/cases/{caseId:long}/hosts",
+            "POST /api/v1/cases/{caseId:long}/hosts/{hostId:long}/merge",
+            "POST /api/v1/cases/{caseId:long}/jobs/{jobId:long}/cancel",
+            "POST /api/v1/cases/{caseId:long}/jobs/{jobId:long}/retry",
             "POST /api/v1/cases/{caseId:long}/members",
+            "POST /api/v1/cases/{caseId:long}/reimport",
+            "POST /api/v1/cases/{caseId:long}/reopen",
+            "POST /api/v1/cases/{caseId:long}/restore",
             "POST /api/v1/cases/{caseId:long}/search",
             "POST /api/v1/cases/{caseId:long}/sql",
             "POST /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
+            "PUT /api/v1/cases/{caseId:long}/files/{fileId:long}/override",
             "PUT /api/v1/cases/{caseId:long}/members/{userId:long}",
         ], routes);
+    }
+
+    [Fact]
+    public void OnlyReadsAndSearchesAreOpenToAReadOnlyMember()
+    {
+        // A route a reader may call either reads (GET) or is a search, which sends its query in a body. Everything
+        // else that changes something asks for more, so the theory below refuses a reader on each of them.
+        var open = CaseRoutes().Where(r => r.Data.Item3 == "ro" && r.Data.Item1 != "GET").Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
+        Assert.Equal(["POST /api/v1/cases/{caseId:long}/search", "POST /api/v1/cases/{caseId:long}/sql"], open);
     }
 
     [Theory]
@@ -82,20 +114,23 @@ public sealed class CaseAccessTests
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var share = await a.PostAsync("/api/v1/cases/1/members", new { user = "carol", role = "ro" });
         Assert.Equal(HttpStatusCode.Created, share.StatusCode);
+        // One host, one file and one job, so a route that names one by id finds it: all three get id 1.
+        Assert.Equal(HttpStatusCode.Created, (await a.PostAsync("/api/v1/cases/1/hosts", new { name = "web-01" })).StatusCode);
+        Assert.Equal(1, (await factory.AddFileAsync(1, "access.log", "line\n")).Id);
 
         var http = new HttpMethod(method);
         const string upload = "0123456789abcdef0123456789abcdef";
-        var path = route.Replace("{caseId:long}", "1", StringComparison.Ordinal).Replace("{userId:long}", alice.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
-            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal);
-        var body = http == HttpMethod.Post || http == HttpMethod.Put ? new { } : null;
+        var path = Ids(route.Replace("{caseId:long}", "1", StringComparison.Ordinal).Replace("{userId:long}", alice.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal));
+        var body = http == HttpMethod.Post || http == HttpMethod.Put || (http == HttpMethod.Patch && !route.Contains("/uploads", StringComparison.Ordinal)) ? new { } : null;
 
         // B is not a member: 404, with the same body as an id that does not exist.
         using var b = factory.Client();
         await b.LoginAsync("bob", Password);
         var asNonMember = await b.SendAsync(http, path, body);
         Assert.Equal(HttpStatusCode.NotFound, asNonMember.StatusCode);
-        var unknownPath = route.Replace("{caseId:long}", "4242", StringComparison.Ordinal).Replace("{userId:long}", "1", StringComparison.Ordinal)
-            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal);
+        var unknownPath = Ids(route.Replace("{caseId:long}", "4242", StringComparison.Ordinal).Replace("{userId:long}", "1", StringComparison.Ordinal)
+            .Replace("{TusFileId?}", upload, StringComparison.Ordinal).Replace("{uploadId}", upload, StringComparison.Ordinal));
         var asUnknown = await a.SendAsync(http, unknownPath, body);
         Assert.Equal(HttpStatusCode.NotFound, asUnknown.StatusCode);
         Assert.Equal(await asUnknown.Content.ReadAsStringAsync(Ct), await asNonMember.Content.ReadAsStringAsync(Ct));
@@ -134,6 +169,8 @@ public sealed class CaseAccessTests
         Assert.NotEqual(bob.Id, carol.Id);
     }
 
+    private static string Ids(string path) => path.Replace("{hostId:long}", "1", StringComparison.Ordinal).Replace("{fileId:long}", "1", StringComparison.Ordinal).Replace("{jobId:long}", "1", StringComparison.Ordinal);
+
     [Fact]
     public async Task AHiddenCaseIs404ForItsOwnMembers()
     {
@@ -166,7 +203,7 @@ public sealed class CaseAccessTests
 
         // /admin/... does not exist for a non-admin: 404 on every registered admin route, the case's own owner included.
         var adminRoutes = AdminRoutes().ToList();
-        Assert.Equal(4, adminRoutes.Count);
+        Assert.Equal(8, adminRoutes.Count);
         foreach (var (method, route) in adminRoutes)
         {
             var http = new HttpMethod(method);
@@ -228,10 +265,10 @@ public sealed class CaseAccessTests
         var app = Build(_ => { });
         var admin = ((IEndpointRouteBuilder)app).DataSources.SelectMany(d => d.Endpoints).OfType<RouteEndpoint>()
             .Where(e => CaseAccess.IsAdminRoute(e.RoutePattern.RawText)).ToList();
-        Assert.Equal(4, admin.Count);
+        Assert.Equal(8, admin.Count);
         Assert.All(admin, e => Assert.Null(e.Metadata.GetMetadata<CaseAccessRequirement>()));
         Assert.All(admin, e => Assert.Contains(e.Metadata.GetOrderedMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>(), a => a.Policy == ApiHost.AdminPolicy));
-        Assert.Equal(3, admin.Count(e => e.RoutePattern.Parameters.Any(p => p.Name == "id")));
+        Assert.Equal(7, admin.Count(e => e.RoutePattern.Parameters.Any(p => p.Name == "id")));
         CaseAccess.AssertGuarded(app);
 
         // An admin route without the admin policy is refused; an admin route with a membership requirement is refused too.

@@ -20,6 +20,9 @@ public sealed class Job
 
     public JobState State { get; set; } = JobState.Queued;
 
+    /// <summary>The file's <c>settings_version</c> at the claim; 0 before the first claim and for an expansion.</summary>
+    public int SettingsVersion { get; set; }
+
     public int Attempt { get; set; } = 1;
 
     public DateTime CreatedAt { get; init; }

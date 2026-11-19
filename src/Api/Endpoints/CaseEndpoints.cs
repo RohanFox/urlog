@@ -4,6 +4,7 @@ using Urlog.Core.Metadata;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Urlog.Api.Endpoints;
 
@@ -30,9 +31,41 @@ public static class CaseEndpoints
         FieldEndpoints.Map(one);
         SearchEndpoints.Map(one);
         Uploads.UploadEndpoints.Map(one);
+        LifecycleEndpoints.Map(one);
+        DashboardEndpoints.Map(one);
+        HostEndpoints.Map(one);
+        FileEndpoints.Map(one);
+        JobEndpoints.Map(one);
     }
 
-    private static async Task<Ok<List<CaseSummaryResponse>>> ListAsync(CurrentUser me, MetadataDb db, CancellationToken cancellationToken)
+    /// <summary>
+    /// The caller's cases. With <c>?state=deleted</c>: the soft-deleted cases the caller owns, which no other route
+    /// lists and which the owner can still restore, each with the day its purge falls due.
+    /// </summary>
+    private static async Task<IResult> ListAsync(HttpRequest request, CurrentUser me, MetadataDb db, IOptions<UrlogOptions> options, CancellationToken cancellationToken)
+    {
+        if (request.Query.TryGetValue("state", out var state) && state.ToString() is { Length: > 0 } wanted)
+        {
+            if (!string.Equals(wanted, "deleted", StringComparison.Ordinal))
+            {
+                throw new ArgumentException("state: 'deleted' lists your soft-deleted cases; without it the list is your visible ones");
+            }
+
+            var deleted = await CaseAcl.DeletedOwnedAsync(db, me.Id, cancellationToken).ConfigureAwait(false);
+            var answer = new List<DeletedCaseResponse>(deleted.Count);
+            foreach (var @case in deleted)
+            {
+                var due = @case.DeletedAt is { } at ? at + options.Value.Lifecycle.PurgeAfter : (DateTime?)null;
+                answer.Add(new DeletedCaseResponse(@case.Id, @case.Name, @case.PriorState, UserResponse.Utc(@case.DeletedAt), UserResponse.Utc(due), await CaseViews.UnfinishedTaskAsync(db, @case.Id, cancellationToken).ConfigureAwait(false)));
+            }
+
+            return TypedResults.Ok(answer);
+        }
+
+        return await ListVisibleAsync(me, db, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<Ok<List<CaseSummaryResponse>>> ListVisibleAsync(CurrentUser me, MetadataDb db, CancellationToken cancellationToken)
     {
         var memberships = await CaseAcl.ListForUserAsync(db, me.Id, cancellationToken).ConfigureAwait(false);
         var owners = await OwnerNamesAsync(db, memberships.Select(m => m.Case.OwnerId), cancellationToken).ConfigureAwait(false);
@@ -47,12 +80,10 @@ public static class CaseEndpoints
         return TypedResults.Created($"/api/v1/cases/{@case.Id}", Response(@case, me.Name, 1, MemberRole.Owner));
     }
 
-    private static async Task<Ok<CaseResponse>> GetAsync(HttpContext http, MetadataDb db, CancellationToken cancellationToken)
+    private static async Task<Ok<CaseDetailResponse>> GetAsync(HttpContext http, MetadataDb db, CancellationToken cancellationToken)
     {
         var context = http.Features.GetRequiredFeature<CaseContext>();
-        var members = await db.CaseMembers.AsNoTracking().CountAsync(m => m.CaseId == context.Case.Id, cancellationToken).ConfigureAwait(false);
-        var owners = await OwnerNamesAsync(db, [context.Case.OwnerId], cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(Response(context.Case, owners.GetValueOrDefault(context.Case.OwnerId, "?"), members, context.Role));
+        return TypedResults.Ok(await CaseViews.CaseAsync(db, context.Case, context.Role, cancellationToken).ConfigureAwait(false));
     }
 
     private static async Task<Ok<List<MemberResponse>>> MembersAsync(HttpContext http, MetadataDb db, CancellationToken cancellationToken)

@@ -151,9 +151,22 @@ public sealed class IntakePipeline
             EvidencePermissions.MakeReadOnly(path);
         }
 
-        // 3. What it is.
+        // 3. What it is. The host comes first, because a host may carry default source options (its nginx
+        // log format): a new file of that host is scored against them unless it brings its own.
         var name = request.OriginalName ?? Path.GetFileName(path);
-        var detection = DetectionSample.DetectFile(path, name, _sources, request.Options, out var content);
+        string? hostName = null;
+        var inferred = false;
+        string? rule = null;
+        if (!string.IsNullOrWhiteSpace(request.Host))
+        {
+            hostName = HostOperations.Normalise(request.Host);
+        }
+        else if (_hosts.Infer(name) is { } proposal)
+        {
+            (hostName, inferred, rule) = (proposal.Host, true, proposal.Rule);
+        }
+
+        var detection = DetectionSample.DetectFile(path, name, _sources, await EffectiveOptionsAsync(request, hostName, cancellationToken).ConfigureAwait(false), out var content);
         var now = _store.Clock.GetUtcNow().UtcDateTime;
         var actor = new AuditActor(request.Uploader, request.UploaderUserId);
         if (detection.Kind == FileKind.Rejected && request.OverrideSource is null)
@@ -181,17 +194,6 @@ public sealed class IntakePipeline
         // 4. The hints.
         var fileTime = File.GetLastWriteTimeUtc(path);
         var year = IntakeHints.Year(request.Year, fileTime, content, now);
-        string? hostName = null;
-        var inferred = false;
-        string? rule = null;
-        if (!string.IsNullOrWhiteSpace(request.Host))
-        {
-            hostName = HostOperations.Normalise(request.Host);
-        }
-        else if (_hosts.Infer(name) is { } proposal)
-        {
-            (hostName, inferred, rule) = (proposal.Host, true, proposal.Rule);
-        }
 
         // A container that cannot be opened here is kept like any other file that is not a log.
         var parsed = request.OverrideSource is not null || detection.Kind == FileKind.Log;
@@ -222,6 +224,7 @@ public sealed class IntakePipeline
             DetectedConfidence = detection.Confidence,
             DetectedLayout = detection.Layout,
             Detection = detection.ToJson(),
+            DetectionRegistry = detection.RegistryKey,
             FileTime = fileTime,
             OverrideSource = request.OverrideSource,
             OverrideOptions = request.Options is { Count: > 0 } ? JsonSerializer.Serialize(request.Options) : null,
@@ -243,6 +246,28 @@ public sealed class IntakePipeline
             request.RecordWaiting,
             cancellationToken).ConfigureAwait(false);
         return new IntakeOutcome(result.File, result.Job, result.Duplicate, Rejected: false, detection, sha256, size, hostName, inferred);
+    }
+
+    /// <summary>
+    /// The options detection reads: the request's own, over the defaults of the host the file goes to when that
+    /// host exists already. The record keeps the request's own options only; a parse merges the host's again.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>?> EffectiveOptionsAsync(IntakeRequest request, string? hostName, CancellationToken cancellationToken)
+    {
+        if (hostName is null)
+        {
+            return request.Options;
+        }
+
+        await using var db = _store.CreateDbContext();
+        var host = await HostOperations.FindLiveAsync(db, request.CaseId, hostName, cancellationToken).ConfigureAwait(false);
+        if (host?.SourceOptions is not { Length: > 0 } defaults)
+        {
+            return request.Options;
+        }
+
+        var merged = SourceOptionSet.Effective(request.Options is { Count: > 0 } ? JsonSerializer.Serialize(request.Options) : null, defaults);
+        return merged.Count == 0 ? null : merged;
     }
 
     /// <summary>One attempt is one context, so one connection and one transaction of its own.</summary>

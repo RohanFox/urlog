@@ -167,3 +167,145 @@ X-CSRF-Token: {{csrf}}
 
 ### Raw SQL: the result as a file
 GET {{baseUrl}}/cases/1/sql/export?format=json&sql=SELECT%20host%2C%20count()%20FROM%20events_v%20GROUP%20BY%20host
+
+### A user changes their own password: every other session of the user ends. Counted by the login throttle.
+POST {{baseUrl}}/auth/password
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "current_password": "correct horse battery staple", "new_password": "an entirely different passphrase" }
+
+### Case dashboard: counts, flags, the queue, hosts, span, statistics state, disk use. No file list.
+GET {{baseUrl}}/cases/1/dashboard
+
+### Lifecycle (owner): close, reopen. A refusal is 409 with the reason.
+POST {{baseUrl}}/cases/1/close
+X-CSRF-Token: {{csrf}}
+
+###
+POST {{baseUrl}}/cases/1/reopen
+X-CSRF-Token: {{csrf}}
+
+### Lifecycle (owner): archive a closed case, re-import an archived one. 202 with the task; the runner does the work.
+POST {{baseUrl}}/cases/1/archive
+X-CSRF-Token: {{csrf}}
+
+###
+POST {{baseUrl}}/cases/1/reimport
+X-CSRF-Token: {{csrf}}
+
+### Lifecycle (owner): soft-delete, confirmed by typing the name of the case exactly
+POST {{baseUrl}}/cases/1/delete
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "name": "incident 1" }
+
+### The caller's own soft-deleted cases, with the day their purge falls due
+GET {{baseUrl}}/cases?state=deleted
+
+### Lifecycle (owner): restore a soft-deleted case to the state it was deleted in
+POST {{baseUrl}}/cases/1/restore
+X-CSRF-Token: {{csrf}}
+
+### Admin: purge a soft-deleted case. With two-person approval on this leaves a request ...
+POST {{baseUrl}}/admin/cases/1/purge
+X-CSRF-Token: {{csrf}}
+
+### ... that another administrator confirms
+POST {{baseUrl}}/admin/cases/1/purge/confirm
+X-CSRF-Token: {{csrf}}
+
+### Hosts: list with their totals; create
+GET {{baseUrl}}/cases/1/hosts
+
+###
+POST {{baseUrl}}/cases/1/hosts
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "name": "web-02", "timezone": "Europe/Bucharest", "source_options": { "nginx.log_format": "combined" } }
+
+### Hosts: change the name, the zone or the default source options. If-Match is the host's version.
+### Without confirm=true a change that would parse files again answers with their number and bytes and changes nothing.
+PATCH {{baseUrl}}/cases/1/hosts/1?confirm=true
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+If-Match: "1"
+
+{ "timezone": "Europe/Bucharest" }
+
+### Hosts: merge host 2 into host 1. Rows keep the host they were written with; nothing is parsed again.
+POST {{baseUrl}}/cases/1/hosts/2/merge
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+If-Match: "1"
+
+{ "into": 1 }
+
+### Files: a page (after, limit up to 500), filtered by host, unassigned, state, kind, source, parent, pattern, extension, stale, q
+GET {{baseUrl}}/cases/1/files?limit=100&unassigned=true
+
+### Files: one record in full; its ETag is the version a change names
+GET {{baseUrl}}/cases/1/files/1
+
+### Files: host, zone, year of one file. 202 with the parse it queued. confirm_host accepts an inferred host as it is.
+PATCH {{baseUrl}}/cases/1/files/1
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+If-Match: "1"
+
+{ "host": "web-02", "timezone": "Europe/Bucharest", "year": 2026 }
+
+### Files: override the source and its options; the detection result stays on the record. DELETE clears it.
+PUT {{baseUrl}}/cases/1/files/1/override
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+If-Match: "2"
+
+{ "source": "nginx", "options": { "nginx.log_format": "$remote_addr [$time_local] \"$request\" $status" } }
+
+### Files, bulk: give a host to the files a path pattern selects. This call changes nothing and answers the
+### number of files, what would be parsed again and a digest ...
+POST {{baseUrl}}/cases/1/files/assign-host
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "pattern": "bundle.zip!web-02/**", "host": "web-02" }
+
+### ... and this one makes the change: the same body, confirm=true, the digest in If-Match. At most 1,000 files
+### a call; a larger selection is walked with "after_id" and "limit" in the body.
+POST {{baseUrl}}/cases/1/files/assign-host?confirm=true
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+If-Match: "{{digest}}"
+
+{ "pattern": "bundle.zip!web-02/**", "host": "web-02" }
+
+### Files, bulk: override the files of one extension and detector result (previewed and confirmed the same way)
+POST {{baseUrl}}/cases/1/files/override
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "match": { "extension": "log", "detected_source": "generic" }, "source": "nginx", "options": { "nginx.log_format": "combined" } }
+
+### Files, bulk: detect again the files a newer detector could send to a parser (or "file_ids": [..])
+POST {{baseUrl}}/cases/1/files/redetect
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{ "stale": true }
+
+### Jobs: newest first (before, limit, state, file); one job with its progress and its reason
+GET {{baseUrl}}/cases/1/jobs?state=failed
+
+###
+GET {{baseUrl}}/cases/1/jobs/1
+
+### Jobs: cancel one that waits; queue the work of a failed or cancelled one again
+POST {{baseUrl}}/cases/1/jobs/2/cancel
+X-CSRF-Token: {{csrf}}
+
+###
+POST {{baseUrl}}/cases/1/jobs/2/retry
+X-CSRF-Token: {{csrf}}

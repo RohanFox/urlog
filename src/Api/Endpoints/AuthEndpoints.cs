@@ -19,6 +19,42 @@ public static class AuthEndpoints
         group.MapPost("/login", LoginAsync).AllowAnonymous().AddEndpointFilter<LoginThrottleFilter>().WithName("Login");
         group.MapPost("/logout", LogoutAsync).WithName("Logout");
         group.MapGet("/me", Me).WithName("Me");
+        // The login throttle counts these too: a session in the wrong hands gets no faster a guess at the password than the login page gives.
+        group.MapPost("/password", ChangePasswordAsync).AddEndpointFilter<LoginThrottleFilter>().WithName("ChangeOwnPassword");
+    }
+
+    /// <summary>
+    /// A user changes their own password. The current one is verified outside any transaction, like a login; the
+    /// new one is held to <see cref="PasswordPolicy"/>. Every other session of the user ends, this one stays. The
+    /// row (<c>user_password_change</c>) holds neither password. A wrong current password is 403 and changes nothing.
+    /// </summary>
+    private static async Task<Results<NoContent, ProblemHttpResult>> ChangePasswordAsync(
+        ChangePasswordRequest request, CurrentUser me, HttpContext http, MetadataDb db, MetadataStore store, PasswordService passwords,
+        TimeProvider clock, ILoggerFactory loggers, CancellationToken cancellationToken)
+    {
+        var logger = loggers.CreateLogger("Urlog.Api.Auth");
+        var current = me.User.PasswordHash;
+        var address = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!await passwords.VerifyAsync(current, request.CurrentPassword, cancellationToken).ConfigureAwait(false))
+        {
+            Log.PasswordChangeRefused(logger, me.Name, address);
+            return TypedResults.Problem(Problems.Make(StatusCodes.Status403Forbidden, "the current password is not right", "https://urlog/problems/wrong-password"));
+        }
+
+        if (PasswordPolicy.Check(request.NewPassword) is { } reason)
+        {
+            return TypedResults.Problem(Problems.BadRequest(reason));
+        }
+
+        if (string.Equals(request.NewPassword, request.CurrentPassword, StringComparison.Ordinal))
+        {
+            return TypedResults.Problem(Problems.BadRequest("the new password is the current one"));
+        }
+
+        var hash = await passwords.HashAsync(request.NewPassword, cancellationToken).ConfigureAwait(false);
+        var ended = await UserOperations.ChangeOwnPasswordAsync(db, store.Audit, me.Actor, me.Id, current, hash, me.Session.Id, clock.GetUtcNow().UtcDateTime, cancellationToken).ConfigureAwait(false);
+        Log.PasswordChanged(logger, me.Name, ended);
+        return TypedResults.NoContent();
     }
 
     /// <summary>

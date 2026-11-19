@@ -520,6 +520,34 @@ public sealed class JobRunner
             }
 
             JobLog.Started(_logger, job.Id, file.Id, job.CaseId, job.Generation, job.Attempt, worker);
+            // The file's own options, with its host's defaults for the keys it does not set.
+            var options = EffectiveOptions(file, claimed.Host);
+            if (JobOperations.IsRedetect(job))
+            {
+                // The detector of this build looks at the file again, read-only like the first time. The record of
+                // what it finds is written before any row: a parse that fails later does not take it back.
+                var (sourceBefore, layoutBefore) = (file.DetectedSource, file.DetectedLayout);
+                var subject = file;
+                var detection = DetectionSample.Detect(() => OpenRaw(subject), subject.Size, subject.ArchivePath ?? subject.OriginalName, FormatDetector.Instantiate(_sources), options);
+                await TerminalAsync(job.Id, async db => file = await JobOperations.RecordRedetectAsync(db, _store.Audit, job.Id, worker, detection, CancellationToken.None).ConfigureAwait(false)).ConfigureAwait(false);
+                string? nothingToParse = null;
+                if (detection.Kind != FileKind.Log)
+                {
+                    nothingToParse = $"detected again: still not a log this build parses ({Names.Of(detection.Kind)}{(detection.Message is { Length: > 0 } m ? ": " + m : string.Empty)})";
+                }
+                else if (committed > 0 && string.Equals(sourceBefore, detection.SourceId, StringComparison.Ordinal) && string.Equals(layoutBefore, detection.Layout, StringComparison.Ordinal))
+                {
+                    nothingToParse = $"detected again: still parsed by '{detection.SourceId}', the rows stay as they are";
+                }
+
+                if (nothingToParse is not null)
+                {
+                    var reason = nothingToParse;
+                    await TerminalAsync(job.Id, db => JobOperations.CompleteWithoutParseAsync(db, job.Id, worker, reason, _store.Clock, CancellationToken.None)).ConfigureAwait(false);
+                    return;
+                }
+            }
+
             var source = ResolveSource(file);
 
             if (generation > 1)
@@ -532,7 +560,7 @@ public sealed class JobRunner
             // the same rows whenever they are parsed.
             var zone = file.Timezone ?? claimed.Host?.Timezone;
             var identity = new FileIdentity(caseId, (ulong)(file.HostId ?? 0), fileId, generation, claimed.Host?.Name ?? string.Empty,
-                ZoneOffset(zone, file.FileTime ?? file.ReceivedAt), file.YearHint ?? 1970, ParseOptions(file.OverrideOptions), file.FileTime);
+                ZoneOffset(zone, file.FileTime ?? file.ReceivedAt), file.YearHint ?? 1970, options, file.FileTime);
             var compression = file.Compression is { Length: > 0 } c ? Names.Parse<CompressionKind>(c) : CompressionKind.None;
             var encoding = Names.Parse<InputEncoding>(file.Encoding);
 
@@ -1057,25 +1085,15 @@ public sealed class JobRunner
         }
     }
 
-    private static Dictionary<string, string>? ParseOptions(string? json)
+    /// <summary>What the parse reads: the host's default options with the file's own value wherever the file sets one; null for none.</summary>
+    private static IReadOnlyDictionary<string, string>? EffectiveOptions(EvidenceFile file, Host? host)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
         try
         {
-            using var document = JsonDocument.Parse(json);
-            var options = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                options[property.Name] = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString()! : property.Value.GetRawText();
-            }
-
+            var options = SourceOptionSet.Effective(file.OverrideOptions, host?.SourceOptions);
             return options.Count == 0 ? null : options;
         }
-        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        catch (FormatException e)
         {
             throw new JobFailedException("override_options is not a JSON object of source options", e);
         }

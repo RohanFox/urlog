@@ -92,6 +92,13 @@ public static class SessionOperations
         return db.Sessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <summary>Deletes every session of a user but one (the one a user changed their own password in); runs inside the caller's transaction.</summary>
+    public static Task<int> DeleteOthersAsync(MetadataDb db, long userId, string keepSessionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Sessions.Where(s => s.UserId == userId && s.Id != keepSessionId).ExecuteDeleteAsync(cancellationToken);
+    }
+
     /// <summary>Deletes every expired session (idle or absolute); called at every login so the table does not grow unbounded.</summary>
     public static Task<int> SweepAsync(MetadataDb db, DateTime nowUtc, TimeSpan idleTimeout, CancellationToken cancellationToken = default)
     {

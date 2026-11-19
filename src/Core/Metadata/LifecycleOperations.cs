@@ -10,6 +10,19 @@ namespace Urlog.Core.Metadata;
 /// <param name="EvidenceSha256">SHA-256 over the SHA-256 of every file record of the case, sorted, one per line (<see cref="LifecycleOperations.EvidenceDigest"/>).</param>
 public sealed record PurgeSummary(long CaseId, string CaseName, long OwnerId, string? OwnerName, int FileCount, int ArrivedFileCount, long TotalBytes, string EvidenceSha256, string? BackupSha256);
 
+/// <summary>Which step of a purge's approval a caller means.</summary>
+public enum PurgeIntent
+{
+    /// <summary>Ask for the purge, or confirm the request that waits: the single verb of the command line.</summary>
+    Either,
+
+    /// <summary>Ask for the purge. Refused while a request waits for its confirmation.</summary>
+    Request,
+
+    /// <summary>Confirm the request another administrator made.</summary>
+    Confirm,
+}
+
 /// <summary>What the mark of a purge needs to know about the backup taken just before it.</summary>
 public sealed record PurgeBackup(string Sha256, string FileName, long Size);
 
@@ -162,14 +175,26 @@ public static class LifecycleOperations
     public static Task<CaseTask> RequestPurgeAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, bool twoPerson, TimeProvider clock, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(clock);
-        return RequestPurgeCoreAsync(db, audit, actor, caseId, twoPerson, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+        return RequestPurgeCoreAsync(db, audit, actor, caseId, twoPerson, PurgeIntent.Either, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
+    }
+
+    /// <summary>
+    /// As the overload without an intent, for a caller that says which of the two steps it means.
+    /// <see cref="PurgeIntent.Request"/> never confirms a request that waits, so a second administrator who asks
+    /// for a purge does not release one unseen; <see cref="PurgeIntent.Confirm"/> needs two-person approval to be
+    /// on and a request to be waiting.
+    /// </summary>
+    public static Task<CaseTask> RequestPurgeAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, bool twoPerson, PurgeIntent intent, TimeProvider clock, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        return RequestPurgeCoreAsync(db, audit, actor, caseId, twoPerson, intent, () => clock.GetUtcNow().UtcDateTime, cancellationToken);
     }
 
     /// <summary>As the overload with a clock, at a time the caller fixes. For tests: a caller that reads a clock itself reads it before the write lock.</summary>
     internal static Task<CaseTask> RequestPurgeAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, bool twoPerson, DateTime nowUtc, CancellationToken cancellationToken = default) =>
-        RequestPurgeCoreAsync(db, audit, actor, caseId, twoPerson, () => nowUtc, cancellationToken);
+        RequestPurgeCoreAsync(db, audit, actor, caseId, twoPerson, PurgeIntent.Either, () => nowUtc, cancellationToken);
 
-    private static async Task<CaseTask> RequestPurgeCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, bool twoPerson, Func<DateTime> now, CancellationToken cancellationToken)
+    private static async Task<CaseTask> RequestPurgeCoreAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long caseId, bool twoPerson, PurgeIntent intent, Func<DateTime> now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(audit);
@@ -194,6 +219,21 @@ public static class LifecycleOperations
             var task = await db.CaseTasks.Where(t => t.CaseId == caseId && t.Kind == CaseTaskKind.Purge && (t.State == CaseTaskState.Requested || t.State == CaseTaskState.Running || t.State == CaseTaskState.Committed))
                 .OrderBy(t => t.Id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             var details = actor.Stamp(new Dictionary<string, object?> { ["two_person"] = twoPerson });
+            if (intent == PurgeIntent.Confirm && !twoPerson)
+            {
+                throw new LifecycleRefusedException($"two-person approval is off: the purge of case {caseId} is released by the administrator who asks for it, and there is nothing to confirm");
+            }
+
+            if (intent == PurgeIntent.Confirm && task is null)
+            {
+                throw new LifecycleRefusedException($"no purge of case {caseId} has been asked for; there is nothing to confirm");
+            }
+
+            if (intent == PurgeIntent.Request && task is { State: CaseTaskState.Requested })
+            {
+                throw new LifecycleRefusedException($"the purge of case {caseId} was already asked for by {task.RequestedBy} and waits for a second administrator to confirm it");
+            }
+
             if (task is null)
             {
                 task = new CaseTask

@@ -105,6 +105,44 @@ public sealed record DetectionResult
     /// <summary>The one compression layer the parse pipeline undoes, when the chain starts with one.</summary>
     public CompressionKind Compression => Containers.IsDefaultOrEmpty ? CompressionKind.None : FormatDetector.CompressionOf(Containers[0]);
 
+    /// <summary>What this record was made with, in the form <see cref="RegistryKeyOf"/> gives for a build.</summary>
+    public string RegistryKey => RegistryKeyOf(DetectorVersion, RegisteredSources);
+
+    /// <summary>
+    /// The detector version and the registered source ids as one short text (<c>1:generic,nginx,syslog</c>), ids in
+    /// ordinal order. Two records with the same key were made by detectors that know the same formats.
+    /// </summary>
+    public static string RegistryKeyOf(int detectorVersion, IEnumerable<string> sourceIds)
+    {
+        ArgumentNullException.ThrowIfNull(sourceIds);
+        return detectorVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + string.Join(',', sourceIds.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>The key of a stored record, read from its JSON; null when the text holds neither member.</summary>
+    public static string? RegistryKeyOfJson(string? detectionJson)
+    {
+        if (string.IsNullOrEmpty(detectionJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(detectionJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("detector_version", out var version) || !root.TryGetProperty("registered_sources", out var sources) || sources.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            return RegistryKeyOf(version.GetInt32(), sources.EnumerateArray().Select(s => s.GetString() ?? string.Empty));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The record as one JSON object with snake_case keys, stable key order.</summary>
     public string ToJson()
     {

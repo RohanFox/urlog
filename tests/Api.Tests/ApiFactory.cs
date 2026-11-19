@@ -60,6 +60,9 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
     /// <summary>The event store behind the search routes; empty and open unless a test fills or closes it.</summary>
     public FakeSearchBackend Search { get; } = new();
 
+    /// <summary>The disk use the dashboard reads in place of the directories and the event store.</summary>
+    public FakeCaseUsage Usage { get; } = new();
+
     /// <summary>Every row of the metadata file as it was when the host was built, for tests that assert the host wrote nothing.</summary>
     public string MetadataAtStart { get; private set; } = string.Empty;
 
@@ -76,6 +79,8 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
         builder.UseSetting("Urlog:Ingest:Enabled", "false"); // no event store behind these tests; the runner has its own
         builder.UseSetting("Urlog:ClickHouse:RetryInterval", "00:00:00.050");
         builder.UseSetting("Urlog:Ingest:EvidenceRoot", EvidenceRoot);
+        // The settings file of the box the tests run on is not the tests' business; a test that wants one names it.
+        builder.UseSetting(ApiHost.LocalSettingsKey, string.Empty);
         if (paired && !File.Exists(MetadataPath))
         {
             var id = StoreId;
@@ -113,6 +118,7 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
             services.AddSingleton<Urlog.Core.Jobs.IDiskProbe>(Disk);
             services.AddSingleton<Urlog.Api.Endpoints.IFieldStatsSource>(FieldStats);
             services.AddSingleton<Urlog.Api.Search.ISearchBackend>(Search);
+            services.AddSingleton<Urlog.Api.Endpoints.ICaseUsageSource>(Usage);
             services.AddTransient<IStartupFilter, TestClientAddressFilter>();
         });
     }
@@ -130,6 +136,69 @@ internal sealed class ApiFactory(IDictionary<string, string?>? settings = null, 
     {
         await using var db = Open();
         return await UserOperations.CreateAsync(db, Store.Audit, new Core.Audit.AuditActor("cli"), name, role, PasswordHasher.Hash(password), Clock.GetUtcNow().UtcDateTime);
+    }
+
+    /// <summary>
+    /// A file record straight into the store, with the parse job intake would queue. <paramref name="edit"/> sets what
+    /// the detector would have found.
+    /// </summary>
+    public async Task<EvidenceFile> AddFileAsync(long caseId, string name, string content, Action<EvidenceFile>? edit = null, string? archivePath = null)
+    {
+        await using var db = Open();
+        var file = new EvidenceFile
+        {
+            CaseId = caseId,
+            Sha256 = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content))),
+            Size = content.Length,
+            OriginalName = name,
+            StoredPath = "web/" + Guid.NewGuid().ToString("n"),
+            Source = FileSource.Web,
+            Uploader = "alice",
+            ReceivedAt = Clock.GetUtcNow().UtcDateTime,
+            Encoding = "utf8",
+            ArchivePath = archivePath,
+            DetectedKind = Urlog.Core.Detection.FileKind.Log,
+            DetectedSource = "nginx",
+            DetectionRegistry = Services.GetRequiredService<SourceRules>().RegistryKey,
+        };
+        edit?.Invoke(file);
+        return (await FileOperations.AddAsync(db, Store.Audit, new Core.Audit.AuditActor("alice"), file, queue: true, arrivalHost: null)).File;
+    }
+
+    /// <summary>The oldest waiting job of the case is claimed and committed, as the job runner would: its file is parsed.</summary>
+    public async Task<Job> RunNextJobAsync(long rows = 10, long rejects = 1)
+    {
+        await using var db = Open();
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var claimed = await JobOperations.ClaimAsync(db, "w:test", Clock) ?? throw new InvalidOperationException("no job waits");
+        var outcome = new JobOutcome(Urlog.Core.Pipeline.InputEnd.Complete(claimed.File.Size, claimed.File.Size), now.AddDays(-2), now.AddDays(-1), HistogramFilled: true);
+        await JobOperations.CompleteAsync(db, Store.Audit, claimed.Job.Id, "w:test", new JobCounts(1, 1, rows, rejects, claimed.File.Size), outcome, Clock);
+        return claimed.Job;
+    }
+
+    /// <summary>The oldest waiting job is claimed and left running, as while a parse is under way.</summary>
+    public async Task<Job> ClaimNextJobAsync()
+    {
+        await using var db = Open();
+        return (await JobOperations.ClaimAsync(db, "w:test", Clock) ?? throw new InvalidOperationException("no job waits")).Job;
+    }
+
+    public async Task FailJobAsync(long jobId, string reason)
+    {
+        await using var db = Open();
+        await JobOperations.FailAsync(db, jobId, "w:test", reason, Clock);
+    }
+
+    public async Task<long> AuditCountAsync()
+    {
+        await using var db = Open();
+        return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.LongCountAsync(db.Audit);
+    }
+
+    public async Task<List<AuditRow>> AuditSinceAsync(long count)
+    {
+        await using var db = Open();
+        return await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(db.Audit.OrderBy(a => a.Seq).Skip((int)count));
     }
 
     protected override void Dispose(bool disposing)
@@ -283,6 +352,26 @@ internal sealed class ApiClient(HttpClient http, string address) : IDisposable
 
     public Task<HttpResponseMessage> DeleteAsync(string path) => SendAsync(HttpMethod.Delete, path, body: null);
 
+    /// <summary>A change that names the version (or the digest) it was made against.</summary>
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body, string? ifMatch)
+    {
+        var request = new HttpRequestMessage(method, path);
+        if (ifMatch is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", "\"" + ifMatch + "\"");
+        }
+
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body, options: ApiFactory.Json);
+        }
+
+        using (request)
+        {
+            return await SendAsync(request);
+        }
+    }
+
     public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body, bool csrf = true, bool cookie = true)
     {
         using var request = new HttpRequestMessage(method, path);
@@ -350,5 +439,28 @@ internal sealed class FakeFieldStats : Urlog.Api.Endpoints.IFieldStatsSource
         }
 
         return Task.FromResult(Sets.TryGetValue(caseId, out var set) ? set : new Urlog.Query.CaseFieldStats(caseId, null, 0, new Dictionary<string, Urlog.Query.FieldStat>()));
+    }
+}
+
+/// <summary>Disk use per case as a test sets it; a case without a figure is measured as empty.</summary>
+internal sealed class FakeCaseUsage : Urlog.Api.Endpoints.ICaseUsageSource
+{
+    public ConcurrentDictionary<long, Urlog.Core.Lifecycle.CaseUsage> Cases { get; } = new();
+
+    /// <summary>Thrown by every measurement while set: the event store is away.</summary>
+    public Exception? Failure { get; set; }
+
+    public int Asked { get; private set; }
+
+    public Task<(Urlog.Core.Lifecycle.CaseUsage Usage, DateTimeOffset MeasuredAt)?> MeasureAsync(long caseId, CancellationToken cancellationToken)
+    {
+        Asked++;
+        if (Failure is { } failure)
+        {
+            throw failure;
+        }
+
+        var usage = Cases.TryGetValue(caseId, out var known) ? known : new Urlog.Core.Lifecycle.CaseUsage(caseId, "?", CaseState.Active, 0, 0, 0, 0, 0, 0, 0, 0, []);
+        return Task.FromResult<(Urlog.Core.Lifecycle.CaseUsage, DateTimeOffset)?>((usage, new DateTimeOffset(2026, 11, 18, 9, 0, 0, TimeSpan.Zero)));
     }
 }

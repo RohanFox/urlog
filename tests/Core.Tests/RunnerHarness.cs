@@ -535,10 +535,14 @@ internal sealed class RunnerHarness : IAsyncDisposable
         return new JobRunner(Store, Events, Catalog(), options.CacheRoot is null ? options with { CacheRoot = CacheRoot } : options, Disk);
     }
 
-    private SourceCatalog Catalog()
+    /// <summary>Sources a test registers beside the harness's own, as a build that has gained a parser would.</summary>
+    public List<SourceRegistration> ExtraSources { get; } = [];
+
+    public SourceCatalog Catalog()
     {
         var catalog = new SourceCatalog();
         catalog.Add(LogSourceRegistry.Registrations);
+        catalog.Add([.. ExtraSources]);
         catalog.Add([new SourceRegistration(HookedSource.Id, [], () => new HookedSource(ctx => BeforeChunk(ctx)))]);
         catalog.Add([new SourceRegistration(NaiveLineSource.Id, [], () => new NaiveLineSource())]);
         // The fallback id the runner resolves a file without a source to; the numbered-line source stands in for it.

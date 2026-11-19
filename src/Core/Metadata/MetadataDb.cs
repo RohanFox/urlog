@@ -90,6 +90,9 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
             // Hosts are case-scoped: the same name in two cases is two rows, in one case one row (design record).
             e.HasIndex(x => new { x.CaseId, x.Name }).IsUnique();
+            e.Property(x => x.SourceOptions).HasMaxLength(8192);
+            // A plain number, no foreign key: SQLite adds one only by rebuilding the table, and both rows go with their case.
+            e.HasIndex(x => x.MergedIntoId);
         });
 
         modelBuilder.Entity<EvidenceFile>(e =>
@@ -119,6 +122,7 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.Property(x => x.CachePath).HasMaxLength(1024);
             e.Property(x => x.HostRule).HasMaxLength(256);
             e.Property(x => x.UnreadableReason).HasMaxLength(512);
+            e.Property(x => x.DetectionRegistry).HasMaxLength(1024);
             e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Host>().WithMany().HasForeignKey(x => x.HostId).OnDelete(DeleteBehavior.Restrict);
             // NO ACTION, not RESTRICT: the case's cascade deletes parents and members in one statement, and SQLite checks
@@ -148,6 +152,8 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.HasOne<EvidenceFile>().WithMany().HasForeignKey(x => x.FileId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.State, x.CreatedAt });
             e.HasIndex(x => x.FileId);
+            // The jobs of one case by state: the dashboard, the close and the claim's one-job-per-case check.
+            e.HasIndex(x => new { x.CaseId, x.State });
         });
 
         modelBuilder.Entity<CaseTask>(e =>

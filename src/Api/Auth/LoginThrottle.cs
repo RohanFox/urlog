@@ -113,7 +113,10 @@ public sealed class LoginThrottleFilter(LoginThrottle throttle, ILogger<LoginThr
         Log.Throttled(logger, address.ToString(), throttle.Attempts, throttle.Window, decision.RetryAfterSeconds);
         if (decision.FirstRefusal)
         {
-            var submitted = context.Arguments.OfType<LoginRequest>().FirstOrDefault()?.Name ?? string.Empty;
+            // A login names the account in its body; a change of password is made by the session's user.
+            var submitted = context.Arguments.OfType<LoginRequest>().FirstOrDefault()?.Name
+                ?? http.Features.Get<SessionContext>()?.User.Name
+                ?? string.Empty;
             await WriteRowAsync(http, address.ToString(), submitted).ConfigureAwait(false);
         }
 

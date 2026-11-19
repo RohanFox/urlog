@@ -79,6 +79,40 @@ public sealed class MetadataStore : IDbContextFactory<MetadataDb>
         await using var db = CreateDbContext();
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ((AuditChain)Audit).EnsureGenesisAsync(db, cancellationToken).ConfigureAwait(false);
+        await BackfillDetectionRegistryAsync(db, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Files recorded before <c>detection_registry</c> existed get it from their detection record, once. The value
+    /// is a copy of two members of that record, so writing it changes nothing a file's trail states.
+    /// </summary>
+    private static async Task BackfillDetectionRegistryAsync(MetadataDb db, CancellationToken cancellationToken)
+    {
+        if (!await db.Files.AnyAsync(f => f.DetectionRegistry == null && f.Detection != null, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        var byKey = new Dictionary<string, List<long>>(StringComparer.Ordinal);
+        await foreach (var row in db.Files.AsNoTracking().Where(f => f.DetectionRegistry == null && f.Detection != null).Select(f => new { f.Id, f.Detection }).AsAsyncEnumerable().WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            // A record without the two members is from before they were kept: the empty key marks it as read, and stale.
+            var key = Urlog.Core.Detection.DetectionResult.RegistryKeyOfJson(row.Detection) ?? string.Empty;
+            if (!byKey.TryGetValue(key, out var ids))
+            {
+                byKey[key] = ids = [];
+            }
+
+            ids.Add(row.Id);
+        }
+
+        foreach (var (key, ids) in byKey)
+        {
+            foreach (var chunk in ids.Chunk(500))
+            {
+                await db.Files.Where(f => chunk.Contains(f.Id)).ExecuteUpdateAsync(s => s.SetProperty(f => f.DetectionRegistry, key), cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>

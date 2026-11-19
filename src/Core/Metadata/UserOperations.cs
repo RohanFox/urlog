@@ -169,6 +169,46 @@ public static partial class UserOperations
         }
     }
 
+    /// <summary>
+    /// A user's own change of password: stores the new hash, ends every other session of the user and writes
+    /// <c>user_password_change</c>. The caller has verified the current password against <paramref name="verifiedHash"/>;
+    /// the change is refused when the stored hash is no longer that one, so a reset that came in between is not undone.
+    /// Neither password and neither hash is in the row.
+    /// </summary>
+    /// <returns>The number of other sessions that were ended.</returns>
+    /// <exception cref="UserNotFoundException">No such user.</exception>
+    /// <exception cref="StaleWriteException">The stored hash is not the one that was verified.</exception>
+    public static async Task<int> ChangeOwnPasswordAsync(MetadataDb db, IAuditWriter audit, AuditActor actor, long userId, string verifiedHash, string passwordHash, string keepSessionId, DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keepSessionId);
+        try
+        {
+            await using var transaction = await AuditChain.BeginTransactionAsync(db, cancellationToken).ConfigureAwait(false);
+            var user = await LoadAsync(db, userId, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(user.PasswordHash, verifiedHash, StringComparison.Ordinal))
+            {
+                throw new StaleWriteException("the password of this account was changed while this request ran; log in again and repeat the change");
+            }
+
+            user.PasswordHash = passwordHash;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var sessions = await SessionOperations.DeleteOthersAsync(db, userId, keepSessionId, cancellationToken).ConfigureAwait(false);
+            var details = new Dictionary<string, object?> { ["sessions_ended"] = sessions, ["session"] = keepSessionId[..Math.Min(12, keepSessionId.Length)] };
+            await audit.AppendAsync(db, AuditEntry.ForUser(actor.Name, actor.UserId, AuditActions.UserPasswordChange, user, details), cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return sessions;
+        }
+        catch
+        {
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
     /// <summary>The tracked row, reloaded under the write lock.</summary>
     internal static async Task<User> LoadAsync(MetadataDb db, long userId, CancellationToken cancellationToken)
     {

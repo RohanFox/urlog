@@ -410,6 +410,11 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("detection");
 
+                    b.Property<string>("DetectionRegistry")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detection_registry");
+
                     b.Property<string>("Encoding")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -484,6 +489,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("parse_generation");
 
+                    b.Property<int?>("ParsedSettingsVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("parsed_settings_version");
+
                     b.Property<DateTime>("ReceivedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("received_at");
@@ -503,6 +512,10 @@ namespace Urlog.Core.Metadata.Migrations
                     b.Property<string>("SeenPaths")
                         .HasColumnType("TEXT")
                         .HasColumnName("seen_paths");
+
+                    b.Property<int>("SettingsVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("settings_version");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -653,11 +666,20 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<long?>("MergedIntoId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("merged_into_id");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(253)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
+
+                    b.Property<string>("SourceOptions")
+                        .HasMaxLength(8192)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_options");
 
                     b.Property<string>("Timezone")
                         .IsRequired()
@@ -669,8 +691,15 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("timezone_assumed");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_hosts");
+
+                    b.HasIndex("MergedIntoId")
+                        .HasDatabaseName("ix_hosts_merged_into_id");
 
                     b.HasIndex("CaseId", "Name")
                         .IsUnique()
@@ -748,6 +777,10 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("rows");
 
+                    b.Property<int>("SettingsVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("settings_version");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("started_at");
@@ -766,11 +799,11 @@ namespace Urlog.Core.Metadata.Migrations
                     b.HasKey("Id")
                         .HasName("pk_jobs");
 
-                    b.HasIndex("CaseId")
-                        .HasDatabaseName("ix_jobs_case_id");
-
                     b.HasIndex("FileId")
                         .HasDatabaseName("ix_jobs_file_id");
+
+                    b.HasIndex("CaseId", "State")
+                        .HasDatabaseName("ix_jobs_case_id_state");
 
                     b.HasIndex("State", "CreatedAt")
                         .HasDatabaseName("ix_jobs_state_created_at");
