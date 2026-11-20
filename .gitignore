@@ -20,3 +20,6 @@ src/Api/data/
 appsettings.Local.json
 src/Api/wwwroot/
 .local/
+web/src/api/schema.gen.ts
+web/test-results/
+web/playwright-report/

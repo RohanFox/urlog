@@ -3,3 +3,6 @@
 *.gz binary
 *.zst binary
 fixtures/** -text
+*.woff2 binary
+# A licence text is kept byte for byte as its authors published it.
+web/src/fonts/**/*.txt -text

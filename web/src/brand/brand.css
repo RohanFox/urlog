@@ -1,0 +1,211 @@
+/* The logo and its loading animation. Colours come from the tokens: the ink of the page and the brand blue. */
+
+.brand-mark,
+.brand-lockup,
+.brand-loader {
+  display: block;
+  flex-shrink: 0;
+  color: var(--ink);
+  overflow: visible;
+}
+
+.brand-ink {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-linejoin: round;
+}
+
+.brand-diamond {
+  fill: var(--brand);
+  stroke: var(--brand);
+  stroke-linejoin: round;
+}
+
+.brand-word {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-tagline {
+  fill: currentColor;
+}
+
+.brand-lockup {
+  height: var(--logo-hdr);
+  width: auto;
+}
+
+.brand-lockup-full {
+  height: var(--logo-full);
+}
+
+/* Loader. One loop of --t-loader: trace, fill, mark, echo. */
+
+.brand-loader {
+  --loader-a: var(--brand);
+}
+
+.brand-loader-glow {
+  filter: drop-shadow(0 0 var(--loader-glow-near) var(--loader-a)) drop-shadow(0 0 var(--loader-glow-far) color-mix(in srgb, var(--loader-a) 45%, transparent));
+}
+
+.brand-loader-on {
+  --loader-a: currentColor;
+
+  color: var(--onAccent);
+}
+
+.brand-loader-solid {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linejoin: round;
+  animation: loader-solid-1 var(--t-loader) ease-in-out infinite;
+}
+
+.brand-loader-solid-2 {
+  animation-name: loader-solid-2;
+}
+
+.brand-loader-line {
+  fill: none;
+  stroke: var(--loader-a);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1 3;
+  stroke-dashoffset: 0;
+  animation: loader-line-1 var(--t-loader) cubic-bezier(.6, 0, .2, 1) infinite;
+}
+
+.brand-loader-line-2 {
+  animation-name: loader-line-2;
+}
+
+.brand-loader-dot {
+  fill: var(--loader-a);
+  stroke: var(--loader-a);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loader-dot var(--t-loader) ease-in-out infinite;
+}
+
+.brand-loader-ring,
+.brand-loader-echo {
+  fill: none;
+  stroke: var(--loader-a);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.brand-loader-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loader-ring var(--t-loader) ease-out infinite;
+}
+
+.brand-loader-echo {
+  animation: loader-echo var(--t-loader) ease-out infinite;
+}
+
+/* At 16 px the fine parts would be noise. */
+.brand-loader-small .brand-loader-line {
+  stroke-width: 5;
+}
+
+.brand-loader-small .brand-loader-echo,
+.brand-loader-small .brand-loader-ring {
+  display: none;
+}
+
+@keyframes loader-dot {
+  0% { transform: scale(0); }
+  7% { transform: scale(1.25); }
+  11%, 94% { transform: scale(1); }
+  100% { transform: scale(0); }
+}
+
+@keyframes loader-ring {
+  0%, 6% { opacity: 0; transform: scale(1); }
+  9% { opacity: .9; transform: scale(1.1); }
+  20%, 100% { opacity: 0; transform: scale(1.9); }
+}
+
+@keyframes loader-line-2 {
+  0%, 14% { stroke-dashoffset: 1.5; }
+  36%, 86% { stroke-dashoffset: 0; }
+  95%, 100% { stroke-dashoffset: -1.5; }
+}
+
+@keyframes loader-solid-2 {
+  0%, 36% { opacity: 0; }
+  44%, 82% { opacity: 1; }
+  86%, 100% { opacity: 0; }
+}
+
+@keyframes loader-line-1 {
+  0%, 24% { stroke-dashoffset: 1.5; }
+  46%, 82% { stroke-dashoffset: 0; }
+  91%, 100% { stroke-dashoffset: -1.5; }
+}
+
+@keyframes loader-solid-1 {
+  0%, 46% { opacity: 0; }
+  54%, 78% { opacity: 1; }
+  82%, 100% { opacity: 0; }
+}
+
+@keyframes loader-echo {
+  0%, 54% { opacity: 0; transform: translate(0, 0); }
+  57% { opacity: .8; transform: translate(var(--loader-echo-near), 0); }
+  76%, 100% { opacity: 0; transform: translate(var(--loader-echo-far), 0); }
+}
+
+@keyframes boot-word {
+  0%, 100% { opacity: .45; }
+  54%, 80% { opacity: 1; }
+}
+
+/* Reduced motion: the mark stands still, whole, with its diamond. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader-solid,
+  .brand-loader-line,
+  .brand-loader-dot,
+  .brand-loader-ring,
+  .brand-loader-echo,
+  .boot-word {
+    animation: none;
+  }
+
+  .brand-loader-line {
+    display: none;
+  }
+}
+
+/* The whole-page loading screen. It follows the theme, so a light page never flashes dark. */
+
+.boot {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-24);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.boot-word {
+  font-family: var(--data);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--track-wide);
+  padding-left: var(--track-wide);
+  color: var(--muted);
+  animation: boot-word var(--t-loader) ease-in-out infinite;
+}

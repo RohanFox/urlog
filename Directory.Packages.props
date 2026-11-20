@@ -26,6 +26,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <!-- Web upload (src/Api/Uploads): the tus 1.0 protocol; the bytes on disk are the API's own store. MIT. -->
     <PackageVersion Include="tusdotnet" Version="2.12.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
     <!-- Debug logging in the chunk pipeline (src/Core/Pipeline); the same version EF Core brings in. -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
   </ItemGroup>

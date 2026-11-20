@@ -1,0 +1,339 @@
+/* Controls and the blocks every page is made of. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-6);
+  height: var(--ctl);
+  padding: 0 var(--sp-12);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+
+.btn:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.btn:disabled {
+  cursor: default;
+}
+
+.btn[aria-busy='true'] {
+  cursor: progress;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--onAccent);
+  font-weight: var(--fw-semibold);
+}
+
+.btn-primary:hover {
+  background: var(--accentHi);
+  border-color: var(--accentHi);
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn-ghost:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.btn-small {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  font-size: var(--fs-12);
+}
+
+.btn-icon {
+  width: var(--ctl-sm);
+  padding: 0;
+}
+
+.input {
+  height: var(--ctl);
+  padding: 0 var(--sp-10);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r);
+  background: var(--sunken);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--ring-w) var(--ring);
+}
+
+.input-bad {
+  border-color: var(--err);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.field > label {
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+}
+
+.field-error {
+  font-size: var(--fs-12);
+  color: var(--err);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: var(--tagH);
+  padding: 0 var(--sp-6);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r-sm);
+  font-family: var(--data);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag-accent {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.seg {
+  display: flex;
+  flex-shrink: 0;
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.seg button {
+  height: calc(var(--ctl) - var(--mark));
+  padding: 0 var(--sp-10);
+  border: 0;
+  background: var(--surface);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.seg button + button {
+  border-left: var(--hair) solid var(--ctlLine);
+}
+
+.seg button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.seg button[aria-pressed='true'] {
+  background: var(--accentBg);
+  color: var(--accent);
+}
+
+/* A refusal or a wait is a plain banner. Only a failure takes the error colours. */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border: var(--hair) solid var(--line2);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.banner-error {
+  background: var(--errBg);
+  border-color: var(--err);
+}
+
+.banner-error > .icon {
+  color: var(--err);
+}
+
+.banner-text {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.banner-text p {
+  margin-top: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.section {
+  background: var(--surface);
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r);
+}
+
+.section-pad {
+  padding: var(--sp-16);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  height: var(--headH);
+  padding: 0 var(--sp-12);
+  text-align: left;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+  border-bottom: var(--hair) solid var(--line);
+  white-space: nowrap;
+}
+
+.table td {
+  height: var(--cellH);
+  padding: var(--sp-4) var(--sp-12);
+  border-bottom: var(--hair) solid var(--line);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td {
+  background: var(--hover);
+}
+
+.skel {
+  display: block;
+  height: var(--skel);
+  border-radius: var(--r-xs);
+  background: var(--sunken);
+  animation: skel-pulse var(--t-pulse) ease-in-out infinite;
+}
+
+.skel-w40 { width: 40%; }
+.skel-w50 { width: 50%; }
+.skel-w60 { width: 60%; }
+.skel-w70 { width: 70%; }
+.skel-w80 { width: 80%; }
+
+@keyframes skel-pulse {
+  50% { opacity: .45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation: none;
+  }
+}
+
+.loading-block {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-16);
+  padding: var(--sp-20) var(--sp-16);
+}
+
+.loading-block strong {
+  font-weight: var(--fw-medium);
+}
+
+.empty {
+  padding: var(--sp-40) var(--sp-24);
+  max-width: var(--w-prose);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  align-items: flex-start;
+}
+
+.empty h2 {
+  font-size: var(--fs-16);
+}
+
+.empty ul {
+  margin: 0;
+  padding-left: var(--sp-20);
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--scrim);
+}
+
+.dialog {
+  position: fixed;
+  z-index: 21;
+  top: var(--sp-48);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - var(--sp-32));
+  max-width: var(--w-dialog);
+  background: var(--surface);
+  border: var(--hair) solid var(--line2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: var(--sp-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.dialog-title {
+  flex-grow: 1;
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}

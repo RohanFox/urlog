@@ -61,7 +61,21 @@ if printf '%s\n' "$staged" | grep -Eq '\.(cs|csproj|props|targets|sln|slnx|edito
   rm -f test-logs/step.tmp
 fi
 
-# 4. A touched source plugin runs its own Tokenise benches (short job) against the baseline.
+# 4. The web interface: type check, lint and unit tests, only when this commit touches web/.
+#    The browser tests against a real backend live in tools/pre-merge.ps1.
+if printf '%s
+' "$staged" | grep -q '^web/'; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "pre-commit: npm is required to check web/." >&2; exit 1
+  fi
+  if [ ! -d web/node_modules ]; then
+    echo "pre-commit: web/node_modules is missing: run (cd web && npm ci) once." >&2; exit 1
+  fi
+  echo "pre-commit: web type check, lint, unit tests"
+  (cd web && npm run check --silent)
+fi
+
+# 5. A touched source plugin runs its own Tokenise benches (short job) against the baseline.
 sources=$(printf '%s\n' "$staged" | sed -n 's#^src/Sources/\([A-Za-z0-9]*\)/.*#\1#p' | sort -u)
 if [ -n "$sources" ]; then
   if command -v pwsh >/dev/null 2>&1; then ps=pwsh; elif command -v powershell >/dev/null 2>&1; then ps=powershell; else

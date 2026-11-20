@@ -19,7 +19,8 @@ public static class CaseEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
         var cases = api.MapGroup("/cases");
-        cases.MapGet("", ListAsync).WithName("ListCases");
+        // Two shapes behind one route, so the handler's type names neither: the description takes the visible list.
+        cases.MapGet("", ListAsync).Produces<List<CaseSummaryResponse>>().WithName("ListCases");
         cases.MapPost("", CreateAsync).WithName("CreateCase");
 
         var one = cases.MapGroup("/{caseId:long}");

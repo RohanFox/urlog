@@ -31,6 +31,9 @@ public static class ApiHost
     /// <summary>The local settings file when the setting does not name another: beside appsettings.json, never tracked.</summary>
     public const string LocalSettingsFile = "appsettings.Local.json";
 
+    /// <summary>The name of the one description of the routes (<c>web/openapi.json</c>).</summary>
+    public const string RouteDescription = "v1";
+
     public static void ConfigureServices(WebApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -138,6 +141,9 @@ public static class ApiHost
             o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
             o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
         });
+        // The description of the routes, for the client's types. No route serves it: web/openapi.json is written from
+        // it and a test compares the two, so a changed route or record fails the build until the file follows.
+        services.AddOpenApi(RouteDescription);
         services.AddValidation();
         services.AddProblemDetails();
         services.AddExceptionHandler<ApiExceptionHandler>();
@@ -250,7 +256,10 @@ public static class ApiHost
         // The SPA placeholder: web/ builds into wwwroot; until then there is nothing to fall back to.
         if (File.Exists(Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html")))
         {
+            // An address the interface routes itself answers with the page. One under /api names a route of the
+            // API or nothing: answered with the page it would read as a success to a client that asked for data.
             app.MapFallbackToFile("index.html").AllowAnonymous();
+            app.MapFallback("/api/{**rest}", () => TypedResults.Problem(Problems.NotFound("no such route")));
         }
     }
 

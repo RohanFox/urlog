@@ -28,8 +28,11 @@
      in test-logs/pre-merge.log (untracked, overwritten by the next run).
   3. bench/check-regression.ps1 -SelfTest, then the commit-msg hook against accepted and rejected messages,
      then the hygiene check of the pre-commit hook against added lines it must refuse and lines it must pass
-  4. DiskRead, Tokenise*, DetectFormat and Insert* benches, full BenchmarkDotNet job
-  5. bench/check-regression.ps1 in full mode: every baseline entry must be measured and within 10 %
+  4. the web interface (web/): a clean install from the lockfile, type check, lint, unit tests, the licences
+     of its dependencies, then tools/web-e2e.ps1: a production build served by the backend, in a real browser,
+     against a scratch event store that the script starts and removes
+  5. DiskRead, Tokenise*, DetectFormat and Insert* benches, full BenchmarkDotNet job
+  6. bench/check-regression.ps1 in full mode: every baseline entry must be measured and within 10 %
   After recreating the dev database, run one throwaway 1 GiB ingest before this script (bench/README.md,
   "Running"): a fresh ClickHouse volume measured InsertNative 11 % slow and within 1 % once settled.
   There are no skip switches on purpose. If a stage cannot run, the branch is not ready to merge.
@@ -215,6 +218,10 @@ Write-Host ("tests: {0} projects run one after another ({1} unit, then Integrati
 Invoke-Step 'gate self-test'               { & powershell -NoProfile -ExecutionPolicy Bypass -File bench/check-regression.ps1 -SelfTest }
 Invoke-Step 'commit-msg hook self-test'    { Test-CommitMsgHook }
 Invoke-Step 'hygiene check self-test'      { Test-HygieneCheck }
+Invoke-Step 'web: clean install' { Push-Location web; try { npm ci --no-audit --no-fund } finally { Pop-Location } }
+Invoke-Step 'web: type check, lint, unit tests' { Push-Location web; try { npm run check --silent } finally { Pop-Location } }
+Invoke-Step 'web: licences of the dependencies' { Push-Location web; try { npm run licenses --silent } finally { Pop-Location } }
+Invoke-Step 'web: browser tests, real backend, scratch store' { & powershell -NoProfile -ExecutionPolicy Bypass -File tools/web-e2e.ps1 }
 Invoke-Step 'bench: DiskRead + Tokenise* + DetectFormat + Insert* (full job)' {
   if (Test-Path 'bench/BenchmarkDotNet.Artifacts/results') { Remove-Item -Recurse -Force 'bench/BenchmarkDotNet.Artifacts/results' }
   dotnet run -c Release --project bench --no-build -- --filter '*DiskRead*' '*Tokenise*' '*DetectFormat*' '*Insert*'

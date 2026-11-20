@@ -21,7 +21,9 @@ Pre-release. What is in the tree today:
   hash-chained audit log, a chain verifier and verified backups.
 - **API**: an ASP.NET Core host with local accounts, sessions, and case and member endpoints.
 
-Not in the tree yet: the web UI, evidence upload, the other query verbs (`where`, full `stats`, `table`,
+- **Web interface** (`web/`): sign-in, the case list and case creation, in light and dark.
+
+Not in the tree yet: the rest of the web UI (upload, search), evidence upload, the other query verbs (`where`, full `stats`, `table`,
 `rex`, `timechart`), and further sources (EVTX, journald, IIS and others).
 
 ## Requirements
@@ -51,12 +53,25 @@ dotnet run --project src/Api
 It listens on http://127.0.0.1:5080 under `/api/v1`; `src/Api/api.http` has sample requests. The accounts
 and passwords in `compose.dev.yml` are development stubs.
 
+The web interface needs Node 26 or later. In development it runs beside the backend and hands `/api` on to it:
+
+```
+cd web
+npm ci
+npm run dev          # http://localhost:5173
+```
+
+`npm run build` writes the production build to `src/Api/wwwroot`, which the backend then serves at its own
+address. A publish runs it before `dotnet publish`; `dotnet build` never needs Node.
+
 ## Tests and benchmarks
 
 ```
 dotnet test
 dotnet run -c Release --project bench -- --filter '*Nginx*'
 powershell -File tools/pre-merge.ps1
+cd web && npm run check                       # type check, lint, unit tests
+powershell -File tools/web-e2e.ps1            # the interface in a browser, real backend, scratch store
 ```
 
 `dotnet test` includes the integration and security suites, which start ClickHouse through Testcontainers

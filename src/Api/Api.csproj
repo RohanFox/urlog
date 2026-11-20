@@ -3,7 +3,7 @@
        TLS is the reverse proxy's; Kestrel listens on 127.0.0.1:5080 by default (appsettings.json). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- OpenAPI generation is deferred by the design record; api.http is the request list. -->
+    <!-- The description of the routes is built for web/openapi.json and its test (ApiHost) and is never served. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="tusdotnet" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Core/Core.csproj" />

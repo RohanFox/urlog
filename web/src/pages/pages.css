@@ -1,0 +1,141 @@
+/* Page layouts. */
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page-pad {
+  padding: var(--sp-20) var(--sp-24) var(--sp-40);
+  max-width: var(--w-page);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-12) var(--sp-16);
+}
+
+.case-filter {
+  width: var(--w-filter);
+}
+
+.case-cell {
+  max-width: var(--w-name);
+}
+
+.case-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+  min-width: 0;
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-8) var(--sp-24);
+  margin: 0;
+  max-width: var(--w-prose);
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* Sign-in: the form on the left, what this instance is on the right. */
+
+.signin {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, var(--w-form)) minmax(0, 1fr);
+}
+
+.signin-left {
+  padding: var(--sp-32) var(--sp-48);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-32);
+  background: var(--surface);
+  border-right: var(--hair) solid var(--line);
+}
+
+.signin-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+.signin-lead {
+  font-size: var(--fs-14);
+  max-width: var(--w-lead);
+}
+
+.signin-foot {
+  margin-top: auto;
+}
+
+.signin-right {
+  padding: var(--sp-32) var(--sp-48);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--sp-16);
+}
+
+.signin-about {
+  font-size: var(--fs-12);
+  font-weight: var(--fw-medium);
+  color: var(--muted);
+}
+
+/* A whole-page state before or outside the session. */
+
+.standing {
+  min-height: 100vh;
+  padding: var(--sp-48) var(--sp-24);
+  max-width: var(--w-prose);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+}
+
+@media (max-width: 900px) {
+  .signin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .signin-left {
+    border-right: 0;
+    border-bottom: var(--hair) solid var(--line);
+  }
+}
+
+@media (max-width: 720px) {
+  .page-pad {
+    padding: var(--sp-16) var(--sp-12) var(--sp-32);
+  }
+
+  .signin-left,
+  .signin-right {
+    padding: var(--sp-24) var(--sp-16);
+  }
+
+  .case-filter {
+    width: 100%;
+  }
+}

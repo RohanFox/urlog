@@ -45,11 +45,11 @@ One backend language, one analytics store, one metadata store. C# was chosen ove
 | Parsers | C#, `Span<byte>`, `SearchValues<byte>`, vectorised `IndexOf`, `Utf8Parser`, `ArrayPool` | zero per-line allocation |
 | Event store | ClickHouse 26.8 LTS (image pinned to 26.8.36.3), native TCP via `ClickHouse.Driver` 1.5 (`ClickHouseTcpClient`, experimental); HTTP client from the same package as fallback | `text` index GA since 26.2; driver decision in ADR 0002 |
 | Metadata store | SQLite via EF Core, WAL mode | users, cases, hosts, files, jobs, audit; schema kept Postgres-portable |
-| Frontend | React, TypeScript, Vite | built to `wwwroot`, SPA fallback |
+| Frontend | React, TypeScript, Vite | built to `wwwroot`, SPA fallback for every address outside `/api` |
 | Search bar | CodeMirror 6 + Lezer grammar | highlighting, autocomplete, inline errors |
 | Results | TanStack Table + Virtual + Query | fixed-row-height, cursor pagination, ≤10k rows client-side |
 | Charts | uPlot | histogram with brush-zoom; lazy chart module for `stats` |
-| UI primitives | Radix | nothing heavier; dark theme first |
+| UI primitives | Radix | nothing heavier; light and dark from one token file |
 | Transport | SSE | histogram → first page → counts, progressively |
 | Upload | tus 1.0 | creation, termination, checksum extensions |
 | Licence | Apache-2.0 | datasets fetched by script, never vendored |
@@ -838,7 +838,9 @@ Splunk's Search & Reporting core, which is where analysts spend most of their ti
 | Pivot on value | right-click any field value → search it across all hosts in the case |
 | Timezone toggle | UTC / source / local, shown explicitly in the header; "assumed" badge when the source TZ was defaulted |
 
-Results stream as events: `meta` first, then the histogram, the first page and the counts each as soon as it is ready, so the page fills progressively (Query language, The search API). Dark theme first.
+Results stream as events: `meta` first, then the histogram, the first page and the counts each as soon as it is ready, so the page fills progressively (Query language, The search API).
+
+**The web client (`web/`).** Every colour, font, size of type, space and radius is a design token in `web/src/styles/tokens.css`, and a lint rule refuses a literal anywhere else; light and dark are two sets of colour values under the same names. The system's setting decides the theme until the user chooses one, and the choice stays in that browser. The two typefaces (IBM Plex Sans for the interface, JetBrains Mono for data; both SIL Open Font License 1.1) are served by the instance with their licence texts beside them, and the page loads nothing from another host. The logo, the favicon and the loading screen are drawn from one set of geometry constants; with reduced motion the loading mark stands still. The client's types come from `web/openapi.json`, the description of the routes that the host builds from its live route table: no route serves it, a backend test compares the tracked file with what the host builds, and the client's type check then fails wherever a changed route or record was used. A production build goes to the backend's web root and the backend serves it; an address under `/api` that names no route is answered 401 or 404, never with the page. A refusal (a wrong sign-in, a case that is not shared, a role that is too low, a wait the server asks for) is shown as a plain notice in the server's words where it has any; the error colours are for failures. A request answered 401 anywhere ends the session in the browser and returns to sign-in, which leads back to the same address; after a sign-out it leads to the case list.
 
 ## Validation
 
@@ -890,7 +892,7 @@ The alternative considered for the tokeniser budget was parsers and ingest in Ru
 - [ ] Choice of bundled reverse proxy (Caddy vs nginx)
 - [ ] Boss of the SOC licensing check before adding it to the dataset script
 
-**Public API.** the UI and external clients use the same `/api/v1/...` endpoints; no internal-only routes; version prefix from day one. **Deferred:** API tokens, rate limits, NDJSON streaming, `dry_run`, OpenAPI generation, CLI client, webhooks. To be designed before the API is opened to external clients.
+**Public API.** the UI and external clients use the same `/api/v1/...` endpoints; no internal-only routes; version prefix from day one. **Deferred:** API tokens, rate limits, NDJSON streaming, `dry_run`, a served OpenAPI document, CLI client, webhooks. To be designed before the API is opened to external clients.
 
 **Case isolation, confirmed on 26.8.36.3.** See Security, Query path, item 2, and `docs/adr/0001-case-isolation.md`.
 

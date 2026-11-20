@@ -14,6 +14,10 @@
   answers, then runs `urlog migrate --db <MetadataFile>` against it, which creates the schema and gives the new metadata
   file and the new store one identity. It ends by printing the environment that points `urlog` at the pair.
 
+  -Store kept: the same for a second store with its own container (urlog-clickhouse-kept, profile "kept",
+  native port 19001, HTTP port 18124), for an instance that stays up while test runs start and remove the
+  first one. -Down removes the store named by -Store.
+
   -Down: removes the container and what it held. The metadata file is left; with its store gone it pairs with
   nothing, so delete it, or let the next run start from a new file.
 
@@ -25,20 +29,25 @@
 param(
   [string]$MetadataFile,
   [switch]$Down,
+  [ValidateSet('scratch', 'kept')]
+  [string]$Store = 'scratch',
   [string]$Configuration = 'Release'
 )
 $ErrorActionPreference = 'Stop'
 $root = (& git rev-parse --show-toplevel).Trim()
 Set-Location $root
 
-$compose = @('compose', '-f', 'compose.dev.yml', '--profile', 'scratch')
+$compose = @('compose', '-f', 'compose.dev.yml', '--profile', $Store)
+$service = "clickhouse-$Store"
+$container = "urlog-clickhouse-$Store"
 $nativePort = '19000'
 $httpPort = '18123'
+if ($Store -eq 'kept') { $nativePort = '19001'; $httpPort = '18124' }
 
 if ($Down) {
-  & docker @compose rm --stop --force clickhouse-scratch
+  & docker @compose rm --stop --force $service
   if ($LASTEXITCODE -ne 0) { throw "scratch-store: could not remove the container" }
-  Write-Host "scratch-store: urlog-clickhouse-scratch removed with everything it held"
+  Write-Host "scratch-store: $container removed with everything it held"
   exit 0
 }
 
@@ -48,16 +57,16 @@ if (Test-Path -LiteralPath $dbPath) {
   throw "scratch-store: $dbPath exists. A scratch run starts from a new metadata file: an old one carries the identity of a store that is gone."
 }
 
-& docker @compose up -d clickhouse-scratch
+& docker @compose up -d $service
 if ($LASTEXITCODE -ne 0) { throw "scratch-store: could not start the container" }
 
 $healthy = $false
 for ($i = 0; $i -lt 60; $i++) {
-  $state = (& docker inspect --format '{{.State.Health.Status}}' urlog-clickhouse-scratch 2>$null)
+  $state = (& docker inspect --format '{{.State.Health.Status}}' $container 2>$null)
   if ($state -eq 'healthy') { $healthy = $true; break }
   Start-Sleep -Seconds 1
 }
-if (-not $healthy) { throw "scratch-store: urlog-clickhouse-scratch did not become healthy in 60 s" }
+if (-not $healthy) { throw "scratch-store: $container did not become healthy in 60 s" }
 
 # Always built: a binary from before a schema change would create yesterday's schema.
 $cli = Join-Path $root ("src/Cli/bin/{0}/net10.0/urlog.dll" -f $Configuration)
@@ -73,4 +82,4 @@ Write-Host ('  $env:URLOG_DB = "{0}"' -f $dbPath)
 Write-Host ('  $env:URLOG_CH_TCP_PORT = "{0}"' -f $nativePort)
 Write-Host ('  $env:URLOG_CH_HTTP_PORT = "{0}"' -f $httpPort)
 Write-Host "then urlog user create, case create, enqueue, worker and query run against the scratch pair."
-Write-Host "Remove it with: powershell -File tools/scratch-store.ps1 -Down"
+Write-Host "Remove it with: powershell -File tools/scratch-store.ps1 -Store $Store -Down"

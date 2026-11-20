@@ -8,6 +8,7 @@ Requirements: .NET 10 SDK, Docker (the development ClickHouse and the integratio
     dotnet run --project src/Cli -- migrate --db src/Api/data/metadata.db    (once: the schema, and one store identity for the pair)
     dotnet test
     powershell -File tools/pre-merge.ps1          (before a merge: all tests, the benchmarks, the regression gate)
+    cd web && npm ci && npm run check              (the web interface: type check, lint, unit tests; the hook runs it for commits that touch web/)
 
 Commits follow Conventional Commits: `type(scope): subject`, with the scope optional. Types: feat, fix, perf,
 refactor, test, docs, build, ci, style, revert, chore. The subject is imperative, lower case, without a trailing
