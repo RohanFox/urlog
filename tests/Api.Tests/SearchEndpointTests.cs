@@ -288,6 +288,35 @@ public sealed class SearchEndpointTests
         Assert.Equal("bad_cursor", (await ApiClient.ReadAsync<JsonElement>(junk)).GetProperty("code").GetString());
     }
 
+    [Theory]
+    [InlineData("yesterday", null)]
+    [InlineData(null, "-24")]
+    [InlineData("-3x", null)]
+    [InlineData("2026-13-45T00:00:00Z", null)]
+    public async Task ARangeThatIsNotATimeIs400WithTheParsersMessageAndIsAudited(string? from, string? to)
+    {
+        await using var factory = new ApiFactory();
+        var (owner, caseId) = await CaseAsync(factory, events: 3);
+        using var _ = owner;
+        var bad = from ?? to!;
+
+        // The range of a search is part of its address in the interface, so a person can type one by hand.
+        var response = await owner.PostAsync($"/api/v1/cases/{caseId}/search", new { query = "", from, to });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await ApiClient.ReadAsync<JsonElement>(response);
+        Assert.Equal("bad_request", problem.GetProperty("code").GetString());
+        Assert.Contains(bad, problem.GetProperty("title").GetString(), StringComparison.Ordinal);
+        Assert.Empty(factory.Search.Calls);
+
+        var row = Assert.Single(await QueryRowsAsync(factory));
+        Assert.Equal("invalid", row.GetProperty("outcome").GetString());
+
+        // The export reads the same range from its address.
+        var export = await owner.GetAsync($"/api/v1/cases/{caseId}/search/export?format=csv&query=&{(from is null ? "to" : "from")}={Uri.EscapeDataString(bad)}");
+        Assert.Equal(HttpStatusCode.BadRequest, export.StatusCode);
+        Assert.Equal("bad_request", (await ApiClient.ReadAsync<JsonElement>(export)).GetProperty("code").GetString());
+    }
+
     [Fact]
     public async Task AQueryThatDoesNotParseIs400WithTheSpanAndIsAudited()
     {

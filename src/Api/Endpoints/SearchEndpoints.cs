@@ -264,6 +264,20 @@ public static class SearchEndpoints
         }
     }
 
+    // An end of the range comes from the request as text. One that is not a time is the caller's mistake, refused
+    // with the time grammar's own message like any other bad member of the request.
+    private static DateTimeOffset RangeEnd(string text, DateTimeOffset now, TimeZoneInfo zone)
+    {
+        try
+        {
+            return TimeExpr.Parse(text, now, zone, out _);
+        }
+        catch (FormatException e)
+        {
+            throw new ArgumentException(e.Message, e);
+        }
+    }
+
     private static (SearchPlan Plan, string Zone, DateTimeOffset Now) Plan(CaseRecord @case, string text, string? tz, string? from, string? to, Cursor? cursor, TimeProvider clock)
     {
         var zoneId = string.IsNullOrWhiteSpace(tz) ? "UTC" : tz.Trim();
@@ -282,8 +296,8 @@ public static class SearchEndpoints
             // range is then every usable time up to now, which finds nothing unless something was just parsed.
             var span = new CaseSpan(@case.TsMin, @case.TsMax, @case.UndatedRows, @case.FutureRows).DefaultRange
                 ?? (new DateTimeOffset(Urlog.Core.EventTime.Floor, TimeSpan.Zero), now);
-            rangeFrom = string.IsNullOrWhiteSpace(from) ? span.From : TimeExpr.Parse(from, now, zone, out _);
-            rangeTo = string.IsNullOrWhiteSpace(to) ? span.To : TimeExpr.Parse(to, now, zone, out _);
+            rangeFrom = string.IsNullOrWhiteSpace(from) ? span.From : RangeEnd(from, now, zone);
+            rangeTo = string.IsNullOrWhiteSpace(to) ? span.To : RangeEnd(to, now, zone);
             if (rangeTo <= rangeFrom)
             {
                 throw new ArgumentException($"the time range is empty: {Instant(rangeFrom)} to {Instant(rangeTo)}");
