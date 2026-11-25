@@ -12,6 +12,8 @@ type Options<N extends Name> = (Operations[N]['params'] extends undefined ? { pa
     signal?: AbortSignal;
     /** A route that answers 401 as part of its own contract (sign-in): the session is not told. */
     quiet401?: boolean;
+    /** The version of the record this request changes, as the server last gave it: refused when it has moved on. */
+    ifMatch?: number | string;
   };
 
 let csrfToken: string | undefined;
@@ -40,7 +42,7 @@ const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /** Calls a route by its name in the description of the backend's routes. */
 export async function call<N extends Name>(name: N, ...rest: Options<N> extends { params: unknown } | { body: unknown } ? [Options<N>] : [Options<N>?]): Promise<Operations[N]['result']> {
-  const options = (rest[0] ?? {}) as { params?: Record<string, number | string>; body?: unknown; query?: Record<string, string | undefined>; signal?: AbortSignal; quiet401?: boolean };
+  const options = (rest[0] ?? {}) as { params?: Record<string, number | string>; body?: unknown; query?: Record<string, string | undefined>; signal?: AbortSignal; quiet401?: boolean; ifMatch?: number | string };
   const { method, path } = operations[name];
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) {
@@ -48,6 +50,9 @@ export async function call<N extends Name>(name: N, ...rest: Options<N> extends 
   }
   if (!SAFE.has(method) && csrfToken !== undefined) {
     headers['X-CSRF-Token'] = csrfToken;
+  }
+  if (options.ifMatch !== undefined) {
+    headers['If-Match'] = `"${options.ifMatch}"`;
   }
 
   let response: Response;

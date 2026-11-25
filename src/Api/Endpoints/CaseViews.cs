@@ -64,7 +64,7 @@ internal static class CaseViews
         var own = SourceOptionSet.Parse(file.OverrideOptions);
         var effective = SourceOptionSet.Effective(file.OverrideOptions, host?.SourceOptions);
         var from = effective.Keys.ToDictionary(k => k, k => own.ContainsKey(k) ? "file" : "host", StringComparer.Ordinal);
-        var stale = CaseOverview.IsStale(file.DetectedKind, file.DetectedSource, file.OverrideSource, file.DetectionRegistry, rules.RegistryKey);
+        var stale = CaseOverview.IsStale(file.DetectedKind, file.DetectedSource, file.DetectedFormat, file.OverrideSource, file.DetectionRegistry, rules.RegistryKey);
         var applied = !parsed || (file.ParsedSettingsVersion ?? 1) == file.SettingsVersion;
         active.TryGetValue(file.Id, out var job);
         var isLog = file.State is FileState.Received or FileState.Parsed or FileState.Failed && !(file.DetectedKind == FileKind.Container && file.OverrideSource is null);
@@ -81,6 +81,7 @@ internal static class CaseViews
         Flag(flags, "undated", parsed && file.UndatedRows > 0);
         Flag(flags, "future_dated", parsed && file.FutureRows > 0);
         Flag(flags, "detection_stale", stale);
+        Flag(flags, "control_bytes", isLog && file.DetectedControlBytes);
         Flag(flags, "reparse_pending", !applied);
         Flag(flags, "seen_elsewhere", file.SeenPaths is { Length: > 0 });
 
@@ -89,7 +90,7 @@ internal static class CaseViews
             file.Source, file.Uploader, Utc(file.ReceivedAt)!.Value, file.State, file.State == FileState.Quarantined,
             host is null ? null : new FileHostResponse(host.Id, host.Name, file.HostInferred, file.HostRule),
             file.Timezone, new FileYearResponse(file.YearHint, file.YearGiven, file.YearAssumed), file.Encoding, file.Compression,
-            new FileDetectionResponse(file.DetectedKind, file.DetectedSource, file.DetectedConfidence, file.DetectedLayout, stale),
+            new FileDetectionResponse(file.DetectedKind, file.DetectedSource, file.DetectedConfidence, file.DetectedLayout, file.DetectedFormat, stale),
             file.OverrideSource is null && own.Count == 0 ? null : new FileOverrideResponse(file.OverrideSource, own.Count == 0 ? null : own),
             new FileEffectiveResponse(SourceRules.EffectiveSource(file), effective, from),
             parsed ? file.ParseGeneration : 0, parsed ? file.RowCount : 0, parsed ? file.RejectCount : 0,

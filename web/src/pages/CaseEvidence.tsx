@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { ApiError, call } from '../api/http';
@@ -107,6 +107,13 @@ export function CaseEvidence() {
       }
     });
   }, [recorded, caseId, queries]);
+
+  // "This is text": a person names the generic source for a file the detector kept as not a log. The server
+  // records the decision beside what the detector found and queues the parse.
+  const asText = useMutation({
+    mutationFn: (file: FileResponse) => call('SetCaseFileOverride', { params: { caseId, fileId: file.id }, body: { source: 'generic' }, ifMatch: file.version }),
+    onSettled: () => Promise.all([queries.invalidateQueries({ queryKey: ['dashboard', caseId] }), queries.invalidateQueries({ queryKey: ['files', caseId] })]),
+  });
 
   const running = useMemo(() => new Map<number, DashboardJobResponse>((dashboard.data?.ingest.current ?? []).map((job) => [job.file_id, job])), [dashboard.data]);
   const failed = useMemo(() => {
@@ -277,7 +284,22 @@ export function CaseEvidence() {
               </EmptyState>
             ) : (
               <>
-                <FilesTable files={list} running={running} failed={failed} />
+                <FilesTable
+                  files={list}
+                  running={running}
+                  failed={failed}
+                  asText={
+                    mayUpload && active
+                      ? {
+                          run: (file) => {
+                            asText.mutate(file);
+                          },
+                          pending: asText.isPending ? asText.variables.id : undefined,
+                          failed: asText.isError ? { id: asText.variables.id, reason: asText.error instanceof ApiError && !asText.error.offline ? asText.error.message : 'The server did not answer.' } : undefined,
+                        }
+                      : undefined
+                  }
+                />
                 {files.hasNextPage ? (
                   <div className="section-foot">
                     <span className="sub">

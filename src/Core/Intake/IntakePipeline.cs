@@ -223,6 +223,8 @@ public sealed class IntakePipeline
             DetectedSource = detection.SourceId,
             DetectedConfidence = detection.Confidence,
             DetectedLayout = detection.Layout,
+            DetectedFormat = detection.Format,
+            DetectedControlBytes = detection.Kind == Urlog.Core.Detection.FileKind.Log && detection.Flags.Contains(Urlog.Core.Detection.FormatDetector.FlagBinaryBytes),
             Detection = detection.ToJson(),
             DetectionRegistry = detection.RegistryKey,
             FileTime = fileTime,

@@ -175,4 +175,69 @@ describe('the evidence page of a case', () => {
     expect(screen.getByText("state: 'parsd' is not a state")).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Case overview' })).toBeInTheDocument();
   });
+
+  const kept = () => fileRecord({ id: 12, original_name: 'app.log', state: 'artifact', version: 4, detection: { kind: 'artifact', source: null, confidence: 0, layout: null, format: 'unknown-binary', stale: false }, effective: { source: '', options: {}, options_from: {} } });
+  const withKept = (role = 'owner', state = 'active') =>
+    dashboard({
+      case: { id: 7, name: 'payroll portal', state, my_role: role, owner: 'alice', task: null },
+      files: { total: 2, arrived: 2, bytes_arrived: 4096, by_state: { parsed: 1, artifact: 1 }, by_kind: { log: 1, artifact: 1 }, rows: 36, rejects: 2, flags: { control_bytes: 1 } },
+    });
+
+  it('counts the files kept as "not a log", lists each with its reason, and parses one as text by one action', async () => {
+    const server = open({
+      'GET /api/v1/cases/7/dashboard': { status: 200, body: withKept() },
+      [`GET ${FILES}`]: { status: 200, body: { files: [fileRecord({ flags: ['control_bytes'] }), kept()], next_after: null } },
+      'PUT /api/v1/cases/7/files/12/override': { status: 202, body: { changed: true } },
+    });
+    const user = userEvent.setup();
+
+    // The count is in the overview, as a way to those files; a log that holds control bytes is counted beside it.
+    const overview = await screen.findByRole('region', { name: 'Case overview' });
+    expect(within(overview).getByRole('button', { name: 'not a log 1' })).toHaveAttribute('title', 'Show the files that were kept and not parsed, each with its reason');
+    expect(overview).toHaveTextContent('holds control bytes 1');
+
+    const row = (await screen.findByText('app.log')).closest('tr') as HTMLElement;
+    expect(row).toHaveTextContent('Kept, not a log');
+    expect(row).toHaveTextContent('no part of it reads as text');
+    expect((await screen.findByText('access.log')).closest('tr')).toHaveTextContent('holds control bytes');
+
+    await user.click(within(row).getByRole('button', { name: 'Parse app.log as text' }));
+    await vi.waitFor(() => {
+      expect(server.calls('PUT /api/v1/cases/7/files/12/override')).toHaveLength(1);
+    });
+    const sent = server.calls('PUT /api/v1/cases/7/files/12/override')[0];
+    // The generic source, for the version of the record the page was shown.
+    expect(sent?.body).toEqual({ source: 'generic' });
+    expect(sent?.headers['If-Match']).toBe('"4"');
+    expect(sent?.headers['X-CSRF-Token']).toBe('token-1');
+  });
+
+  it('says in the words of the server why a file could not be sent to the parser', async () => {
+    open({
+      'GET /api/v1/cases/7/dashboard': { status: 200, body: withKept() },
+      [`GET ${FILES}`]: { status: 200, body: { files: [kept()], next_after: null } },
+      'PUT /api/v1/cases/7/files/12/override': problem(412, 'stale-write', 'file 12 was changed by someone else: read it again'),
+    });
+    const row = (await screen.findByText('app.log')).closest('tr') as HTMLElement;
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'Parse app.log as text' }));
+    expect(await within(row).findByText('file 12 was changed by someone else: read it again')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['ro', 'active'],
+    ['owner', 'closed'],
+  ])('offers no way to parse a kept file to a %s member of a case that is %s, and still shows the reason', async (role, state) => {
+    open({ 'GET /api/v1/cases/7/dashboard': { status: 200, body: withKept(role, state) }, [`GET ${FILES}`]: { status: 200, body: { files: [kept()], next_after: null } } });
+    const row = (await screen.findByText('app.log')).closest('tr') as HTMLElement;
+    expect(row).toHaveTextContent('no part of it reads as text');
+    expect(within(row).queryByRole('button', { name: /Parse/ })).toBeNull();
+  });
+
+  it('shows the reason of a file with a format of its own by the name of the format', async () => {
+    open({
+      'GET /api/v1/cases/7/dashboard': { status: 200, body: withKept() },
+      [`GET ${FILES}`]: { status: 200, body: { files: [fileRecord({ id: 13, original_name: 'report.pdf', state: 'artifact', detection: { kind: 'artifact', source: null, confidence: 0, layout: null, format: 'pdf', stale: false } })], next_after: null } },
+    });
+    expect((await screen.findByText('report.pdf')).closest('tr')).toHaveTextContent('taken for pdf');
+  });
 });

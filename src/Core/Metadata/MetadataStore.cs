@@ -80,6 +80,60 @@ public sealed class MetadataStore : IDbContextFactory<MetadataDb>
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ((AuditChain)Audit).EnsureGenesisAsync(db, cancellationToken).ConfigureAwait(false);
         await BackfillDetectionRegistryAsync(db, cancellationToken).ConfigureAwait(false);
+        await BackfillDetectedFormatAsync(db, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Files recorded before <c>detected_format</c> and <c>detected_control_bytes</c> existed get both from their
+    /// detection record, once: the format of a file that is not a log, and whether a log's record carries the
+    /// control-bytes flag. Copies of the record, like the registry key; nothing a file's trail states changes.
+    /// </summary>
+    private static async Task BackfillDetectedFormatAsync(MetadataDb db, CancellationToken cancellationToken)
+    {
+        // A file that is not a log always has a format in its record, so a row is read here at most once.
+        var missing = db.Files.Where(f => f.DetectedFormat == null && f.Detection != null
+            && (f.DetectedKind == Urlog.Core.Detection.FileKind.Artifact || f.DetectedKind == Urlog.Core.Detection.FileKind.Unparsed || f.DetectedKind == Urlog.Core.Detection.FileKind.Rejected));
+        if (await missing.AnyAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var byFormat = new Dictionary<string, List<long>>(StringComparer.Ordinal);
+            await foreach (var row in missing.AsNoTracking().Select(f => new { f.Id, f.Detection }).AsAsyncEnumerable().WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                // A record without a format is marked with the empty text, so it is not read again.
+                var format = string.Empty;
+                try
+                {
+                    using var record = System.Text.Json.JsonDocument.Parse(row.Detection!);
+                    if (record.RootElement.TryGetProperty("format", out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        format = value.GetString() ?? string.Empty;
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                }
+
+                if (!byFormat.TryGetValue(format, out var ids))
+                {
+                    byFormat[format] = ids = [];
+                }
+
+                ids.Add(row.Id);
+            }
+
+            foreach (var (format, ids) in byFormat)
+            {
+                foreach (var chunk in ids.Chunk(500))
+                {
+                    await db.Files.Where(f => chunk.Contains(f.Id)).ExecuteUpdateAsync(s => s.SetProperty(f => f.DetectedFormat, format), cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        // The flag of a log is one word in its record; setting the column twice changes nothing.
+        var flag = "\"" + Urlog.Core.Detection.FormatDetector.FlagBinaryBytes + "\"";
+        await db.Files
+            .Where(f => !f.DetectedControlBytes && f.DetectedKind == Urlog.Core.Detection.FileKind.Log && f.Detection != null && f.Detection.Contains(flag))
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.DetectedControlBytes, true), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

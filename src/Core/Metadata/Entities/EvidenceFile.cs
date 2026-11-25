@@ -144,6 +144,15 @@ public sealed class EvidenceFile
     /// </summary>
     public string? DetectionRegistry { get; set; }
 
+    /// <summary>
+    /// What the detector took a file that is not a log for (<c>pdf</c>, <c>unknown-binary</c>, ...), as its record
+    /// says: the reason a person reads beside a file that was kept and not parsed. Null for a log.
+    /// </summary>
+    public string? DetectedFormat { get; set; }
+
+    /// <summary>True when the detector saw control bytes in what it sampled of a file it took for a log.</summary>
+    public bool DetectedControlBytes { get; set; }
+
     public int ParseGeneration { get; set; } = 1;
 
     /// <summary>

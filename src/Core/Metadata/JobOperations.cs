@@ -908,11 +908,13 @@ public static class JobOperations
                 ["layout"] = file.DetectedLayout,
                 ["registry"] = file.DetectionRegistry,
             };
-            var changed = file.DetectedKind != detection.Kind || !string.Equals(file.DetectedSource, detection.SourceId, StringComparison.Ordinal) || !string.Equals(file.DetectedLayout, detection.Layout, StringComparison.Ordinal);
+            var changed = file.DetectedKind != detection.Kind || !string.Equals(file.DetectedSource, detection.SourceId, StringComparison.Ordinal) || !string.Equals(file.DetectedLayout, detection.Layout, StringComparison.Ordinal) || !string.Equals(file.DetectedFormat, detection.Format, StringComparison.Ordinal);
             file.DetectedKind = detection.Kind;
             file.DetectedSource = detection.SourceId;
             file.DetectedConfidence = detection.Confidence;
             file.DetectedLayout = detection.Layout;
+            file.DetectedFormat = detection.Format;
+            file.DetectedControlBytes = detection.Kind == Urlog.Core.Detection.FileKind.Log && detection.Flags.Contains(Urlog.Core.Detection.FormatDetector.FlagBinaryBytes);
             file.Detection = detection.ToJson();
             file.DetectionRegistry = detection.RegistryKey;
             if (detection.Kind == Urlog.Core.Detection.FileKind.Log && file.State == FileState.Artifact)

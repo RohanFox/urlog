@@ -22,24 +22,33 @@ public sealed record DetectionInput(string FileName, long FileLength, IReadOnlyD
 }
 
 /// <summary>
-/// Classifies a file from its first 64 KB, its last 4 KB, its name and its size (design record, "Format detection").
-/// A pure function: no I/O, no clock, the same inputs give the same record. <see cref="DetectionSample"/> reads the
-/// two samples and removes one compression layer before calling it.
+/// Classifies a file from its first 64 KB, its last 4 KB, its name and its size (design record, "Format detection"),
+/// and, when its start does not read as text, from windows further into it. A pure function of what it is handed:
+/// no clock, the same inputs give the same record. <see cref="DetectionSample"/> reads the samples and removes
+/// one compression layer before calling it.
 /// <para>
 /// Order: empty, packet capture, compression, zip and tar, EVTX and the binary journal, artifact signatures, the
 /// encoding, text that is a script or a page by its first line, then every source's score. A top score of 0.8 or
 /// more is a log whatever the file is called. Below that an artifact extension makes it an artifact; 0.5 and above
-/// is a probable log; below 0.5 a sample with binary bytes is an artifact and anything else goes to the generic source.
+/// is a probable log. Below 0.5 the content decides between the generic source and an artifact: control bytes
+/// alone never make a text file "not a log". The file is text when any sampled window reads as text
+/// (<see cref="TextProbe.Read"/>): its start, its end, or a window further in, which are looked at only when the
+/// start does not read as text. A log that holds control bytes anywhere in what was sampled carries the flag
+/// <c>binary_bytes</c>. Someone who controls a file can still shape it to pass or to fail these tests, so a file
+/// kept as "not a log" stays counted, listed with its reason, and one action away from being parsed as text.
 /// </para>
 /// </summary>
 public static class FormatDetector
 {
     /// <summary>Bumped when a rule changes what an existing file would be detected as.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     public const string GenericSourceId = "generic";
 
     public const string EvtxSourceId = "evtx";
+
+    /// <summary>The format of a file that is not a log by its bytes alone: no signature, no name, and no window that reads as text.</summary>
+    public const string UnknownBinary = "unknown-binary";
 
     public const float ConfidentAt = 0.8f;
 
@@ -50,8 +59,6 @@ public static class FormatDetector
     public const string FlagBinaryBytes = "binary_bytes";
 
     public const string FlagDecodeError = "decode_error";
-
-    private const double BinaryShareLimit = 0.05;
 
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
 
@@ -64,7 +71,11 @@ public static class FormatDetector
 
     /// <param name="head">The first 64 KB of the content (after the layers in <see cref="DetectionInput.Containers"/>).</param>
     /// <param name="tail">The last 4 KB of the stored file; empty when a layer was removed or the head covers the file.</param>
-    public static DetectionResult Detect(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, DetectionInput input, IReadOnlyList<ILogSource> sources)
+    /// <param name="further">
+    /// Reads windows further into the content, in file order. Asked for once, and only when no source took the
+    /// file and its start and end do not read as text. Null: there is nothing more to look at.
+    /// </param>
+    public static DetectionResult Detect(ReadOnlySpan<byte> head, ReadOnlySpan<byte> tail, DetectionInput input, IReadOnlyList<ILogSource> sources, Func<IReadOnlyList<byte[]>>? further = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(sources);
@@ -193,10 +204,11 @@ public static class FormatDetector
             return seed with { Kind = FileKind.Artifact, Format = firstLine, Basis = DetectionBasis.Content };
         }
 
-        var nul = false;
-        var control = TextProbe.CountControl(textHead, ref nul) + TextProbe.CountControl(textTail, ref nul);
-        var share = (double)control / (textHead.Length + textTail.Length);
-        var binary = nul || share > BinaryShareLimit;
+        var headReading = TextProbe.Read(textHead);
+        var tailReading = TextProbe.Read(textTail);
+        var share = (double)(headReading.ControlBytes + tailReading.ControlBytes) / (textHead.Length + textTail.Length);
+        // A log a source takes is flagged when what was sampled of it holds any control byte.
+        var binary = headReading.Control || tailReading.Control;
 
         // Every source but the fallback scores the sample.
         var sniff = new SniffContext(input.FileName, Math.Max(input.FileLength, textHead.Length));
@@ -268,12 +280,37 @@ public static class FormatDetector
             return AsLog(seed, best, ConfidenceBand.Probable, seed.Flags, seed.Message, binary, share);
         }
 
-        if (binary)
+        // No source took it. It is text for the generic source when any window of it reads as text: the start,
+        // the end, or, only when neither does, a window further in.
+        var fallback = seed with { Kind = FileKind.Log, SourceId = GenericSourceId, Band = ConfidenceBand.Fallback, LayoutKnown = true, Basis = DetectionBasis.Content };
+        if (headReading.Kind == WindowKind.Text)
         {
-            return seed with { Kind = FileKind.Artifact, Format = "unknown-binary", Basis = DetectionBasis.Content };
+            return binary ? Flagged(fallback, share, null) : fallback;
         }
 
-        return seed with { Kind = FileKind.Log, SourceId = GenericSourceId, Band = ConfidenceBand.Fallback, LayoutKnown = true, Basis = DetectionBasis.Content };
+        if (tailReading.Kind == WindowKind.Text)
+        {
+            return Flagged(fallback, share, "the start of the file does not read as text; its end does");
+        }
+
+        var position = 0;
+        foreach (var window in further?.Invoke() ?? [])
+        {
+            position++;
+            var text = encoding == InputEncoding.Utf8 ? window : Transcode(window, encoding);
+            if (TextProbe.Read(text).Kind == WindowKind.Text)
+            {
+                return Flagged(fallback, share, string.Create(CultureInfo.InvariantCulture, $"the start of the file does not read as text; window {position} further in does"));
+            }
+        }
+
+        return seed with { Kind = FileKind.Artifact, Format = UnknownBinary, Basis = DetectionBasis.Content };
+    }
+
+    private static DetectionResult Flagged(DetectionResult log, double share, string? where)
+    {
+        var message = string.Create(CultureInfo.InvariantCulture, $"holds control bytes ({share * 100:F1} % of the sample)");
+        return log with { Flags = log.Flags.Add(FlagBinaryBytes), Message = Join(Join(log.Message, message), where) };
     }
 
     /// <summary>The compression a chain step names, <see cref="CompressionKind.None"/> for <c>tar</c>, <c>zip</c> or anything else.</summary>
@@ -295,7 +332,7 @@ public static class FormatDetector
         if (binary)
         {
             flags = flags.Add(FlagBinaryBytes);
-            message = Join(message, string.Create(CultureInfo.InvariantCulture, $"contains binary bytes ({share * 100:F1} % of the sample)"));
+            message = Join(message, string.Create(CultureInfo.InvariantCulture, $"holds control bytes ({share * 100:F1} % of the sample)"));
         }
 
         if (!best.LayoutKnown)
@@ -316,7 +353,7 @@ public static class FormatDetector
         };
     }
 
-    private static string Join(string? first, string second) => first is null ? second : first + "; " + second;
+    private static string Join(string? first, string? second) => first is null ? second ?? string.Empty : second is null ? first : first + "; " + second;
 
     /// <summary>
     /// A zip that is a document or a package: by the name of its first entry (OOXML, OpenDocument, Java), or by the

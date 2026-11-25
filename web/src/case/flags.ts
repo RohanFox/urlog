@@ -16,7 +16,30 @@ const NAMES: Record<string, string> = {
   reparse_pending: 're-parse pending',
   seen_elsewhere: 'seen in another case',
   no_stored_histogram: 'no stored timeline',
+  control_bytes: 'holds control bytes',
 };
+
+/** What a file that was kept and not parsed was taken for, in words. A format without words here is shown by its name. */
+const FORMATS: Record<string, string> = {
+  'unknown-binary': 'no part of it reads as text',
+  empty: 'empty',
+  script: 'a script',
+  html: 'a web page',
+  php: 'a PHP script',
+};
+
+/** The reason beside a file that is "not a log". */
+export function formatReason(format: string | null): string {
+  if (format === null || format === '') {
+    return 'no reason on record';
+  }
+  return FORMATS[format] ?? `taken for ${format}`;
+}
+
+/** The states of a file as the overview names them. */
+export function stateName(state: string): string {
+  return state === 'artifact' ? 'not a log' : state.replaceAll('_', ' ');
+}
 
 export function flagName(flag: string): string {
   return NAMES[flag] ?? flag.replaceAll('_', ' ');

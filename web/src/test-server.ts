@@ -118,7 +118,7 @@ export function fileRecord(over: Record<string, unknown> = {}) {
     year: { value: null, given: false, assumed: false },
     encoding: 'utf-8',
     compression: null,
-    detection: { kind: 'log', source: 'nginx', confidence: 0.99, layout: 'combined', stale: false },
+    detection: { kind: 'log', source: 'nginx', confidence: 0.99, layout: 'combined', format: null, stale: false },
     override: null,
     effective: { source: 'nginx', options: {}, options_from: {} },
     parse_generation: 1,

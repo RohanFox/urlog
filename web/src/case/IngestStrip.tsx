@@ -3,7 +3,7 @@ import type { DashboardResponse } from '../api/schema.gen';
 import { bytes, count, number, percent, utcMinute } from '../app/format';
 import { Banner, Tag } from '../ui/controls';
 import { format, futureRange, UNDATED, type SearchUrl } from '../search/urlState';
-import { flagName } from './flags';
+import { flagName, stateName } from './flags';
 import './case.css';
 
 /** A search of the whole case with nothing else chosen: the two counts add their range to it. */
@@ -86,8 +86,8 @@ export function IngestStrip({ dashboard, onFilter }: Props) {
             {count(files.total, 'file', 'files')} · {bytes(files.bytes_arrived)} arrived · {number(files.rows)} rows · {number(files.rejects)} rejected lines
           </span>
           {states.map(([state, n]) => (
-            <button key={state} type="button" className="chip" title={`Show the ${state} files`} onClick={() => { onFilter({ state }); }}>
-              {state.replace('_', ' ')} <span className="num">{number(n)}</span>
+            <button key={state} type="button" className={state === 'artifact' ? 'chip chip-warn' : 'chip'} title={state === 'artifact' ? 'Show the files that were kept and not parsed, each with its reason' : `Show the ${state} files`} onClick={() => { onFilter({ state }); }}>
+              {stateName(state)} <span className="num">{number(n)}</span>
             </button>
           ))}
         </dd>

@@ -3,7 +3,7 @@ import type { DashboardJobResponse, FileResponse, JobResponse } from '../api/sch
 import { bytes, number, percent } from '../app/format';
 import { Button, Tag } from '../ui/controls';
 import { Icon } from '../ui/Icon';
-import { flagName } from './flags';
+import { flagName, formatReason } from './flags';
 import './case.css';
 
 /** States in which something went wrong with the file itself and a person should read why. */
@@ -49,7 +49,7 @@ function Hash({ value, name }: { value: string; name: string }) {
   );
 }
 
-function State({ file, running, failed }: { file: FileResponse; running: DashboardJobResponse | undefined; failed: JobResponse | undefined }) {
+function State({ file, running, failed, asText }: { file: FileResponse; running: DashboardJobResponse | undefined; failed: JobResponse | undefined; asText: AsText | undefined }) {
   if (running !== undefined) {
     const share = percent(running.bytes_read, running.bytes_total);
     return (
@@ -68,13 +68,36 @@ function State({ file, running, failed }: { file: FileResponse; running: Dashboa
       <span>
         {STATE_TEXT[file.state]}
         {file.state === 'failed' && failed?.message != null ? <span className="file-reason">{failed.message}</span> : null}
+        {file.state === 'artifact' ? (
+          <>
+            <span className="file-reason">{formatReason(file.detection.format)}</span>
+            {asText === undefined ? null : (
+              <span className="file-reason">
+                <Button small busy={asText.pending === file.id} disabled={asText.pending !== undefined} aria-label={`Parse ${file.original_name} as text`} onClick={() => { asText.run(file); }}>
+                  Parse as text
+                </Button>
+                {asText.failed?.id === file.id ? <span className="err-text"> {asText.failed.reason}</span> : null}
+              </span>
+            )}
+          </>
+        ) : null}
         {file.reparse === null ? null : <span className="sub"> · {file.reparse.kind} {file.reparse.state}</span>}
       </span>
     </span>
   );
 }
 
+/** The action that sends a file kept as "not a log" to the parser as text: one call, a person's decision. */
+export interface AsText {
+  run: (file: FileResponse) => void;
+  /** The file whose request is on its way. */
+  pending: number | undefined;
+  failed: { id: number; reason: string } | undefined;
+}
+
 interface Props {
+  /** Absent for a reader who may not change the case, and for a case that takes no changes. */
+  asText?: AsText | undefined;
   files: readonly FileResponse[];
   /** The jobs that run, by file. */
   running: ReadonlyMap<number, DashboardJobResponse>;
@@ -83,7 +106,7 @@ interface Props {
 }
 
 /** The evidence files of a case, in the order they were recorded. */
-export function FilesTable({ files, running, failed }: Props) {
+export function FilesTable({ files, running, failed, asText }: Props) {
   return (
     <div className="table-wrap">
       <table className="table">
@@ -128,7 +151,7 @@ export function FilesTable({ files, running, failed }: Props) {
                 <Hash value={file.sha256} name={file.original_name} />
               </td>
               <td>
-                <State file={file} running={running.get(file.id)} failed={failed.get(file.id)} />
+                <State file={file} running={running.get(file.id)} failed={failed.get(file.id)} asText={asText} />
               </td>
               <td className="right num">{number(file.rows)}</td>
               <td className="right num">{number(file.rejects)}</td>

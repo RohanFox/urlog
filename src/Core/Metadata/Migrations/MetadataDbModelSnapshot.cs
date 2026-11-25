@@ -391,6 +391,15 @@ namespace Urlog.Core.Metadata.Migrations
                         .HasColumnType("REAL")
                         .HasColumnName("detected_confidence");
 
+                    b.Property<bool>("DetectedControlBytes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("detected_control_bytes");
+
+                    b.Property<string>("DetectedFormat")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detected_format");
+
                     b.Property<string>("DetectedKind")
                         .HasMaxLength(16)
                         .HasColumnType("TEXT")

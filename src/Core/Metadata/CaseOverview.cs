@@ -59,7 +59,7 @@ public static class CaseOverview
     public static IReadOnlyList<string> FlagNames { get; } =
     [
         "unassigned", "host_inferred", "quarantined", "input_truncated", "spans_dst", "undated", "future_dated",
-        "year_assumed", "detection_stale", "reparse_pending", "no_stored_histogram",
+        "year_assumed", "detection_stale", "reparse_pending", "no_stored_histogram", "control_bytes",
     ];
 
     public static async Task<CaseOverviewData> ReadAsync(MetadataDb db, long caseId, string registryKey, CancellationToken cancellationToken = default)
@@ -68,6 +68,7 @@ public static class CaseOverview
         // One statement over the file records of the case, grouped by what the counts are split by. The store
         // adds up; nothing of a record crosses into this process but the sums of its group.
         var generic = FormatDetector.GenericSourceId;
+        var unknownBinary = FormatDetector.UnknownBinary;
         var groups = await db.Files.AsNoTracking().Where(f => f.CaseId == caseId)
             .GroupBy(f => new { f.HostId, f.State, f.DetectedKind })
             .Select(g => new
@@ -92,7 +93,8 @@ public static class CaseOverview
                 Future = g.Sum(f => f.FutureRows > 0 ? 1 : 0),
                 YearAssumed = g.Sum(f => f.YearAssumed ? 1 : 0),
                 YearAssumedNoOverride = g.Sum(f => f.YearAssumed && f.OverrideSource == null ? 1 : 0),
-                Stale = g.Sum(f => f.OverrideSource == null && (f.DetectionRegistry == null || f.DetectionRegistry != registryKey) && (f.DetectedKind == FileKind.Unparsed || (f.DetectedKind == FileKind.Log && f.DetectedSource == generic)) ? 1 : 0),
+                Stale = g.Sum(f => f.OverrideSource == null && (f.DetectionRegistry == null || f.DetectionRegistry != registryKey) && (f.DetectedKind == FileKind.Unparsed || (f.DetectedKind == FileKind.Log && f.DetectedSource == generic) || (f.DetectedKind == FileKind.Artifact && f.DetectedFormat == unknownBinary)) ? 1 : 0),
+                ControlBytes = g.Sum(f => f.DetectedControlBytes ? 1 : 0),
                 Pending = g.Sum(f => (f.ParsedSettingsVersion ?? 1) != f.SettingsVersion ? 1 : 0),
                 NoHistogram = g.Sum(f => f.HistogramGeneration == null || f.HistogramGeneration != f.ParseGeneration ? 1 : 0),
             })
@@ -157,6 +159,7 @@ public static class CaseOverview
             flags["detection_stale"] += g.Stale;
             flags["reparse_pending"] += parsed ? g.Pending : 0;
             flags["no_stored_histogram"] += parsed ? g.NoHistogram : 0;
+            flags["control_bytes"] += parses ? g.ControlBytes : 0;
         }
 
         var jobs = await db.Jobs.AsNoTracking().Where(j => j.CaseId == caseId).GroupBy(j => j.State).Select(g => new { State = g.Key, Count = g.Count() }).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -196,12 +199,15 @@ public static class CaseOverview
     }
 
     /// <summary>
-    /// True for a file that could reach a parser it has not got: no override, taken for <c>unparsed</c> or sent to
-    /// the fallback source, by a detector that is not this build's.
+    /// True for a file that could reach a parser it has not got: no override, taken for <c>unparsed</c>, sent to
+    /// the fallback source, or kept as an unknown binary (which another build's rule may read as text), by a
+    /// detector that is not this build's.
     /// </summary>
-    public static bool IsStale(FileKind? kind, string? detectedSource, string? overrideSource, string? registry, string registryKey) =>
+    public static bool IsStale(FileKind? kind, string? detectedSource, string? detectedFormat, string? overrideSource, string? registry, string registryKey) =>
         overrideSource is null
-        && (kind == FileKind.Unparsed || (kind == FileKind.Log && string.Equals(detectedSource, FormatDetector.GenericSourceId, StringComparison.Ordinal)))
+        && (kind == FileKind.Unparsed
+            || (kind == FileKind.Log && string.Equals(detectedSource, FormatDetector.GenericSourceId, StringComparison.Ordinal))
+            || (kind == FileKind.Artifact && string.Equals(detectedFormat, FormatDetector.UnknownBinary, StringComparison.Ordinal)))
         && !string.Equals(registry, registryKey, StringComparison.Ordinal);
 
     private static DateTime? Least(DateTime? a, DateTime? b) => a is null ? b : b is null ? a : a < b ? a : b;

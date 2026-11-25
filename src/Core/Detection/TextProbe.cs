@@ -65,19 +65,92 @@ internal static class TextProbe
     }
 
     /// <summary>Counts the bytes of <paramref name="text"/> that are not text; <paramref name="nul"/> is set when one of them is NUL.</summary>
-    public static int CountControl(ReadOnlySpan<byte> text, ref bool nul)
+    /// <summary>A run of this many NUL bytes or more is padding (a crash, a power loss, a preallocated file), not content.</summary>
+    public const int PaddingRun = 16;
+
+    /// <summary>The most control bytes text may hold outside its padding, as a share of what is left.</summary>
+    public const double ControlShareLimit = 0.03;
+
+    /// <summary>Text has a line break at least this often on average, when it holds control bytes at all.</summary>
+    public const int BytesPerLineLimit = 4096;
+
+    /// <summary>The fewest bytes outside padding a window is judged on; a smaller rest says nothing.</summary>
+    public const int LeastRest = 256;
+
+    /// <summary>
+    /// Reads one window of a file as text or not (design record, "Format detection", control bytes). Runs of
+    /// <see cref="PaddingRun"/> or more NUL bytes are taken out first. A window without any control byte is
+    /// text whatever its lines. A window with some is text when, in what is left, they are at most
+    /// <see cref="ControlShareLimit"/> of the bytes and a line break comes at least every
+    /// <see cref="BytesPerLineLimit"/> bytes on average (a window under <see cref="LeastRest"/> bytes needs no
+    /// line break). A window that is padding alone says nothing.
+    /// </summary>
+    public static WindowReading Read(ReadOnlySpan<byte> window)
     {
-        var count = 0;
-        foreach (var b in text)
+        if (window.IsEmpty)
         {
-            if (IsControl(b))
-            {
-                count++;
-                nul |= b == 0;
-            }
+            return new WindowReading(WindowKind.Nothing, false, 0, 0);
         }
 
-        return count;
+        var control = 0;
+        var padding = 0;
+        var restControl = 0;
+        var lines = 0;
+        var i = 0;
+        while (i < window.Length)
+        {
+            var b = window[i];
+            if (b == 0)
+            {
+                var end = i + 1;
+                while (end < window.Length && window[end] == 0)
+                {
+                    end++;
+                }
+
+                var run = end - i;
+                control += run;
+                if (run >= PaddingRun)
+                {
+                    padding += run;
+                }
+                else
+                {
+                    restControl += run;
+                }
+
+                i = end;
+                continue;
+            }
+
+            if (IsControl(b))
+            {
+                control++;
+                restControl++;
+            }
+            else if (b == (byte)'\n')
+            {
+                lines++;
+            }
+
+            i++;
+        }
+
+        var rest = window.Length - padding;
+        if (control == 0)
+        {
+            return new WindowReading(WindowKind.Text, false, 0, rest);
+        }
+
+        if (rest < Math.Min(LeastRest, window.Length / 2))
+        {
+            return new WindowReading(WindowKind.Nothing, true, control, rest);
+        }
+
+        // Lines are asked of anything long enough to have them; a scrap shorter than that is judged on its bytes.
+        var lined = lines > 0 ? rest <= (long)lines * BytesPerLineLimit : window.Length < LeastRest;
+        var text = restControl <= rest * ControlShareLimit && lined;
+        return new WindowReading(text ? WindowKind.Text : WindowKind.NotText, true, control, rest);
     }
 
     /// <summary>
@@ -129,3 +202,19 @@ internal static class TextProbe
         return true;
     }
 }
+
+/// <summary>What a window of a file reads as.</summary>
+internal enum WindowKind
+{
+    /// <summary>Padding alone, or too little outside it to judge.</summary>
+    Nothing,
+
+    Text,
+
+    NotText,
+}
+
+/// <param name="Control">True when the window holds any control byte, padding included.</param>
+/// <param name="ControlBytes">How many, padding included.</param>
+/// <param name="Rest">Bytes outside padding.</param>
+internal readonly record struct WindowReading(WindowKind Kind, bool Control, int ControlBytes, int Rest);

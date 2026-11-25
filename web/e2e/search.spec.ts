@@ -169,6 +169,8 @@ test('a case is filled and its search page shows timeline, events and count', as
   // Kept with the run: which of the hostile files detection took for a log by itself.
   test.info().annotations.push({ type: 'detection', description: JSON.stringify(how) });
   writeFileSync(join(scratch, 'detection.json'), JSON.stringify(how));
+  // A log with a NUL, a bell and escapes in it is a log: nobody has to name its source by hand.
+  expect(how).toEqual({ 'paged.log': 'detected', 'sample.log': 'detected', 'hostile.log': 'detected', 'long-line.log': 'detected', 'many-fields.log': 'detected' });
 
   await page.getByRole('link', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(/\/cases\/\d+\/search$/);

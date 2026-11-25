@@ -321,8 +321,77 @@ internal static class FixtureWriter
             var noise = r.Bytes(600);
             string Plain(DateTime t) => Iso(t, ' ', 3, string.Empty);
 
+            // Logs that hold control bytes: what an attacker can write into a line, and what a crash or a power loss
+            // leaves in a file. No source takes these lines, so the content alone decides, and each stays a log.
+            // They are made from a clock and a random stream of their own, so every older fixture keeps its bytes.
+            var own = new Random(20261125);
+            byte[] OwnLines(int count)
+            {
+                var text = new StringBuilder();
+                var at = new DateTime(2026, 11, 7, 6, 0, 0, DateTimeKind.Utc);
+                for (var i = 0; i < count; i++)
+                {
+                    at = at.AddMilliseconds(137 + (i % 11 * 53));
+                    text.Append(CultureInfo.InvariantCulture, $"{Iso(at, ' ', 3, string.Empty)} INFO  [worker-{i % 6}] job {4000 + i} finished in {i * 7 % 900} ms for tenant t{i % 41}\n");
+                }
+
+                return Encoding.ASCII.GetBytes(text.ToString());
+            }
+
+            byte[] OwnBytes(int count)
+            {
+                var bytes = new byte[count];
+                own.NextBytes(bytes);
+                return bytes;
+            }
+
+            var app = OwnLines(160);
+            byte[] oneNul = [.. app[..900], 0, .. app[900..]];
+            var nulEveryLine = (byte[])app.Clone();
+            var scattered = (byte[])app.Clone();
+            byte[] controls = [0x01, 0x02, 0x07, 0x08, 0x0B, 0x10];
+            for (var i = 0; i < app.Length; i++)
+            {
+                if (app[i] == (byte)'\n' && i + 1 < app.Length)
+                {
+                    nulEveryLine[i + 1] = 0;
+                }
+
+                if (i % 190 == 100)
+                {
+                    scattered[i] = controls[i / 190 % controls.Length];
+                }
+            }
+
+            byte[] nulAfterCrash = [.. app[..6000], .. new byte[4096], .. app[6000..]];
+            byte[] nulTrailing = [.. app, .. new byte[8192]];
+            byte[] afterJunk = [.. OwnBytes(66 << 10), .. OwnLines(120)];
+            var padded = new List<byte>();
+            for (var i = 0; i < 900; i++)
+            {
+                var record = OwnBytes(4);
+                padded.AddRange([(byte)(record[0] | 0x80), (byte)(record[1] | 0x80), (byte)(record[2] | 0x80), 0, 0, 0, 0, 0, (byte)(record[3] | 0x80), 0, 0]);
+            }
+
+            var access = new StringBuilder();
+            for (var i = 0; i < 20; i++)
+            {
+                access.Append(CultureInfo.InvariantCulture, $"198.51.100.{10 + i} - - [07/Nov/2026:06:20:{i:00} +0000] \"GET /shop/item/{i} HTTP/1.1\" 200 {1200 + i} \"-\" \"curl/8.5.0\"\n");
+            }
+
+            var combined = Encoding.ASCII.GetBytes(access.ToString());
+            byte[] nginxBell = [.. combined[..300], 0x07, .. combined[300..]];
+
             return
             [
+                Log("text-with-one-nul.log", oneNul, "generic", "fallback", flags: "binary_bytes"),
+                Log("text-with-a-nul-in-every-line.log", nulEveryLine, "generic", "fallback", flags: "binary_bytes"),
+                Log("text-with-control-bytes-scattered.log", scattered, "generic", "fallback", flags: "binary_bytes"),
+                Log("text-with-a-nul-block-after-a-crash.log", nulAfterCrash, "generic", "fallback", flags: "binary_bytes"),
+                Log("text-with-trailing-nuls.log", nulTrailing, "generic", "fallback", flags: "binary_bytes"),
+                Log("text-after-junk.log", afterJunk, "generic", "fallback", flags: "binary_bytes"),
+                Art("padded-records.dat", [.. padded], "unknown-binary"),
+                Log("nginx-with-a-bell.log", nginxBell, "nginx", layout: "combined", flags: "binary_bytes"),
                 Log("nginx-json-user-agent.log", Text(jsonAgent), "nginx", layout: "combined"),
                 Log("syslog-without-pri.log", Text(SyslogLines(24)), "syslog"),
                 Log("event-viewer-export-utf16.xml", [0xFF, 0xFE, .. Text(xml, "\r\n", encoding: Encoding.Unicode)], "generic", "fallback", encoding: Utf16Le),

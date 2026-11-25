@@ -174,6 +174,21 @@ test('closing the tab with an upload in flight asks first', async ({ page }) => 
   expect(await asked).toBe('beforeunload');
 });
 
+test('a file that is not text is kept with its reason, counted, and parsed as text by one action', async ({ page }) => {
+  await openCase(page);
+  // Bytes without any pattern: no signature, no name that says what it is, and no part that reads as text.
+  await page.getByLabel('Files to add').setInputFiles({ name: 'blob.dat', mimeType: 'application/octet-stream', buffer: randomBytes(8192) });
+  const row = fileRow(page, 'blob.dat');
+  await expect(row).toContainText('Kept, not a log', { timeout: 30_000 });
+  await expect(row).toContainText('no part of it reads as text');
+  await expect(page.getByRole('region', { name: 'Case overview' }).getByRole('button', { name: /^not a log 1$/ })).toBeVisible();
+
+  await row.getByRole('button', { name: 'Parse blob.dat as text' }).click();
+  await expect(row).toContainText('Parsed', { timeout: 60_000 });
+  await expect(row).toContainText('override');
+  await expect(row.getByRole('button', { name: /Parse/ })).toHaveCount(0);
+});
+
 test('a read-only member reads the files and has no way to upload', async ({ page }) => {
   await openCase(page);
   const address = new URL(page.url()).pathname;

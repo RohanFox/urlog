@@ -44,7 +44,7 @@ public sealed record FileHostResponse(long Id, string Name, bool Inferred, strin
 public sealed record FileYearResponse(int? Value, bool Given, bool Assumed);
 
 /// <summary>What the detector took the file for. Never changed by an override; <c>stale</c> when a newer detector could send the file to a parser.</summary>
-public sealed record FileDetectionResponse(FileKind? Kind, string? Source, float? Confidence, string? Layout, bool Stale);
+public sealed record FileDetectionResponse(FileKind? Kind, string? Source, float? Confidence, string? Layout, string? Format, bool Stale);
 
 public sealed record FileOverrideResponse(string? Source, IReadOnlyDictionary<string, string>? Options);
 

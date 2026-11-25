@@ -2916,6 +2916,7 @@
           "source",
           "confidence",
           "layout",
+          "format",
           "stale"
         ],
         "type": "object",
@@ -2946,6 +2947,12 @@
             "format": "float"
           },
           "layout": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "format": {
             "type": [
               "null",
               "string"

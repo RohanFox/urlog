@@ -118,7 +118,7 @@ public sealed class DetectorCorpusTests
         var result = DetectionSample.DetectFile(Path.Combine(CorpusRoot, "adversarial", "syslog-nul-block-in-the-middle.log"), "syslog-nul-block-in-the-middle.log", Sources);
         Assert.Equal("syslog", result.SourceId);
         Assert.InRange(result.BinaryShare, 0.3, 0.6); // 4,096 NUL bytes in a file of about 10 KB
-        Assert.Contains("binary bytes", result.Message, StringComparison.Ordinal);
+        Assert.Contains("control bytes", result.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -382,7 +382,9 @@ public static class FileSettingsOperations
                     return file.DetectedKind == FileKind.Container ? "container" : Names.Of(file.State);
                 }
 
-                if (!(file.DetectedKind == FileKind.Unparsed || (file.DetectedKind == FileKind.Log && string.Equals(file.DetectedSource, FormatDetector.GenericSourceId, StringComparison.Ordinal))))
+                if (!(file.DetectedKind == FileKind.Unparsed
+                    || (file.DetectedKind == FileKind.Log && string.Equals(file.DetectedSource, FormatDetector.GenericSourceId, StringComparison.Ordinal))
+                    || (file.DetectedKind == FileKind.Artifact && string.Equals(file.DetectedFormat, FormatDetector.UnknownBinary, StringComparison.Ordinal))))
                 {
                     return "has_a_parser";
                 }
@@ -449,7 +451,7 @@ public static class FileSettingsOperations
             && (selection.DetectedKind is null || file.DetectedKind == selection.DetectedKind)
             && (selection.DetectedLayout is null || string.Equals(file.DetectedLayout, selection.DetectedLayout, StringComparison.Ordinal))
             && (selection.HostId is null || file.HostId == selection.HostId)
-            && (!selection.StaleDetection || CaseOverview.IsStale(file.DetectedKind, file.DetectedSource, file.OverrideSource, file.DetectionRegistry, rules.RegistryKey));
+            && (!selection.StaleDetection || CaseOverview.IsStale(file.DetectedKind, file.DetectedSource, file.DetectedFormat, file.OverrideSource, file.DetectionRegistry, rules.RegistryKey));
     }
 
     /// <summary>SHA-256 over one line per file, <c>id:settings_version</c>, in id order.</summary>

@@ -653,7 +653,121 @@ public sealed class CaseSettingsTests
         await scene.Store.MigrateAsync(Ct);
         await using var after = scene.Open();
         Assert.Equal(["1:generic,nginx,syslog", string.Empty, null], (await after.Files.AsNoTracking().OrderBy(f => f.Id).Select(f => f.DetectionRegistry).ToListAsync(Ct)).ToArray());
-        Assert.Equal("1:generic,nginx,syslog", scene.Rules.RegistryKey);
+        Assert.Equal("2:generic,nginx,syslog", scene.Rules.RegistryKey);
+    }
+
+    [Fact]
+    public async Task AFileAnOlderDetectorKeptAsAnUnknownBinaryIsStaleAndIsDetectedAgainWhenAsked()
+    {
+        // The older rule kept a text file with one NUL as "not a log". Such a file could reach a parser under this
+        // build's rule, so its record is stale like one of a file that went to the fallback source.
+        await using var scene = await Scene.CreateAsync();
+        await using var db = scene.Open();
+        const string OldRegistry = "1:generic,nginx,syslog";
+        var unknown = await scene.AddAsync(db, "a", "app.log", f =>
+        {
+            f.DetectedKind = FileKind.Artifact;
+            f.DetectedFormat = FormatDetector.UnknownBinary;
+            f.State = FileState.Artifact;
+            f.DetectionRegistry = OldRegistry;
+        });
+        var pdf = await scene.AddAsync(db, "b", "report.pdf", f =>
+        {
+            f.DetectedKind = FileKind.Artifact;
+            f.DetectedFormat = "pdf";
+            f.State = FileState.Artifact;
+            f.DetectionRegistry = OldRegistry;
+        });
+        var unknownNow = await scene.AddAsync(db, "c", "blob.dat", f =>
+        {
+            f.DetectedKind = FileKind.Artifact;
+            f.DetectedFormat = FormatDetector.UnknownBinary;
+            f.State = FileState.Artifact;
+            f.DetectionRegistry = scene.Rules.RegistryKey;
+        });
+
+        Assert.True(CaseOverview.IsStale(FileKind.Artifact, null, FormatDetector.UnknownBinary, null, OldRegistry, scene.Rules.RegistryKey));
+        // A file with a signature or a name of its own is what it is under any rule; one this build looked at is current;
+        // one a person named a source for is theirs.
+        Assert.False(CaseOverview.IsStale(FileKind.Artifact, null, "pdf", null, OldRegistry, scene.Rules.RegistryKey));
+        Assert.False(CaseOverview.IsStale(FileKind.Artifact, null, FormatDetector.UnknownBinary, null, scene.Rules.RegistryKey, scene.Rules.RegistryKey));
+        Assert.False(CaseOverview.IsStale(FileKind.Artifact, null, FormatDetector.UnknownBinary, "generic", OldRegistry, scene.Rules.RegistryKey));
+
+        var overview = await CaseOverview.ReadAsync(db, scene.CaseId, scene.Rules.RegistryKey, Ct);
+        Assert.Equal(1, overview.Flags["detection_stale"]);
+
+        var preview = await FileSettingsOperations.RedetectAsync(db, scene.Audit, scene.Alice, scene.Rules, scene.CaseId, new FileSelection { StaleDetection = true }, false, null, scene.Clock, Ct);
+        Assert.Equal((1, 1), (preview.Matched, preview.Changed));
+        var made = await FileSettingsOperations.RedetectAsync(db, scene.Audit, scene.Alice, scene.Rules, scene.CaseId, new FileSelection { StaleDetection = true }, true, preview.Digest, scene.Clock, Ct);
+        Assert.Equal(1, made.Jobs);
+        Assert.Equal(unknown.Id, (await db.Jobs.AsNoTracking().SingleAsync(j => j.State == JobState.Queued, Ct)).FileId);
+
+        // The runner's write: this build's detector reads the file as text with control bytes in it.
+        var claimed = (await JobOperations.ClaimAsync(db, "w:1", Now, Ct))!;
+        var detection = new DetectionResult { Kind = FileKind.Log, SourceId = "generic", Band = ConfidenceBand.Fallback, Flags = [FormatDetector.FlagBinaryBytes], RegisteredSources = ["generic", "nginx", "syslog"] };
+        var after = await JobOperations.RecordRedetectAsync(db, scene.Audit, claimed.Job.Id, "w:1", detection, Ct);
+        Assert.Equal((FileKind.Log, "generic", null, true, FileState.Received), (after.DetectedKind!.Value, after.DetectedSource, after.DetectedFormat, after.DetectedControlBytes, after.State));
+        _ = (pdf, unknownNow);
+    }
+
+    [Fact]
+    public async Task MigrateGivesOlderRecordsTheirFormatAndTheControlBytesFlagFromTheirRecord()
+    {
+        await using var scene = await Scene.CreateAsync();
+        await using (var db = scene.Open())
+        {
+            await scene.AddAsync(db, "a", "blob.dat", f =>
+            {
+                f.DetectedKind = FileKind.Artifact;
+                f.Detection = """{"kind":"artifact","format":"unknown-binary","flags":[]}""";
+            });
+            await scene.AddAsync(db, "b", "report.pdf", f =>
+            {
+                f.DetectedKind = FileKind.Artifact;
+                f.Detection = """{"kind":"artifact","format":"pdf","flags":[]}""";
+            });
+            await scene.AddAsync(db, "c", "messages", f =>
+            {
+                f.DetectedKind = FileKind.Log;
+                f.Detection = """{"kind":"log","source_id":"syslog","flags":["binary_bytes"]}""";
+            });
+            await scene.AddAsync(db, "d", "access.log", f =>
+            {
+                f.DetectedKind = FileKind.Log;
+                f.Detection = """{"kind":"log","source_id":"nginx","flags":["extension_mismatch"]}""";
+            });
+            await scene.AddAsync(db, "e", "old.bin", f =>
+            {
+                f.DetectedKind = FileKind.Artifact;
+                f.Detection = """{"kind":"artifact"}""";
+            });
+        }
+
+        await scene.Store.MigrateAsync(Ct);
+        await scene.Store.MigrateAsync(Ct); // and again: nothing is read or written twice
+        await using var after = scene.Open();
+        var rows = await after.Files.AsNoTracking().OrderBy(f => f.Id).Select(f => new { f.DetectedFormat, f.DetectedControlBytes }).ToListAsync(Ct);
+        Assert.Equal(["unknown-binary", "pdf", null, null, string.Empty], rows.Select(r => r.DetectedFormat).ToArray());
+        Assert.Equal([false, false, true, false, false], rows.Select(r => r.DetectedControlBytes).ToArray());
+    }
+
+    [Fact]
+    public async Task TheOverviewCountsTheLogsThatHoldControlBytes()
+    {
+        await using var scene = await Scene.CreateAsync();
+        await using var db = scene.Open();
+        await scene.ParsedAsync(db, "a", "app.log", source: "generic", edit: f => f.DetectedControlBytes = true);
+        await scene.ParsedAsync(db, "b", "clean.log", source: "generic");
+        await scene.AddAsync(db, "c", "blob.dat", f =>
+        {
+            f.DetectedKind = FileKind.Artifact;
+            f.DetectedFormat = FormatDetector.UnknownBinary;
+            f.State = FileState.Artifact;
+        });
+
+        var overview = await CaseOverview.ReadAsync(db, scene.CaseId, scene.Rules.RegistryKey, Ct);
+        Assert.Equal(1, overview.Flags["control_bytes"]);
+        Assert.Contains("control_bytes", CaseOverview.FlagNames);
     }
 
     /// <summary>Writes the row, then fails: what a crash between the append and the commit looks like to the caller.</summary>

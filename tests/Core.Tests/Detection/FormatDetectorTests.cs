@@ -102,19 +102,29 @@ public sealed class FormatDetectorTests
         Assert.Equal(ConfidenceBand.Probable, log.Band);
         Assert.Equal([FormatDetector.FlagBinaryBytes], log.Flags);
         Assert.Equal(200.0 / withNul.Length, log.BinaryShare, 6);
-        Assert.StartsWith("contains binary bytes (7.", log.Message, StringComparison.Ordinal);
+        Assert.StartsWith("holds control bytes (7.", log.Message, StringComparison.Ordinal);
 
-        var artifact = Detect(withNul, "app.log", new Scored("alpha", 0.49f));
+        // Under 0.5 no source takes the file, and the content decides: text around a block of NULs is a log.
+        var fallback = Detect(withNul, "app.log", new Scored("alpha", 0.49f));
+        Assert.Equal((FileKind.Log, FormatDetector.GenericSourceId), (fallback.Kind, fallback.SourceId));
+        Assert.Equal([FormatDetector.FlagBinaryBytes], fallback.Flags);
+
+        // Bytes that are not text are an artifact.
+        var noise = new byte[4096];
+        new Random(5).NextBytes(noise);
+        var artifact = Detect(noise, "app.log", new Scored("alpha", 0.49f));
         Assert.Equal(FileKind.Artifact, artifact.Kind);
         Assert.Equal("unknown-binary", artifact.Format);
         Assert.Equal(DetectionBasis.Content, artifact.Basis);
     }
 
     [Fact]
-    public void OneNulIsBinaryAndSoIsMoreThanFivePercentOfControlBytes()
+    public void OneNulIsNotBinaryAndMoreThanThreePercentOfControlBytesIs()
     {
         byte[] oneNul = [.. Text, 0];
-        Assert.Equal("unknown-binary", Detect(oneNul, "x").Format);
+        var kept = Detect(oneNul, "x");
+        Assert.Equal((FileKind.Log, FormatDetector.GenericSourceId), (kept.Kind, kept.SourceId));
+        Assert.Equal([FormatDetector.FlagBinaryBytes], kept.Flags);
 
         var controls = (byte[])Text.Clone();
         for (var i = 0; i < controls.Length; i += 16)
@@ -130,10 +140,14 @@ public sealed class FormatDetectorTests
             few[i] = 0x01; // 2.5 %
         }
 
-        Assert.Equal(FormatDetector.GenericSourceId, Detect(few, "x").SourceId);
+        var log = Detect(few, "x");
+        Assert.Equal((FileKind.Log, FormatDetector.GenericSourceId), (log.Kind, log.SourceId));
+        Assert.Equal([FormatDetector.FlagBinaryBytes], log.Flags);
 
         // Tab, CR, form feed, escape and bytes above 0x7F are text.
-        Assert.Equal(FormatDetector.GenericSourceId, Detect("col\tcol\r\n\f\u001b[0m caf\u00e9 \u00ff\n"u8.ToArray(), "x").SourceId);
+        var plain = Detect("col\tcol\r\n\f\u001b[0m caf\u00e9 \u00ff\n"u8.ToArray(), "x");
+        Assert.Equal(FormatDetector.GenericSourceId, plain.SourceId);
+        Assert.Empty(plain.Flags);
     }
 
     [Fact]
@@ -379,7 +393,7 @@ public sealed class FormatDetectorTests
         Assert.Equal(["extension_mismatch", "binary_bytes"], root.GetProperty("flags").EnumerateArray().Select(e => e.GetString()));
         Assert.Equal("php", root.GetProperty("mismatched_extension").GetString());
         Assert.True(root.GetProperty("binary_share").GetDouble() > 0);
-        Assert.Contains("binary bytes", root.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Contains("control bytes", root.GetProperty("message").GetString(), StringComparison.Ordinal);
     }
 
     [Theory]

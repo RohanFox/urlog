@@ -123,6 +123,7 @@ public sealed class MetadataDb(DbContextOptions<MetadataDb> options) : DbContext
             e.Property(x => x.HostRule).HasMaxLength(256);
             e.Property(x => x.UnreadableReason).HasMaxLength(512);
             e.Property(x => x.DetectionRegistry).HasMaxLength(1024);
+            e.Property(x => x.DetectedFormat).HasMaxLength(64);
             e.HasOne<CaseRecord>().WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Host>().WithMany().HasForeignKey(x => x.HostId).OnDelete(DeleteBehavior.Restrict);
             // NO ACTION, not RESTRICT: the case's cascade deletes parents and members in one statement, and SQLite checks
