@@ -14,8 +14,10 @@ export const accounts = {
 };
 
 export async function signIn(page: Page, account: { name: string; password: string }): Promise<void> {
-  await page.getByLabel('Name').fill(account.name);
-  await page.getByLabel('Password').fill(account.password);
+  // Exact labels, and only once the sign-in page is up: the page before it may have a field with a longer label.
+  await page.getByRole('heading', { name: 'Sign in' }).waitFor();
+  await page.getByLabel('Name', { exact: true }).fill(account.name);
+  await page.getByLabel('Password', { exact: true }).fill(account.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 

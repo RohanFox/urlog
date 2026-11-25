@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setCsrfToken } from '../api/http';
-import { fakeServer, problem, session } from '../test-server';
+import { dashboard, fakeServer, fileRecord, problem, session } from '../test-server';
 import { App } from './App';
 import { safeNext } from './session';
 
@@ -97,7 +97,7 @@ describe('a session that ends', () => {
   it('sends any page to sign-in on a 401 and brings the user back to the same address', async () => {
     const server = fakeServer({
       'GET /api/v1/auth/me': { status: 200, body: session },
-      'GET /api/v1/cases/7': NOT_LOGGED_IN,
+      'GET /api/v1/cases/7/dashboard': NOT_LOGGED_IN,
       'POST /api/v1/auth/login': { status: 200, body: { ...session, csrf_token: 'token-2' } },
     });
     const user = userEvent.setup();
@@ -106,7 +106,8 @@ describe('a session that ends', () => {
     expect(await screen.findByText('Your session ended')).toBeInTheDocument();
     expect(`${window.location.pathname}${window.location.search}`).toBe('/login?next=%2Fcases%2F7');
 
-    server.set('GET /api/v1/cases/7', { status: 200, body: { ...incident, closed_at: null, archived_at: null, members: 1, my_role: 'owner', span: { from: null, to: null, undated_events: 0, future_events: 0 }, statistics: { state: 'none', pending: false, computed_at: null, reason: null }, task: null } });
+    server.set('GET /api/v1/cases/7/dashboard', { status: 200, body: dashboard() });
+    server.set('GET /api/v1/cases/7/files', { status: 200, body: { files: [fileRecord()], next_after: null } });
     await user.type(screen.getByLabelText('Name'), 'alice');
     await user.type(screen.getByLabelText('Password'), 'correct horse battery');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
@@ -244,7 +245,7 @@ describe('the case list', () => {
 
 describe('a case', () => {
   it('answers a case that is not shared and one that does not exist with the same page', async () => {
-    fakeServer({ 'GET /api/v1/auth/me': { status: 200, body: session }, 'GET /api/v1/cases/99': problem(404, 'not-found', 'no such case') });
+    fakeServer({ 'GET /api/v1/auth/me': { status: 200, body: session }, 'GET /api/v1/cases/99/dashboard': problem(404, 'not-found', 'no such case') });
     open('/cases/99');
     expect(await screen.findByRole('heading', { name: 'No such case' })).toBeInTheDocument();
     expect(screen.getByText(/or it is not shared with you/)).toBeInTheDocument();

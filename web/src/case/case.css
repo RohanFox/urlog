@@ -1,0 +1,165 @@
+/* The overview of a case and its file list. */
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.strip-facts {
+  max-width: none;
+}
+
+.strip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-6);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-6);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--hover);
+}
+
+.chip-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.warn-text {
+  color: var(--warn);
+}
+
+.err-text {
+  color: var(--err);
+}
+
+.right {
+  text-align: right;
+}
+
+.table th.right {
+  text-align: right;
+}
+
+.jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+.job {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+}
+
+.meter {
+  appearance: none;
+  width: var(--w-meter);
+  height: var(--sp-4);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--line);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.meter::-webkit-progress-bar {
+  background: var(--line);
+}
+
+.meter::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.meter::-moz-progress-bar {
+  background: var(--accent);
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.section-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-16);
+  border-top: var(--hair) solid var(--line);
+}
+
+.files-q {
+  width: var(--w-filter);
+}
+
+.file-name {
+  max-width: var(--w-file);
+}
+
+.file-name .ellipsis {
+  display: block;
+}
+
+.file-state {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+}
+
+.file-reason {
+  display: block;
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.file-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.hash {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  white-space: nowrap;
+}
+
+/* A file that wants a person to look carries a stripe at the start of its row. */
+.row-err td:first-child {
+  border-left: var(--ring-w) solid var(--err);
+}
+
+.row-warn td:first-child {
+  border-left: var(--ring-w) solid var(--warn);
+}
+
+@media (max-width: 720px) {
+  .files-q {
+    width: 100%;
+  }
+}

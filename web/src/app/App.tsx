@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router';
 import { ApiError } from '../api/http';
 import { BootScreen } from '../brand/Logo';
-import { CaseHome } from '../pages/CaseHome';
+import { CaseEvidence } from '../pages/CaseEvidence';
 import { Cases } from '../pages/Cases';
 import { Login } from '../pages/Login';
 import { NotFound, NotReady, Unreachable } from '../pages/Standing';
@@ -68,7 +68,7 @@ function Gate() {
       <Route element={<SignedIn />}>
         <Route path="/" element={<Navigate to="/cases" replace />} />
         <Route path="/cases" element={<Cases />} />
-        <Route path="/cases/:caseId" element={<CaseHome />} />
+        <Route path="/cases/:caseId" element={<CaseEvidence />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

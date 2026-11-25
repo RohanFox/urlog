@@ -9,6 +9,11 @@ const PATHS = {
   folder: 'M3.5 6.5h6l2 2.5h9v10.5h-17Z',
   down: 'M6.5 9.5 12 15l5.5-5.5',
   out: 'M14 4.5h5.5v15H14M10.5 8 14.5 12l-4 4M14.5 12h-10',
+  upload: 'M12 16.5V5M7.5 9.5 12 5l4.5 4.5M4.5 19.5h15',
+  file: 'M6.5 3.5h7.5l4 4v13h-11.5ZM14 3.5v4h4',
+  pause: 'M9 5.5v13M15 5.5v13',
+  play: 'M8 5.5v13l10.5-6.5Z',
+  copy: 'M9 9h10.5v10.5H9ZM5.5 15h-1V4.5H15v1',
 } as const;
 
 export type IconName = keyof typeof PATHS;

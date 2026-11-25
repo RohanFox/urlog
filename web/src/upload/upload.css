@@ -1,0 +1,85 @@
+/* Where files enter a case, and the uploads of this tab. */
+
+.drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-12) var(--sp-16);
+  padding: var(--sp-16);
+  border: var(--hair) dashed var(--ctlLine);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.drop > .icon {
+  color: var(--accent);
+}
+
+.drop-first {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--sp-32) var(--sp-24);
+}
+
+.drop-over {
+  border-color: var(--accent);
+  background: var(--accentBg);
+}
+
+.drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: var(--w-prose);
+}
+
+.drop-refused {
+  color: var(--warn);
+}
+
+.uploads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-10) var(--sp-16);
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.upload:last-child {
+  border-bottom: 0;
+}
+
+.upload-bad {
+  border-left: var(--ring-w) solid var(--err);
+}
+
+.upload-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-6) var(--sp-12);
+  min-width: 0;
+}
+
+.upload .meter {
+  width: 100%;
+}
+
+.upload-state {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--fs-12);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.upload-bad .upload-state {
+  color: var(--err);
+}

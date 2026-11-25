@@ -47,8 +47,8 @@ test('sign in, create a case, find it after a reload, sign out', async ({ page }
 
   await page.getByRole('link', { name: caseName }).click();
   await expect(page.getByRole('heading', { name: caseName })).toBeVisible();
-  await expect(page.getByText('Owner', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('No events with a usable time yet')).toBeVisible();
+  await expect(page.getByText('your role: Owner')).toBeVisible();
+  await expect(page.getByText('Add the first evidence files')).toBeVisible();
 
   await page.getByRole('button', { name: /Signed in as/ }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
@@ -71,7 +71,8 @@ test('a user without a share sees no such case and no case in their list', async
   // Signing out on a case's page leaves no trace of its address for the next person.
   await expect(page).toHaveURL(/\/login$/);
   await signIn(page, accounts.other());
-  await expect(page.getByRole('heading', { name: 'Start your first case' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Cases', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New case' }).first()).toBeVisible();
   await expect(page.getByText(caseName)).toHaveCount(0);
 
   await page.goto(address);

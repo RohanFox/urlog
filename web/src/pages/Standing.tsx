@@ -67,3 +67,21 @@ export function NotFound() {
     </main>
   );
 }
+
+/** One page for a case that does not exist and a case that is not shared with the caller: the server answers both alike. */
+export function NoSuchCase() {
+  return (
+    <main className="page">
+      <div className="page-pad">
+        <section className="section">
+          <EmptyState title="No such case">
+            <p className="muted">There is no case at this address, or it is not shared with you. The owner of a case adds people to it.</p>
+            <Link className="btn" to="/cases">
+              All cases
+            </Link>
+          </EmptyState>
+        </section>
+      </div>
+    </main>
+  );
+}

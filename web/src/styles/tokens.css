@@ -79,6 +79,7 @@
   --r-sm: 4px;
   --r-lg: 8px;
   --r-round: 50%;
+  --r-pill: 999px;
   --rowH: 30px;
   --ctl: 32px;
   --ctl-sm: 24px;
@@ -136,6 +137,8 @@
   --w-dialog: 560px;
   --w-name: 520px;
   --w-menu: 220px;
+  --w-meter: 80px;
+  --w-file: 320px;
 
   /* Motion. */
   --t-fast: 100ms;

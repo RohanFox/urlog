@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, call, setCsrfToken, setUnauthorizedHandler } from '../api/http';
 import type { UserResponse } from '../api/schema.gen';
+import { uploads } from '../upload/queue';
 
 /** What the app knows about who is using it. */
 export type SessionState =
@@ -93,6 +94,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             throw error;
           }
         }
+        // The next person on this browser inherits nothing: not the list of uploads, not their names.
+        uploads.forget();
         end(false, true);
       },
       retry() {

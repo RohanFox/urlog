@@ -1,11 +1,12 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router';
 import { Lockup } from '../brand/Logo';
 import { Banner } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { useSession, useUser } from './session';
 import { useTheme, type ThemeChoice } from './theme';
+import { uploads } from '../upload/queue';
 import './shell.css';
 
 const THEMES: ReadonlyArray<{ key: ThemeChoice; label: string }> = [
@@ -72,6 +73,20 @@ function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
 /** The frame of every page behind the session: the header with the logo, the places and the user. */
 export function Shell({ children }: { children: ReactNode }) {
   const [signOutFailed, setSignOutFailed] = useState(false);
+
+  // Closing or reloading the tab while bytes have still to reach the server asks first. The browser words the
+  // question itself; a page may only say that it has one.
+  useEffect(() => {
+    const ask = (event: BeforeUnloadEvent) => {
+      if (uploads.unsafeToLeave()) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', ask);
+    return () => {
+      window.removeEventListener('beforeunload', ask);
+    };
+  }, []);
   return (
     <div className="app">
       <header className="header">

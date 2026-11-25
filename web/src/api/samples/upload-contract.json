@@ -1,0 +1,6 @@
+{
+  "state_header": "Urlog-Upload-State",
+  "pending_problem_type": "https://urlog/problems/upload-pending",
+  "pending_status": 503,
+  "states": ["receiving", "finalising", "done", "duplicate", "rejected", "failed"]
+}

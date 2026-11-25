@@ -80,6 +80,66 @@ export async function call<N extends Name>(name: N, ...rest: Options<N> extends 
   return (await response.json()) as Operations[N]['result'];
 }
 
+export interface RawAnswer {
+  status: number;
+  header: (name: string) => string | null;
+  text: string;
+}
+
+export interface RawRequest {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  /** Bytes to send. With a body the request reports how many of them have left. */
+  body?: Blob;
+  onSent?: (bytes: number) => void;
+  /** Every byte of the body has left; the answer has not arrived yet. */
+  onAllSent?: () => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * A request outside the description of the routes (the upload protocol), with the same two rules as every
+ * other: the CSRF token on a request that changes something, and the session told about a 401. It answers
+ * with whatever status arrived and throws only when no answer did. A body goes through XMLHttpRequest,
+ * the one transport that reports upload progress in every browser.
+ */
+export function raw(request: RawRequest): Promise<RawAnswer> {
+  const headers: Record<string, string> = { ...request.headers };
+  if (!SAFE.has(request.method) && csrfToken !== undefined) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  return new Promise<RawAnswer>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(request.method, request.url);
+    for (const [name, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.onprogress = (event) => request.onSent?.(event.loaded);
+    xhr.upload.onload = () => request.onAllSent?.();
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        onUnauthorized?.();
+      }
+      resolve({ status: xhr.status, header: (name) => xhr.getResponseHeader(name), text: xhr.responseText });
+    };
+    xhr.onerror = () => {
+      reject(offline());
+    };
+    xhr.onabort = () => {
+      reject(new DOMException('aborted', 'AbortError'));
+    };
+    if (request.signal?.aborted === true) {
+      reject(new DOMException('aborted', 'AbortError'));
+      return;
+    }
+    request.signal?.addEventListener('abort', () => {
+      xhr.abort();
+    });
+    xhr.send(request.body ?? null);
+  });
+}
+
 /** Why the backend is not serving yet, in its own words. The health route answers with or without a session. */
 export async function healthReason(signal?: AbortSignal): Promise<string | undefined> {
   try {
