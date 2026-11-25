@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page, Request } from '@playwright/test';
 import { accounts, expect, signIn, test } from './fixtures';
@@ -463,6 +463,119 @@ test('a line of a megabyte and an event of three thousand fields open at once an
   await detail.getByLabel('Part of a field name').fill('p2999');
   await expect(detail.getByRole('rowheader')).toHaveCount(1);
   await expect(detail.getByRole('row').filter({ hasText: 'p2999' })).toContainText('<b>v2999</b>');
+  await nothingRan(page);
+});
+
+test('the fields beside the events show the values of the search, and a value narrows it', async ({ page }) => {
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  const rail = page.getByRole('complementary', { name: 'Fields' });
+
+  // A field the statistics keep values for: counted by the search itself.
+  await rail.getByRole('button', { name: /^http\.request\.method/ }).click();
+  await expect(rail.getByRole('button', { name: 'Only http.request.method get' })).toBeVisible();
+  await expect(rail.getByRole('listitem').filter({ hasText: /^get/ })).toContainText('65');
+
+  // A text field has none: its values are asked for when it is opened, with the search of the page.
+  const asked = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/search') && String(request.postData()).includes('stats count by url.path'));
+  await rail.getByRole('button', { name: /^url\.path/ }).click();
+  expect((await asked).postDataJSON()).toEqual({ query: 'status=404 | stats count by url.path | sort -count | head 10' });
+  await expect(rail.getByRole('button', { name: /^Only url\.path \/shop\/item\// })).toHaveCount(10);
+
+  await rail.getByRole('button', { name: /^Only url\.path \/shop\/item\// }).first().click();
+  await expect(queryBox(page)).toHaveText(/^status=404 url\.path="\/shop\/item\/\d+"$/);
+  await expect(eventsStatus(page)).toContainText('1 of 1 events loaded');
+  await nothingRan(page);
+});
+
+test('the query box completes field names and, after a pipe, verbs', async ({ page }) => {
+  await openSearch(page);
+  await expect(eventsStatus(page)).toContainText(/200 of [\d,]+ events loaded/);
+  await queryBox(page).click();
+  await page.keyboard.type('http.resp');
+  const options = page.getByRole('option');
+  await expect(options.filter({ hasText: 'http.response.status_code' })).toBeVisible();
+  await options.filter({ hasText: 'http.response.status_code' }).click();
+  await expect(queryBox(page)).toHaveText('http.response.status_code');
+
+  await page.keyboard.type('=404 | st');
+  await expect(options.filter({ hasText: 'stats' })).toBeVisible();
+  await expect(options.filter({ hasText: 'http.response.status_code' })).toHaveCount(0);
+  await options.filter({ hasText: 'stats' }).click();
+  await page.keyboard.type(' count by progr');
+  await options.filter({ hasText: 'program' }).first().click();
+  await expect(queryBox(page)).toHaveText('http.response.status_code=404 | stats count by program');
+
+  // With the list closed, Enter runs the search.
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('region', { name: 'Result' })).toContainText('1 row');
+  await nothingRan(page);
+});
+
+/** The bytes of the export written to a chosen file, kept for the test that downloads the same search. */
+let exported = '';
+
+test('an export is written to the file the reader chose as it arrives, and two exports are the same bytes', async ({ page }) => {
+  // The browser of the tests has no dialog to answer: the file is one in the browser's own private file system,
+  // written through the same stream a chosen file would be.
+  await page.addInitScript(() => {
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = async (options: { suggestedName: string }) => {
+      const root = await navigator.storage.getDirectory();
+      return root.getFileHandle(options.suggestedName, { create: true });
+    };
+  });
+  const stored = () =>
+    page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      const names: string[] = [];
+      for await (const name of (root as unknown as { keys: () => AsyncIterable<string> }).keys()) {
+        names.push(name);
+      }
+      const first = names[0];
+      return first === undefined ? '' : (await (await root.getFileHandle(first)).getFile()).text();
+    });
+
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'CSV', exact: true }).click();
+  await expect(page.getByText(/^Exported case-\d+-export\.csv, [\d.]+ KiB, 65 rows$/)).toBeVisible();
+
+  exported = await stored();
+  const lines = exported.trimEnd().split('\r\n');
+  // A note of the sensitive columns, the header, and one line for each of the 65 events.
+  expect(lines[0]).toMatch(/^# sensitive fields: /);
+  expect(lines[1]).toBe('ts,host,program,severity,source_ip,message');
+  expect(lines).toHaveLength(67);
+  expect(lines[2]).toContain('404');
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'CSV', exact: true }).click();
+  await expect(page.getByText(/^Exported case-\d+-export\.csv/)).toBeVisible();
+  expect(await stored()).toBe(exported);
+  await nothingRan(page);
+});
+
+test('a browser that cannot write a chosen file gets the same export as a download from the page', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
+  });
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'JSON lines' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^case-\d+-export\.jsonl$/);
+  await expect(page.getByText(/^Exported case-\d+-export\.jsonl, [\d.]+ KiB, 65 rows$/)).toBeVisible();
+  const text = readFileSync(await file.path(), 'utf8');
+  expect(text.trimEnd().split('\n')).toHaveLength(66);
+
+  // The same search as CSV is, byte for byte, what the other way wrote.
+  const second = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'CSV', exact: true }).click();
+  expect(readFileSync(await (await second).path(), 'utf8')).toBe(exported);
   await nothingRan(page);
 });
 

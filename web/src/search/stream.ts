@@ -51,10 +51,18 @@ export interface Page {
   message: string | undefined;
 }
 
+export interface TopValue {
+  value: string;
+  count: number;
+}
+
 export interface Counts {
   kind: 'counts';
   total: number;
+  /** `field_stats`: the search narrows nothing, and the values of the case's statistics are these counts. */
   source: string;
+  /** The most frequent values of each field the server counted for this search. */
+  fields: Array<{ name: string; top: TopValue[] }>;
 }
 
 export interface Table {
@@ -220,7 +228,25 @@ export function decode(event: string, data: string): Frame {
       };
     }
     case 'counts':
-      return { kind: 'counts', total: count(o, 'total'), source: text(o, 'source') };
+      return {
+        kind: 'counts',
+        total: count(o, 'total'),
+        source: text(o, 'source'),
+        fields: list(o, 'fields').map((f) => {
+          if (!object(f)) {
+            throw new FrameError('a counted field that is not an object');
+          }
+          return {
+            name: text(f, 'name'),
+            top: list(f, 'top').map((v) => {
+              if (!object(v)) {
+                throw new FrameError('a counted value that is not an object');
+              }
+              return { value: text(v, 'value'), count: count(v, 'count') };
+            }),
+          };
+        }),
+      };
     case 'table':
       return {
         kind: 'table',

@@ -52,6 +52,16 @@ function firstPipe(query: string): number {
   return query.length;
 }
 
+/** The search part of a query: what stands before its first command. */
+export function searchPart(query: string): string {
+  return query.slice(0, firstPipe(query)).trim();
+}
+
+/** True when the name can stand in a query as it is. */
+export function isWord(name: string): boolean {
+  return WORD.test(name);
+}
+
 /** The query with one more comparison in its search part, before any command. */
 export function addTerm(query: string, added: string): string {
   const cut = firstPipe(query);

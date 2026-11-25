@@ -22,11 +22,11 @@ Pre-release. What is in the tree today:
 - **API**: an ASP.NET Core host with local accounts, sessions, and case and member endpoints.
 
 - **Web interface** (`web/`): sign-in, the case list, the evidence page of a case with resumable upload,
-  the file list and parse progress, and the search page (query, time range, timeline, events, one event in
-  full), in light and dark. Text out of a log is drawn as text that cannot act, and every answer carries a
+  the file list and parse progress, and the search page (query with completion, time range, timeline, events, the fields with
+  their values, one event in full, export), in light and dark. Text out of a log is drawn as text that cannot act, and every answer carries a
   strict content policy.
 
-Not in the tree yet: the field sidebar, completion and export of the search page, the other query verbs
+Not in the tree yet: the other query verbs
 (`where`, full `stats`, `table`, `rex`, `timechart`), and further sources (EVTX, journald, IIS and others).
 
 ## Requirements

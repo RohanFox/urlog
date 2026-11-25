@@ -122,7 +122,8 @@ test('with reduced motion the loader stands still', async ({ page }) => {
   await page.goto('/login', { waitUntil: 'commit' });
   const solid = page.locator('.boot .brand-loader-solid').first();
   await expect(solid).toBeVisible();
-  expect(await solid.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  // The page's own loading mark replaces the one of the document while this looks: asked again until it is one that is drawn.
+  await expect.poll(() => page.locator('.boot .brand-loader-solid').first().evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 

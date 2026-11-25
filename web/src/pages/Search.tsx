@@ -6,11 +6,13 @@ import { count, number, roleName, stateName } from '../app/format';
 import { Banner, Button, EmptyState, LoadingBlock, Tag } from '../ui/controls';
 import { Detail, type FieldInfo } from '../search/Detail';
 import { EventTable, indexOf, keyOf } from '../search/EventTable';
+import { ExportMenu } from '../search/ExportMenu';
+import { FieldRail } from '../search/FieldRail';
 import { plain } from '../search/inert';
 import { QueryBox } from '../search/QueryBox';
 import { BUSY_TRIES, SearchRun, type Refusal, type RunState } from '../search/run';
 import { StatsTable } from '../search/StatsTable';
-import { addTerm, term } from '../search/terms';
+import { addTerm, isWord, term } from '../search/terms';
 import { knownZone } from '../search/time';
 import { TimeRange } from '../search/TimeRange';
 import { format, MAX_COLUMNS, parse, requestOf, runKey, type SearchUrl } from '../search/urlState';
@@ -132,7 +134,25 @@ export function Search() {
 
   const dashboard = useQuery({ queryKey: ['dashboard', caseId], queryFn: ({ signal }) => call('GetCaseDashboard', { params: { caseId }, signal }), enabled: valid });
   const catalog = useQuery({ queryKey: ['fields', caseId], queryFn: ({ signal }) => call('GetCaseFields', { params: { caseId }, signal }), enabled: valid && dashboard.isSuccess, staleTime: 60_000 });
-  const fields = useMemo(() => (catalog.data === undefined ? undefined : new Map<string, FieldInfo>(catalog.data.fields.map((f) => [f.name, { type: f.type, sensitive: f.sensitive }]))), [catalog.data]);
+  const fields = useMemo(() => (catalog.data === undefined ? undefined : new Map<string, FieldInfo>(catalog.data.fields.map((f) => [f.name, { type: f.type, sensitive: f.sensitive, zeroIsAbsent: f.zero_is_absent }]))), [catalog.data]);
+
+  // What the query box completes from: the catalog's names and aliases, the other fields that can be written
+  // as a word, and the verbs the server names. Without the fields of the case, nothing.
+  const words = useMemo(() => {
+    const data = catalog.data;
+    if (data === undefined) {
+      return { fields: [], verbs: [] };
+    }
+    const names = data.fields.flatMap((f) => [{ name: f.name, detail: f.type }, ...f.aliases.filter(isWord).map((alias) => ({ name: alias, detail: f.name }))]);
+    const extras = data.extras_keys.filter((k) => isWord(k.key)).slice(0, 500).map((k) => ({ name: k.key, detail: 'outside the catalog' }));
+    return { fields: [...names, ...extras], verbs: data.verbs };
+  }, [catalog.data]);
+  const filterBy = useCallback((field: string, value: string, exclude: boolean) => {
+    const current = parse(new URLSearchParams(window.location.search));
+    const q = addTerm(current.q, term(field, value, exclude));
+    setDraft(q);
+    void navigate({ search: format({ ...current, q, sel: undefined }) });
+  }, [navigate]);
 
   const caseState = dashboard.data?.case.state;
   const searchable = caseState === 'active' || caseState === 'closed';
@@ -325,9 +345,10 @@ export function Search() {
             warnings={state?.meta?.warnings ?? []}
             refusal={ofQuery ? refused : undefined}
             running={live}
+            words={words}
             onDraft={setDraft}
-            onRun={() => {
-              submit(draft);
+            onRun={(text) => {
+              submit(text ?? draft);
             }}
             onCancel={() => {
               run?.cancel();
@@ -357,6 +378,7 @@ export function Search() {
               This browser does not know the zone {plain(url.tz ?? '', 80)}. Times are shown in UTC.
             </p>
           )}
+          <ExportMenu request={request} disabled={state === undefined || state.phase === 'refused' || state.phase === 'waiting' || state.phase === 'busy'} />
         </section>
 
         {state?.phase === 'busy' && state.wait !== undefined ? (
@@ -419,6 +441,15 @@ export function Search() {
             </Region>
 
             <div className={selectedRow === undefined && selectedKey === undefined ? 'results' : 'results results-split'}>
+              <FieldRail
+                catalog={catalog.data}
+                catalogError={catalog.isError ? (catalog.error instanceof ApiError && !catalog.error.offline ? catalog.error.message : 'The server did not answer.') : undefined}
+                request={request}
+                counts={state?.counts}
+                live={live}
+                ended={ended || state?.phase === 'refused'}
+                onFilter={filterBy}
+              />
               <Region label="Events" stale={live && oldEvents} incomplete={ended && state.paged}>
                 {listing !== undefined ? (
                   listing.rows.length === 0 ? (
@@ -458,11 +489,7 @@ export function Search() {
                   zone={zone}
                   fields={fields}
                   shown={url.cols}
-                  onFilter={(field, value, exclude) => {
-                    const q = addTerm(state.request.q, term(field, value, exclude));
-                    setDraft(q);
-                    go({ q, sel: undefined });
-                  }}
+                  onFilter={filterBy}
                   onColumn={(field) => {
                     go({ cols: [...url.cols, field].slice(0, MAX_COLUMNS) }, true);
                   }}

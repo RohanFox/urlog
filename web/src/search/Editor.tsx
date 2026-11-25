@@ -1,3 +1,4 @@
+import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
 import { Decoration, EditorView, keymap, placeholder, type DecorationSet } from '@codemirror/view';
@@ -10,13 +11,41 @@ export interface Mark {
   message: string;
 }
 
+/** What the box offers while a word is typed: the fields of the case and the verbs of the language. */
+export interface Words {
+  fields: ReadonlyArray<{ name: string; detail: string }>;
+  verbs: readonly string[];
+}
+
+/**
+ * The word at the cursor, completed from the names the case has. After a pipe the word is a verb; anywhere
+ * else it is a field. There is no grammar behind it: it never says a query is right or wrong.
+ */
+export function complete(words: Words, context: CompletionContext): CompletionResult | null {
+  const word = context.matchBefore(/[A-Za-z_@][A-Za-z0-9_.@:/-]*/);
+  if (word === null && !context.explicit) {
+    return null;
+  }
+  const from = word?.from ?? context.pos;
+  const before = context.state.sliceDoc(0, from).trimEnd();
+  const options: Completion[] = before.endsWith('|')
+    ? words.verbs.map((verb) => ({ label: verb, type: 'keyword' }))
+    : // A value is not completed: after a comparison the word is the reader's own.
+      /[=<>!]$/.test(before)
+      ? []
+      : words.fields.map((field) => ({ label: field.name, detail: field.detail, type: 'property' }));
+  return options.length === 0 ? null : { from, options, validFor: /^[A-Za-z0-9_.@:/-]*$/ };
+}
+
 interface Props {
   value: string;
+  words: Words;
   marks: readonly Mark[];
   label: string;
   describedBy: string | undefined;
   onChange: (value: string) => void;
-  onRun: () => void;
+  /** Enter was pressed, with the text as it stands in the editor at that moment. */
+  onRun: (text: string) => void;
   /** Hands out a way to move the focus into the box. */
   focusRef: { current: (() => void) | null };
 }
@@ -60,6 +89,11 @@ const theme = EditorView.theme({
   '.cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, ::selection': { backgroundColor: 'var(--accentBg)' },
   '.cm-placeholder': { color: 'var(--muted)' },
   '.cm-mark-error': { textDecoration: 'underline wavy var(--err)', textDecorationSkipInk: 'none', backgroundColor: 'var(--errBg)' },
+  '.cm-tooltip': { backgroundColor: 'var(--surface)', color: 'var(--ink)', border: 'var(--hair) solid var(--line2)', borderRadius: 'var(--r)', boxShadow: 'var(--shadow)' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--data)', fontSize: 'var(--fs-12)', maxHeight: 'var(--h-raw)' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li': { padding: 'var(--sp-4) var(--sp-8)' },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: 'var(--accentBg)', color: 'var(--accent)' },
+  '.cm-completionDetail': { color: 'var(--muted)', fontStyle: 'normal', marginLeft: 'var(--sp-12)' },
   '.cm-mark-warning': { textDecoration: 'underline wavy var(--warn)', textDecorationSkipInk: 'none' },
 });
 
@@ -68,13 +102,13 @@ const theme = EditorView.theme({
  * strict content policy allows, where in the document itself they would be an inline style element, which it
  * does not. The text is plain: the server, not this box, says what is wrong with it and where.
  */
-export default function Editor({ value, marks, label, describedBy, onChange, onRun, focusRef }: Props) {
+export default function Editor({ value, words, marks, label, describedBy, onChange, onRun, focusRef }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const handlers = useRef({ onChange, onRun });
+  const handlers = useRef({ onChange, onRun, words });
   useEffect(() => {
-    handlers.current = { onChange, onRun };
-  }, [onChange, onRun]);
+    handlers.current = { onChange, onRun, words };
+  }, [onChange, onRun, words]);
 
   useEffect(() => {
     const el = host.current;
@@ -89,12 +123,14 @@ export default function Editor({ value, marks, label, describedBy, onChange, onR
         doc: value,
         extensions: [
           history(),
+          // Its keys come first: Enter takes the chosen name while the list is open, and runs the search otherwise.
+          autocompletion({ override: [(context) => complete(handlers.current.words, context)], icons: false, activateOnTyping: true }),
           // Enter runs the search; a query is one line that may wrap.
           keymap.of([
             {
               key: 'Enter',
-              run: () => {
-                handlers.current.onRun();
+              run: (target) => {
+                handlers.current.onRun(target.state.doc.toString());
                 return true;
               },
             },

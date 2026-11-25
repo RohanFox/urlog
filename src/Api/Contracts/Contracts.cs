@@ -102,8 +102,9 @@ public sealed record TopValueResponse(string Value, long Count);
 /// estimate, null where none was computed. <c>top</c>: the most frequent values, exact counts, most frequent first;
 /// null for a field that never has them (string and text fields, and a field the catalog excludes), empty when
 /// none are stored (no statistics, or more distinct values than top values are computed for).
+/// <c>zero_is_absent</c>: an integer field whose 0 in an event stands for "no value", as the catalog marks it.
 /// </summary>
-public sealed record FieldResponse(string Name, string Type, string Description, IReadOnlyList<string> Aliases, bool Sensitive, long? Events, long? DistinctEstimate, IReadOnlyList<TopValueResponse>? Top);
+public sealed record FieldResponse(string Name, string Type, string Description, IReadOnlyList<string> Aliases, bool Sensitive, bool ZeroIsAbsent, long? Events, long? DistinctEstimate, IReadOnlyList<TopValueResponse>? Top);
 
 /// <summary>An extras key seen in the case that the catalog does not list: its name and how many events carry it, no values.</summary>
 public sealed record ExtrasKeyResponse(string Key, long Events);

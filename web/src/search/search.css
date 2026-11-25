@@ -190,13 +190,13 @@
 
 .results {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: var(--w-rail) minmax(0, 1fr);
   gap: var(--sp-16);
   align-items: start;
 }
 
 .results-split {
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--w-detail));
+  grid-template-columns: var(--w-rail) minmax(0, 1fr) minmax(0, var(--w-detail));
 }
 
 .events-head {
@@ -392,7 +392,127 @@
 }
 
 @media (max-width: 1100px) {
+  .results,
   .results-split {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The fields of the case, beside the events. */
+
+.rail {
+  min-width: 0;
+  max-height: calc(var(--h-results) + var(--ctl-lg));
+  overflow: auto;
+}
+
+.rail-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-10) var(--sp-12);
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.rail-head h2,
+.rail-sub {
+  margin: 0;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+}
+
+.rail-sub {
+  padding: var(--sp-10) var(--sp-12) var(--sp-4);
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+.rail-pad {
+  padding: var(--sp-10) var(--sp-12);
+}
+
+.rail-list,
+.rail-values {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail-field {
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.rail-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  width: 100%;
+  min-height: var(--rowH);
+  padding: 0 var(--sp-12);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-12);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-name:hover,
+.rail-name[aria-expanded='true'] {
+  background: var(--hover);
+}
+
+.rail-body {
+  padding: var(--sp-4) var(--sp-12) var(--sp-10);
+}
+
+.rail-note {
+  margin: var(--sp-4) 0;
+  padding: 0 var(--sp-12);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.rail-body .rail-note {
+  padding: 0;
+}
+
+.rail-values li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--ctl-sm);
+  font-size: var(--fs-12);
+}
+
+.rail-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-skeleton {
+  padding: var(--sp-10) var(--sp-12);
+}
+
+/* Export. */
+
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+}
+
+.export .banner {
+  margin-top: var(--sp-8);
+}
+
+.menu-note {
+  max-width: var(--w-lead);
+  white-space: normal;
+  font-weight: var(--fw-regular);
 }

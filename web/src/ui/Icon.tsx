@@ -14,6 +14,7 @@ const PATHS = {
   pause: 'M9 5.5v13M15 5.5v13',
   play: 'M8 5.5v13l10.5-6.5Z',
   copy: 'M9 9h10.5v10.5H9ZM5.5 15h-1V4.5H15v1',
+  download: 'M12 4.5V16M7.5 11.5 12 16l4.5-4.5M4.5 19.5h15',
   search: 'M10.5 4.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM15 15l4.5 4.5',
 } as const;
 

@@ -80,6 +80,12 @@ public sealed class FieldEndpointTests
         Assert.Contains("status", status.GetProperty("aliases").EnumerateArray().Select(a => a.GetString()));
         Assert.Equal([("200", 900L), ("404", 90L)], status.GetProperty("top").EnumerateArray().Select(t => (t.GetProperty("value").GetString()!, t.GetProperty("count").GetInt64())));
 
+        // The catalog marks the fields whose 0 is "no value"; a reader of an event needs to know which.
+        Assert.True(status.GetProperty("zero_is_absent").GetBoolean());
+        Assert.Equal(
+            ["event.code", "http.response.status_code", "process.pid"],
+            body.GetProperty("fields").EnumerateArray().Where(f => f.GetProperty("zero_is_absent").GetBoolean()).Select(f => f.GetProperty("name").GetString()).Order(StringComparer.Ordinal));
+
         // An address field: sensitive, counted, and here with more distinct values than top values are kept for.
         var source = Field(body, "source.ip");
         Assert.True(source.GetProperty("sensitive").GetBoolean());

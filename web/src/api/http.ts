@@ -172,6 +172,30 @@ export async function open(url: string, body: unknown, signal: AbortSignal): Pro
   return response.body;
 }
 
+/**
+ * A GET whose answer the caller reads itself, headers and body (the export). A refusal is thrown as an
+ * ApiError; a success is handed over unread.
+ */
+export async function get(url: string, signal: AbortSignal): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'same-origin', signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') {
+      throw cause;
+    }
+    throw offline();
+  }
+  if (!response.ok) {
+    const problem = await problemOf(response);
+    if (response.status === 401) {
+      onUnauthorized?.();
+    }
+    throw problem;
+  }
+  return response;
+}
+
 /** Why the backend is not serving yet, in its own words. The health route answers with or without a session. */
 export async function healthReason(signal?: AbortSignal): Promise<string | undefined> {
   try {

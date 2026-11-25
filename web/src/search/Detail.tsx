@@ -21,6 +21,8 @@ const APART = new Set(['_time', 'raw', 'extras', 'file.id', 'file.offset', 'host
 export interface FieldInfo {
   type: string;
   sensitive: boolean;
+  /** The catalog says a 0 in this field is "no value". */
+  zeroIsAbsent: boolean;
 }
 
 interface Props {
@@ -46,7 +48,7 @@ interface Entry {
 }
 
 /** The fields of the event that hold something: an empty text and the unspecified address are "no value". */
-function entries(columns: readonly string[], row: readonly Cell[]): Entry[] {
+function entries(columns: readonly string[], row: readonly Cell[], fields: ReadonlyMap<string, FieldInfo> | undefined): Entry[] {
   const named: Entry[] = [];
   const zeros: Entry[] = [];
   const extras: Entry[] = [];
@@ -63,6 +65,14 @@ function entries(columns: readonly string[], row: readonly Cell[]): Entry[] {
     if (APART.has(name) || cell === null || cell === undefined || cell === '' || cell === '::') {
       return;
     }
+    if (cell === 0 && fields !== undefined) {
+      // The catalog says which fields store 0 for "no value"; in any other field a 0 is a value like any.
+      if (fields.get(name)?.zeroIsAbsent !== true) {
+        named.push({ name, value: '0', zero: false, extra: false });
+      }
+      return;
+    }
+    // Without the catalog a 0 cannot be told from "no value": it is listed last and said to be uncertain.
     (cell === 0 ? zeros : named).push({ name, value: cellText(cell), zero: cell === 0, extra: false });
   });
   return [...named, ...extras, ...zeros];
@@ -78,7 +88,7 @@ export function Detail({ caseId, columns, row, zone, fields, shown, onFilter, on
   const raw = cellText(at('raw'));
   const fileId = Number(at('file.id'));
   const offset = cellText(at('file.offset'));
-  const all = useMemo(() => entries(columns, row), [columns, row]);
+  const all = useMemo(() => entries(columns, row, fields), [columns, row, fields]);
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(STEP_FIELDS);
   const needle = filter.trim().toLowerCase();
@@ -136,6 +146,11 @@ export function Detail({ caseId, columns, row, zone, fields, shown, onFilter, on
         <CopyButton value={raw} label="Copy the whole raw line" />
       </div>
       <LongText value={raw} label="Raw line" />
+      {raw.includes('�') ? (
+        <p className="sub detail-note">
+          This line holds bytes that are not valid UTF-8. The server sent a replacement character (<span className="mono">{'�'}</span>) for each, so the text here and what Copy gives are not the exact bytes of the file.
+        </p>
+      ) : null}
 
       <div className="detail-sub">
         <h3>Fields</h3>

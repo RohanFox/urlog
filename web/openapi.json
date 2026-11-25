@@ -2710,6 +2710,7 @@
           "description",
           "aliases",
           "sensitive",
+          "zero_is_absent",
           "events",
           "distinct_estimate",
           "top"
@@ -2732,6 +2733,9 @@
             }
           },
           "sensitive": {
+            "type": "boolean"
+          },
+          "zero_is_absent": {
             "type": "boolean"
           },
           "events": {

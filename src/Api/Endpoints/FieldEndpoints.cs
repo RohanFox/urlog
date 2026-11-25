@@ -81,6 +81,7 @@ public static class FieldEndpoints
                 f.Description,
                 f.Aliases,
                 f.Sensitive,
+                f.ZeroIsAbsent,
                 have && counted ? (long)(stat?.Events ?? 0) : null,
                 stat?.DistinctEstimate is { } d ? (long)d : null,
                 hasTop && f.TopValues ? [.. (stat?.Top ?? []).Select(t => new TopValueResponse(t.Key, (long)t.Value))] : null));

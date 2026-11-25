@@ -10,7 +10,7 @@ import { dashboard, events, fakeServer, fileRecord, problem, session, sse } from
 // The editor and the chart draw through browser APIs the test document does not have. Each is replaced by a
 // stand-in with the same contract; what they draw is covered by the browser tests.
 vi.mock('../search/Editor', () => ({
-  default: ({ value, marks, label, onChange, onRun }: { value: string; marks: ReadonlyArray<{ kind: string; offset: number; length: number }>; label: string; onChange: (v: string) => void; onRun: () => void }) => (
+  default: ({ value, marks, label, onChange, onRun }: { value: string; marks: ReadonlyArray<{ kind: string; offset: number; length: number }>; label: string; onChange: (v: string) => void; onRun: (text: string) => void }) => (
     <div>
       <textarea
         aria-label={label}
@@ -21,7 +21,7 @@ vi.mock('../search/Editor', () => ({
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
-            onRun();
+            onRun(event.currentTarget.value);
           }
         }}
       />
@@ -112,7 +112,7 @@ function frames(l: Listing = {}) {
     meta: { event: 'meta', data: { ...META, warnings: l.warnings ?? [], span: l.span ?? META.span } },
     histogram: { event: 'histogram', data: { kind: 'histogram', span: '1s', source: 'query', total: l.total ?? rows.length, buckets: l.buckets ?? [{ start: '2026-03-01T00:00:05.000Z', counts: { info: 1, error: 1 } }] } },
     page: { event: 'page', data: { kind: 'page', first_row: 0, columns: COLUMNS, rows, next: l.next ?? null, capped: l.capped ?? false, ...(l.capped === true ? { message: 'narrow the search or the time range: a result is paged to 10,000 events' } : {}) } },
-    counts: { event: 'counts', data: { kind: 'counts', total: l.total ?? rows.length, source: 'query', fields: [] } },
+    counts: { event: 'counts', data: { kind: 'counts', total: l.total ?? rows.length, source: 'query', fields: [{ name: 'program', top: [{ value: 'nginx', count: rows.length }] }] } },
     done: { event: 'done', data: { kind: 'done', duration_ms: 42 } },
   };
 }
@@ -125,7 +125,7 @@ function listing(l: Listing = {}) {
 const BASE = {
   'GET /api/v1/auth/me': { status: 200, body: session },
   'GET /api/v1/cases/7/dashboard': { status: 200, body: dashboard() },
-  'GET /api/v1/cases/7/fields': { status: 200, body: { case_id: 7, span: META.span, statistics: { state: 'ok', pending: false, computed_at: null, events: 2, reason: null }, fields: [{ name: 'user.name', type: 'keyword', description: '', aliases: [], sensitive: true, events: 1, distinct_estimate: 1, top: null }], extras_keys: [], verbs: [] } },
+  'GET /api/v1/cases/7/fields': { status: 200, body: { case_id: 7, span: META.span, statistics: { state: 'ok', pending: false, computed_at: null, events: 2, reason: null }, fields: [{ name: 'user.name', type: 'keyword', description: '', aliases: [], sensitive: true, zero_is_absent: false, events: 1, distinct_estimate: 1, top: null }, { name: 'program', type: 'keyword', description: '', aliases: [], sensitive: false, zero_is_absent: false, events: 2, distinct_estimate: 1, top: [{ value: 'nginx', count: 2 }] }, { name: 'http.response.status_code', type: 'int', description: '', aliases: ['status'], sensitive: false, zero_is_absent: true, events: 2, distinct_estimate: 2, top: [] }, { name: 'process.pid', type: 'int', description: '', aliases: [], sensitive: false, zero_is_absent: true, events: 0, distinct_estimate: 0, top: [] }, { name: 'http.response.body.bytes', type: 'int', description: '', aliases: [], sensitive: false, zero_is_absent: false, events: 2, distinct_estimate: 2, top: [] }], extras_keys: [], verbs: ['stats', 'sort', 'head'] } },
   'GET /api/v1/cases/7/files/11': { status: 200, body: { file: fileRecord(), detection_record: null, seen: null, unreadable_reason: null, stated_size: null, truncated_decoded_offset: null, truncated_stored_offset: null, trailing_bytes: 0 } },
 };
 
@@ -535,6 +535,96 @@ describe('the search page', () => {
     open({ [SEARCH]: listing(), 'GET /api/v1/cases/7/dashboard': { status: 200, body: dashboard({ case: { id: 7, name: 'payroll portal', state: 'closed', my_role: 'ro', owner: 'alice', task: null } }) } });
     expect(await screen.findByText('GET /admin 404')).toBeInTheDocument();
     expect(screen.getByText(/your role: Read-only/)).toBeInTheDocument();
+  });
+});
+
+describe('the fields, the zeros and the export on the search page', () => {
+  it('shows the fields of the case beside the events and narrows the search from a value', async () => {
+    const server = open({ [SEARCH]: listing() }, '/cases/7/search?q=status%3D404+%7C+head+50');
+    const user = userEvent.setup();
+    const rail = await screen.findByRole('complementary', { name: 'Fields' });
+    await user.click(await within(rail).findByRole('button', { name: /^program/ }));
+    await user.click(within(rail).getByRole('button', { name: 'Only program nginx' }));
+
+    // Into the search part, before the command.
+    await waitFor(() => {
+      expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: 'status=404 program="nginx" | head 50' });
+    });
+    expect(screen.getByLabelText('Query')).toHaveValue('status=404 program="nginx" | head 50');
+  });
+
+  it('says so when the fields cannot be listed, and searches all the same', async () => {
+    open({ [SEARCH]: listing(), 'GET /api/v1/cases/7/fields': problem(400, 'bad-request', 'the fields of this case cannot be read') });
+    expect(await screen.findByText('GET /admin 404')).toBeInTheDocument();
+    const rail = screen.getByRole('complementary', { name: 'Fields' });
+    expect(await within(rail).findByText('The fields could not be listed')).toBeInTheDocument();
+    expect(within(rail).getByText('the fields of this case cannot be read')).toBeInTheDocument();
+    // What the search counted is still there under its name.
+    expect(within(rail).getByRole('button', { name: /^program/ })).toBeInTheDocument();
+  });
+
+  it('leaves out a 0 where the catalog says it stands for "no value", and shows a 0 that is a value', async () => {
+    open({ [SEARCH]: listing({ rows: [{ offset: 100, status: 0 }] }) }, '/cases/7/search?sel=11:100');
+    const detail = await screen.findByRole('complementary', { name: 'Event' });
+    await waitFor(() => {
+      expect(within(detail).queryByText(/Fields in grey hold 0/)).toBeNull();
+      expect(within(detail).getAllByRole('rowheader').map((th) => th.textContent)).toContain('http.response.body.bytes');
+    });
+    const names = within(detail).getAllByRole('rowheader').map((th) => th.textContent);
+    // The status and the pid are 0 in the row and marked by the catalog: no value. The bytes are 0 and a value.
+    expect(names).not.toContain('http.response.status_code');
+    expect(names).not.toContain('process.pid');
+  });
+
+  it('says on an event whose line held bytes that are not UTF-8 that the text is not the exact bytes', async () => {
+    open({ [SEARCH]: listing({ rows: [{ offset: 100, raw: 'caf� na�ve', message: 'caf�' }] }) }, '/cases/7/search?sel=11:100');
+    const detail = await screen.findByRole('complementary', { name: 'Event' });
+    expect(within(detail).getByText(/This line holds bytes that are not valid UTF-8/)).toHaveTextContent('what Copy gives are not the exact bytes of the file');
+  });
+
+  it('exports the search of the address to a file the reader chose, and says where the server cut it', async () => {
+    const written: string[] = [];
+    const picker = vi.fn(() =>
+      Promise.resolve({
+        name: 'findings.csv',
+        createWritable: () =>
+          Promise.resolve(
+            new WritableStream<Uint8Array>({
+              write: (chunk) => {
+                written.push(new TextDecoder().decode(chunk));
+              },
+            }),
+          ),
+      }),
+    );
+    vi.stubGlobal('showSaveFilePicker', picker);
+    const server = open({ [SEARCH]: listing(), 'GET /api/v1/cases/7/search/export': { status: 200, text: 'ts,host\nrow\n', headers: { 'X-Urlog-Rows': '5000000', 'X-Urlog-Truncated': 'true' } } }, '/cases/7/search?q=status%3D404');
+    const user = userEvent.setup();
+    await screen.findByText('GET /admin 404');
+    // What is typed and not run is not what is exported.
+    await user.type(screen.getByLabelText('Query'), ' draft');
+
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Guard formula cells (CSV)' }));
+    await user.click(screen.getByRole('menuitem', { name: 'CSV, formula cells guarded' }));
+
+    expect(await screen.findByText(/^Exported/)).toHaveTextContent('Exported findings.csv, 12 B');
+    expect(written.join('')).toBe('ts,host\nrow\n');
+    expect(server.sent.find((s) => s.path.includes('/export'))?.path).toBe('/api/v1/cases/7/search/export?format=csv&query=status%3D404&formula_guard=true');
+    expect(screen.getByText("The file is cut at the server's row limit")).toBeInTheDocument();
+    expect(screen.getByText(/The result has 5,000,000 rows/)).toBeInTheDocument();
+  });
+
+  it('says that an export of the user is already running when the server answers so', async () => {
+    vi.stubGlobal('showSaveFilePicker', () => Promise.resolve({ name: 'x.jsonl', createWritable: () => Promise.resolve(new WritableStream<Uint8Array>()), remove: () => Promise.resolve() }));
+    open({ [SEARCH]: listing(), 'GET /api/v1/cases/7/search/export': { status: 429, body: samples.refusals.busy.body, headers: { 'Retry-After': '1' } } });
+    const user = userEvent.setup();
+    await screen.findByText('GET /admin 404');
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'JSON lines' }));
+    expect(await screen.findByText('The export did not start')).toBeInTheDocument();
+    expect(screen.getByText('An export of yours is already running. One export runs at a time for a user.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 

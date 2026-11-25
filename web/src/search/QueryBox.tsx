@@ -1,7 +1,7 @@
 import { lazy, Suspense, useId, useMemo, type RefObject } from 'react';
 import { number } from '../app/format';
 import { Button } from '../ui/controls';
-import type { Mark } from './Editor';
+import type { Mark, Words } from './Editor';
 import { plain } from './inert';
 import type { Refusal } from './run';
 import type { Warning } from './stream';
@@ -20,14 +20,17 @@ interface Props {
   /** A refusal of the query itself: its syntax, or what the server would not run. */
   refusal: Refusal | undefined;
   running: boolean;
+  /** The names the box completes from. Without the fields of the case, the verbs alone. */
+  words: Words;
   onDraft: (text: string) => void;
-  onRun: () => void;
+  /** Runs the text given, or the draft when none is: the editor hands over its own text, which may be newer than the draft. */
+  onRun: (text?: string) => void;
   onCancel: () => void;
   focusRef: RefObject<(() => void) | null>;
 }
 
 /** The query, the button that runs it, and what the server said about the text that ran. */
-export function QueryBox({ draft, ran, warnings, refusal, running, onDraft, onRun, onCancel, focusRef }: Props) {
+export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraft, onRun, onCancel, focusRef }: Props) {
   const notes = useId();
   const current = draft === ran;
   const tooLong = draft.length > MAX_QUERY;
@@ -50,7 +53,7 @@ export function QueryBox({ draft, ran, warnings, refusal, running, onDraft, onRu
       <div className="query-row">
         <div className={said || tooLong ? 'query-box query-box-bad' : 'query-box'}>
           <Suspense fallback={<div className="query-editor query-editor-loading" aria-hidden="true" />}>
-            <Editor value={draft} marks={marks} label="Query" describedBy={said || tooLong || marks.length > 0 ? notes : undefined} onChange={onDraft} onRun={onRun} focusRef={focusRef} />
+            <Editor value={draft} words={words} marks={marks} label="Query" describedBy={said || tooLong || marks.length > 0 ? notes : undefined} onChange={onDraft} onRun={onRun} focusRef={focusRef} />
           </Suspense>
         </div>
         {running ? (
@@ -58,7 +61,7 @@ export function QueryBox({ draft, ran, warnings, refusal, running, onDraft, onRu
             Cancel
           </Button>
         ) : (
-          <Button kind="primary" onClick={onRun} disabled={tooLong}>
+          <Button kind="primary" onClick={() => { onRun(); }} disabled={tooLong}>
             Search
           </Button>
         )}
