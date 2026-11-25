@@ -107,6 +107,15 @@ describe('the contrast of the design tokens', () => {
     }
   });
 
+  it('draws every series of the timeline in a colour that is measured on the surface it stands on', () => {
+    const series = Object.entries(light).filter(([token]) => token.startsWith('--sev-'));
+    expect(series.map(([token]) => token).sort()).toEqual(['--sev-error', '--sev-info', '--sev-none', '--sev-warning']);
+    for (const [token, value] of series) {
+      const of = /^var\((--[A-Za-z0-9-]+)\)$/.exec(value)?.[1] ?? '';
+      expect(PAIRS[of]?.some((pair) => pair.on.includes('--surface') && pair.need >= BOUNDARY), `${token} is ${value}`).toBe(true);
+    }
+  });
+
   it('measures a background only where something is drawn on it', () => {
     const used = new Set(Object.values(PAIRS).flatMap((pairs) => pairs.flatMap((pair) => pair.on)));
     expect(BACKGROUNDS.filter((token) => !used.has(token))).toEqual([]);

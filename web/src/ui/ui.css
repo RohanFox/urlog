@@ -289,16 +289,14 @@
   gap: var(--sp-4);
 }
 
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
+.dialog::backdrop {
   background: var(--scrim);
 }
 
 .dialog {
   position: fixed;
-  z-index: 21;
+  margin: 0;
+  color: var(--ink);
   top: var(--sp-48);
   left: 50%;
   transform: translateX(-50%);

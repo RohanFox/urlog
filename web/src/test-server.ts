@@ -9,7 +9,30 @@ export interface Sent {
   body: unknown;
 }
 
-type Answer = { status: number; body?: unknown; headers?: Record<string, string> } | (() => { status: number; body?: unknown; headers?: Record<string, string> });
+interface Reply {
+  status: number;
+  body?: unknown;
+  headers?: Record<string, string>;
+  /** A body that is not JSON (an event stream), sent as it is. */
+  text?: string;
+  /** A body the test feeds by hand, to hold an answer open or to end it where it likes. */
+  stream?: ReadableStream<Uint8Array>;
+}
+
+type Answer = Reply | (() => Reply);
+
+/** The frames of a search as the server writes them. */
+export function sse(frames: ReadonlyArray<{ event: string; data: unknown }>): string {
+  return frames.map((frame) => `event: ${frame.event}
+data: ${JSON.stringify(frame.data)}
+
+`).join('');
+}
+
+/** A stream answer: 200 with the frames, as one body. */
+export function events(frames: ReadonlyArray<{ event: string; data: unknown }>): Reply {
+  return { status: 200, text: sse(frames) };
+}
 
 export function problem(status: number, slug: string, title: string, extra: Record<string, unknown> = {}) {
   return { status, body: { type: `https://urlog/problems/${slug}`, title, status, ...extra } };
@@ -30,6 +53,9 @@ export function fakeServer(routes: Record<string, Answer>) {
       return Promise.reject(new TypeError(`no route for ${method} ${path}`));
     }
     const answer = typeof route === 'function' ? route() : route;
+    if (answer.text !== undefined || answer.stream !== undefined) {
+      return Promise.resolve(new Response(answer.stream ?? answer.text ?? '', { status: answer.status, headers: { 'Content-Type': 'text/event-stream', ...answer.headers } }));
+    }
     const hasBody = answer.body !== undefined && answer.status !== 204;
     return Promise.resolve(
       new Response(hasBody ? JSON.stringify(answer.body) : null, {

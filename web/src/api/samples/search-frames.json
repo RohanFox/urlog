@@ -1,0 +1,429 @@
+{
+  "listing": [
+    {
+      "event": "meta",
+      "data": {
+        "kind": "meta",
+        "from": "2026-03-01T00:00:00.000Z",
+        "to": "2026-03-01T00:00:05.001Z",
+        "tz": "UTC",
+        "result": "events",
+        "columns": [
+          "ts",
+          "host",
+          "program",
+          "severity",
+          "source_ip",
+          "message"
+        ],
+        "warnings": [
+          {
+            "code": "unknown_field",
+            "offset": 0,
+            "length": 11,
+            "message": "\u0027nosuchfield\u0027 is not in the catalog: searched as extras[\u0027nosuchfield\u0027]"
+          },
+          {
+            "code": "unindexed",
+            "offset": 0,
+            "length": 13,
+            "message": "nosuchfield lives in extras: compared without an index"
+          }
+        ],
+        "fields": [
+          "nosuchfield"
+        ],
+        "span": {
+          "from": "2026-03-01T00:00:00.000Z",
+          "to": "2026-03-01T00:00:05.000Z",
+          "undated_events": 12,
+          "future_events": 1
+        }
+      }
+    },
+    {
+      "event": "counts",
+      "data": {
+        "kind": "counts",
+        "total": 6,
+        "source": "query",
+        "fields": []
+      }
+    },
+    {
+      "event": "histogram",
+      "data": {
+        "kind": "histogram",
+        "span": "1s",
+        "source": "query",
+        "total": 6,
+        "buckets": [
+          {
+            "start": "2026-03-01T00:00:00.000Z",
+            "counts": {
+              "error": 2,
+              "info": 4
+            }
+          }
+        ]
+      }
+    },
+    {
+      "event": "page",
+      "data": {
+        "kind": "page",
+        "first_row": 0,
+        "columns": [
+          "_time",
+          "host.name",
+          "program",
+          "log.level",
+          "event.code",
+          "event.action",
+          "event.outcome",
+          "user.name",
+          "source.ip",
+          "destination.ip",
+          "process.name",
+          "url.path",
+          "http.response.status_code",
+          "message",
+          "raw",
+          "http.request.method",
+          "http.version",
+          "http.response.body.bytes",
+          "http.request.referrer",
+          "user_agent.original",
+          "url.query",
+          "log.syslog.facility.name",
+          "process.pid",
+          "file.id",
+          "file.offset",
+          "host.id",
+          "extras"
+        ],
+        "rows": [
+          [
+            "2026-03-01T00:00:05.000Z",
+            "",
+            "",
+            "info",
+            "",
+            "",
+            "",
+            "",
+            "10.0.0.5",
+            "",
+            "",
+            "",
+            "",
+            "line 5",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            1,
+            500,
+            "",
+            {
+              "k": "v"
+            }
+          ],
+          [
+            "2026-03-01T00:00:04.000Z",
+            "",
+            "",
+            "info",
+            "",
+            "",
+            "",
+            "",
+            "10.0.0.5",
+            "",
+            "",
+            "",
+            "",
+            "line 4",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            1,
+            400,
+            "",
+            {
+              "k": "v"
+            }
+          ]
+        ],
+        "next": "CURSOR",
+        "capped": false
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "kind": "done",
+        "duration_ms": 0
+      }
+    }
+  ],
+  "page_at_the_limit": [
+    {
+      "event": "page",
+      "data": {
+        "kind": "page",
+        "first_row": 2,
+        "columns": [
+          "_time",
+          "host.name",
+          "program",
+          "log.level",
+          "event.code",
+          "event.action",
+          "event.outcome",
+          "user.name",
+          "source.ip",
+          "destination.ip",
+          "process.name",
+          "url.path",
+          "http.response.status_code",
+          "message",
+          "raw",
+          "http.request.method",
+          "http.version",
+          "http.response.body.bytes",
+          "http.request.referrer",
+          "user_agent.original",
+          "url.query",
+          "log.syslog.facility.name",
+          "process.pid",
+          "file.id",
+          "file.offset",
+          "host.id",
+          "extras"
+        ],
+        "rows": [
+          [
+            "2026-03-01T00:00:03.000Z",
+            "",
+            "",
+            "error",
+            "",
+            "",
+            "",
+            "",
+            "10.0.0.5",
+            "",
+            "",
+            "",
+            "",
+            "line 3",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            1,
+            300,
+            "",
+            {
+              "k": "v"
+            }
+          ],
+          [
+            "2026-03-01T00:00:02.000Z",
+            "",
+            "",
+            "info",
+            "",
+            "",
+            "",
+            "",
+            "10.0.0.5",
+            "",
+            "",
+            "",
+            "",
+            "line 2",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            1,
+            200,
+            "",
+            {
+              "k": "v"
+            }
+          ]
+        ],
+        "next": null,
+        "capped": true,
+        "message": "narrow the search or the time range: a result is paged to 4 events; the export carries up to 1,000,000"
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "kind": "done",
+        "duration_ms": 0
+      }
+    }
+  ],
+  "aggregation": [
+    {
+      "event": "meta",
+      "data": {
+        "kind": "meta",
+        "from": "2026-03-01T00:00:00.000Z",
+        "to": "2026-03-01T00:00:05.001Z",
+        "tz": "UTC",
+        "result": "stats",
+        "columns": [],
+        "warnings": [],
+        "fields": [
+          "host.name"
+        ],
+        "span": {
+          "from": "2026-03-01T00:00:00.000Z",
+          "to": "2026-03-01T00:00:05.000Z",
+          "undated_events": 12,
+          "future_events": 1
+        }
+      }
+    },
+    {
+      "event": "table",
+      "data": {
+        "kind": "table",
+        "columns": [
+          "host.name",
+          "count"
+        ],
+        "rows": [
+          [
+            "web-01",
+            "12"
+          ],
+          [
+            "web-02",
+            "7"
+          ]
+        ],
+        "truncated": true,
+        "total_rows": 3,
+        "values_capped_rows": [
+          1
+        ]
+      }
+    },
+    {
+      "event": "done",
+      "data": {
+        "kind": "done",
+        "duration_ms": 0
+      }
+    }
+  ],
+  "failed_in_the_stream": [
+    {
+      "event": "meta",
+      "data": {
+        "kind": "meta",
+        "from": "2026-03-01T00:00:00.000Z",
+        "to": "2026-03-01T00:00:05.001Z",
+        "tz": "UTC",
+        "result": "events",
+        "columns": [
+          "ts",
+          "host",
+          "program",
+          "severity",
+          "source_ip",
+          "message"
+        ],
+        "warnings": [],
+        "fields": [],
+        "span": {
+          "from": "2026-03-01T00:00:00.000Z",
+          "to": "2026-03-01T00:00:05.000Z",
+          "undated_events": 12,
+          "future_events": 1
+        }
+      }
+    },
+    {
+      "event": "error",
+      "data": {
+        "kind": "error",
+        "code": "query_timeout",
+        "message": "Code: 159. DB::Exception: Timeout exceeded: elapsed 60.0 seconds"
+      }
+    }
+  ],
+  "refusals": {
+    "query_syntax": {
+      "status": 400,
+      "retry_after": null,
+      "body": {
+        "type": "https://urlog/problems/query-syntax",
+        "title": "not supported in v1: eval",
+        "status": 400,
+        "code": "query_syntax",
+        "offset": 14,
+        "length": 4
+      }
+    },
+    "bad_request": {
+      "status": 400,
+      "retry_after": null,
+      "body": {
+        "type": "https://urlog/problems/bad-request",
+        "title": "\u0027yesterday\u0027 is not a time: use -24h, -7d@d, now, or ISO 8601 (2026-03-01T00:00:00Z)",
+        "status": 400,
+        "code": "bad_request"
+      }
+    },
+    "bad_cursor": {
+      "status": 400,
+      "retry_after": null,
+      "body": {
+        "type": "https://urlog/problems/bad-cursor",
+        "title": "the cursor is not one this search issued",
+        "status": 400,
+        "code": "bad_cursor"
+      }
+    },
+    "busy": {
+      "status": 429,
+      "retry_after": "1",
+      "body": {
+        "type": "https://urlog/problems/busy",
+        "title": "too many queries are running",
+        "status": 429,
+        "detail": "retry after 1 s",
+        "code": "busy"
+      }
+    }
+  }
+}

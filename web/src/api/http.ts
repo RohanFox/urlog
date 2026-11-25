@@ -140,6 +140,38 @@ export function raw(request: RawRequest): Promise<RawAnswer> {
   });
 }
 
+/**
+ * A request whose answer is read as it arrives (the search stream). The same two rules as every other request;
+ * a refusal is thrown as an ApiError before any byte of a body is handed out, and the body of a success is the
+ * caller's to read.
+ */
+export async function open(url: string, body: unknown, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+  const headers: Record<string, string> = { Accept: 'text/event-stream', 'Content-Type': 'application/json' };
+  if (csrfToken !== undefined) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'same-origin', signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') {
+      throw cause;
+    }
+    throw offline();
+  }
+  if (!response.ok) {
+    const problem = await problemOf(response);
+    if (response.status === 401) {
+      onUnauthorized?.();
+    }
+    throw problem;
+  }
+  if (response.body === null) {
+    throw offline();
+  }
+  return response.body;
+}
+
 /** Why the backend is not serving yet, in its own words. The health route answers with or without a session. */
 export async function healthReason(signal?: AbortSignal): Promise<string | undefined> {
   try {

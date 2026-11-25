@@ -1,8 +1,13 @@
+import { Link } from 'react-router';
 import type { DashboardResponse } from '../api/schema.gen';
 import { bytes, count, number, percent, utcMinute } from '../app/format';
 import { Banner, Tag } from '../ui/controls';
+import { format, futureRange, UNDATED, type SearchUrl } from '../search/urlState';
 import { flagName } from './flags';
 import './case.css';
+
+/** A search of the whole case with nothing else chosen: the two counts add their range to it. */
+const EVERYTHING: SearchUrl = { q: '', from: undefined, to: undefined, tz: undefined, cols: [], sel: undefined };
 
 const STATISTICS: Record<DashboardResponse['statistics']['state'], string> = {
   none: 'Not computed yet',
@@ -54,8 +59,26 @@ export function IngestStrip({ dashboard, onFilter }: Props) {
         <dt>Events</dt>
         <dd>
           <span className="mono">{span.from !== null && span.to !== null ? `${utcMinute(span.from)} to ${utcMinute(span.to)}` : 'No events with a usable time yet'}</span>
-          {span.undated_events > 0 ? <span className="warn-text"> · {count(span.undated_events, 'event', 'events')} without a usable time</span> : null}
-          {span.future_events > 0 ? <span className="warn-text"> · {count(span.future_events, 'event', 'events')} dated after their file arrived</span> : null}
+          {span.undated_events > 0 ? (
+            <>
+              {' · '}
+              <Link className="warn-text" to={`/cases/${dashboard.case.id}/search${format({ ...EVERYTHING, ...UNDATED })}`}>
+                {count(span.undated_events, 'event', 'events')} without a usable time
+              </Link>
+            </>
+          ) : null}
+          {span.future_events > 0 ? (
+            <>
+              {' · '}
+              {span.to === null ? (
+                <span className="warn-text">{count(span.future_events, 'event', 'events')} dated after their file arrived</span>
+              ) : (
+                <Link className="warn-text" to={`/cases/${dashboard.case.id}/search${format({ ...EVERYTHING, ...futureRange(span.to) })}`}>
+                  {count(span.future_events, 'event', 'events')} dated after their file arrived
+                </Link>
+              )}
+            </>
+          ) : null}
         </dd>
         <dt>Files</dt>
         <dd className="strip-tags">

@@ -6,6 +6,7 @@ import { BootScreen } from '../brand/Logo';
 import { CaseEvidence } from '../pages/CaseEvidence';
 import { Cases } from '../pages/Cases';
 import { Login } from '../pages/Login';
+import { Search } from '../pages/Search';
 import { NotFound, NotReady, Unreachable } from '../pages/Standing';
 import { safeNext, SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
@@ -69,6 +70,7 @@ function Gate() {
         <Route path="/" element={<Navigate to="/cases" replace />} />
         <Route path="/cases" element={<Cases />} />
         <Route path="/cases/:caseId" element={<CaseEvidence />} />
+        <Route path="/cases/:caseId/search" element={<Search />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

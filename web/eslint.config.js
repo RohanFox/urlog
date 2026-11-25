@@ -23,7 +23,19 @@ export default tseslint.config(
       // One module talks to the backend, so the CSRF header and the 401 rule have one home.
       'no-restricted-globals': ['error', { name: 'fetch', message: 'Use src/api/http.ts.' }],
       // Colours, fonts and sizes live in styles/tokens.css. A style attribute would be a second home.
-      'no-restricted-syntax': ['error', { selector: "JSXAttribute[name.name='style']", message: 'Use a class and the tokens.' }],
+      'no-restricted-syntax': [
+        'error',
+        { selector: "JSXAttribute[name.name='style']", message: 'Use a class and the tokens.' },
+        // Text out of a log is written by whoever was attacked or attacking. It reaches the document as text
+        // nodes only: no markup is ever built from a string.
+        { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: 'No markup from a string. Render text.' },
+        { selector: "Property[key.name='dangerouslySetInnerHTML']", message: 'No markup from a string. Render text.' },
+        { selector: "Property[key.value='dangerouslySetInnerHTML']", message: 'No markup from a string. Render text.' },
+        { selector: "MemberExpression[property.name=/^(innerHTML|outerHTML|insertAdjacentHTML|createContextualFragment|srcdoc)$/]", message: 'No markup from a string. Render text.' },
+        { selector: "CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]", message: 'No markup from a string. Render text.' },
+        { selector: "NewExpression[callee.name='DOMParser']", message: 'No markup from a string. Render text.' },
+        { selector: "CallExpression[callee.name='eval'], NewExpression[callee.name='Function']", message: 'No code from a string.' },
+      ],
     },
   },
   { files: ['src/api/http.ts'], rules: { 'no-restricted-globals': 'off' } },

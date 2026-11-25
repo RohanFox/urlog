@@ -226,6 +226,25 @@ public static class ApiHost
             throw new InvalidOperationException($"Urlog:Ingest:EvidenceRoot ({evidence}) lies inside the web root ({Path.GetFullPath(web)}), whose files are served to anyone; the host refuses to start");
         }
 
+        // On every answer, the page, the API and a refusal alike, and before anything that could answer.
+        app.Use(static (http, next) =>
+        {
+            var headers = http.Response.Headers;
+            headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            headers.XContentTypeOptions = "nosniff";
+            headers["Referrer-Policy"] = "no-referrer";
+            headers["Cross-Origin-Opener-Policy"] = "same-origin";
+            headers["Cross-Origin-Resource-Policy"] = "same-origin";
+            headers["Permissions-Policy"] = PermissionsPolicy;
+            if (http.Request.Path.StartsWithSegments("/api", StringComparison.Ordinal))
+            {
+                // What the API answers is evidence or says something about it: no cache keeps a copy. A handler
+                // that sets the header itself says the same.
+                headers.CacheControl = "no-store";
+            }
+
+            return next(http);
+        });
         app.UseExceptionHandler();
         app.UseStatusCodePages();
         // Before anything that reads the metadata file: until the store identity check has passed, only the health route answers.
@@ -242,6 +261,28 @@ public static class ApiHost
         app.UseMiddleware<CsrfMiddleware>();
         app.UseMiddleware<CaseAccessMiddleware>();
     }
+
+    /// <summary>
+    /// What a page of this origin may load and run (design record, Security): scripts, styles, fonts, images and
+    /// requests from the instance itself and nothing else. No inline script or style and no eval, so text that
+    /// came out of a log cannot become code even if a defect let it into the document; no frame may show the
+    /// page, and a form posts only here.
+    /// </summary>
+    public const string ContentSecurityPolicy =
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; " +
+        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+    /// <summary>
+    /// The browser features a page of this origin may use: none of the listed ones, in any frame, and writing
+    /// to the clipboard for the page itself, which its Copy buttons need. No transport security header is set
+    /// here: the host listens behind a proxy, and that header is the proxy's (design record, Security).
+    /// </summary>
+    public const string PermissionsPolicy =
+        "accelerometer=(), autoplay=(), bluetooth=(), browsing-topics=(), camera=(), " +
+        "clipboard-read=(), clipboard-write=(self), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), " +
+        "geolocation=(), gyroscope=(), hid=(), idle-detection=(), local-fonts=(), magnetometer=(), " +
+        "microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), " +
+        "serial=(), usb=(), window-management=(), xr-spatial-tracking=()";
 
     public static void MapEndpoints(WebApplication app)
     {

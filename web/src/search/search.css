@@ -1,0 +1,398 @@
+/* The search page: the query, the range, the timeline, the events and one event in full. */
+
+.search {
+  max-width: none;
+}
+
+.search-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+/* The query. */
+
+.query-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+
+.query-box {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--ctl);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.query-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--ring-w) var(--ring);
+}
+
+.query-box-bad {
+  border-color: var(--err);
+}
+
+.query-editor {
+  display: block;
+  min-height: calc(var(--ctl) - var(--mark));
+}
+
+.query-bar {
+  height: var(--mark);
+  margin-top: var(--sp-4);
+  border-radius: var(--r-xs);
+  background: transparent;
+}
+
+.query-bar-on {
+  background: var(--accent);
+  animation: skel-pulse var(--t-pulse) ease-in-out infinite;
+}
+
+.query-notes p,
+.query-warnings {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+/* The range. */
+
+.range-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-8) var(--sp-12);
+}
+
+.range-form .field {
+  min-width: var(--w-col);
+}
+
+.field-label {
+  font-size: var(--fs-12);
+  color: var(--muted);
+}
+
+.range-said {
+  margin: var(--sp-8) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.linklike {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linklike.warn-text {
+  color: var(--warn);
+}
+
+.stale-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A part of the answer. */
+
+.region {
+  position: relative;
+  min-width: 0;
+}
+
+.region-stale > * {
+  opacity: .5;
+}
+
+.region-mark {
+  padding: var(--sp-6) var(--sp-12) 0;
+}
+
+/* The timeline. */
+
+.timeline {
+  padding: var(--sp-8) var(--sp-12);
+}
+
+.timeline-plot {
+  min-height: var(--h-timeline);
+  border-radius: var(--r-sm);
+}
+
+.timeline-plot:focus-visible {
+  outline: var(--mark) solid var(--accent);
+  outline-offset: var(--sp-2);
+}
+
+.timeline-skeleton {
+  height: var(--h-timeline);
+  margin: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-sm);
+  background: var(--sunken);
+  animation: skel-pulse var(--t-pulse) ease-in-out infinite;
+}
+
+.timeline-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-16);
+  margin-top: var(--sp-4);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-12);
+  color: var(--muted);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+}
+
+.swatch {
+  width: var(--skel);
+  height: var(--skel);
+  border-radius: var(--r-xs);
+}
+
+.swatch-error { background: var(--sev-error); }
+.swatch-warning { background: var(--sev-warning); }
+.swatch-info { background: var(--sev-info); }
+.swatch-none { background: var(--sev-none); }
+
+/* The chart's own selection box, in the colours of the page. */
+.timeline .u-select {
+  background: var(--ring);
+  border-left: var(--hair) solid var(--accent);
+  border-right: var(--hair) solid var(--accent);
+}
+
+/* The events. */
+
+.results {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+}
+
+.results-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--w-detail));
+}
+
+.events-head {
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.events-scroll {
+  max-height: var(--h-results);
+  overflow: auto;
+}
+
+.events-table {
+  table-layout: fixed;
+  min-width: var(--w-page);
+}
+
+.events-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* One height for every row: the list is drawn from the rows in view, and its length is rows times this. */
+.events-table td {
+  height: var(--rowH);
+  padding: 0 var(--sp-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-12);
+}
+
+.events-table tr.spacer td {
+  padding: 0;
+  border: 0;
+}
+
+.events-table tr.spacer:hover td {
+  background: none;
+}
+
+.col-time { width: var(--w-time); }
+.col-host { width: var(--w-col); }
+.col-program { width: var(--w-col); }
+.col-level { width: var(--w-meter); }
+.col-extra { width: var(--w-col); }
+
+.event-time {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.event-open td {
+  background: var(--accentBg);
+}
+
+.events-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-10) var(--sp-12);
+  border-top: var(--hair) solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.search-foot {
+  margin: 0;
+}
+
+/* Text out of a log. Its direction is set by the page, never by the text; what would act is shown as a mark. */
+
+.inert {
+  unicode-bidi: plaintext;
+}
+
+.odd {
+  padding: 0 var(--sp-2);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r-xs);
+  background: var(--warnBg);
+  color: var(--warn);
+  font-family: var(--data);
+  font-size: var(--fs-10);
+  unicode-bidi: isolate;
+  user-select: all;
+}
+
+.odd-more {
+  color: var(--muted);
+}
+
+/* One event. */
+
+.detail {
+  min-width: 0;
+  padding: var(--sp-12) var(--sp-16) var(--sp-16);
+  background: var(--surface);
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r);
+}
+
+.detail-head,
+.detail-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-6) var(--sp-12);
+}
+
+.detail-head h2,
+.detail-sub h3 {
+  margin: 0;
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+}
+
+.detail-sub {
+  margin-top: var(--sp-16);
+  padding-bottom: var(--sp-6);
+}
+
+.detail-facts {
+  margin-top: var(--sp-8);
+  max-width: none;
+  overflow-wrap: anywhere;
+}
+
+.detail-filter {
+  width: var(--w-filter);
+}
+
+.raw {
+  max-height: var(--h-raw);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-10);
+  overflow: auto;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--sunken);
+  font-family: var(--data);
+  font-size: var(--fs-12);
+  line-height: var(--lh);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.long-more,
+.detail-note {
+  margin: var(--sp-6) 0 0;
+}
+
+.fields-table th,
+.fields-table td {
+  height: auto;
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) 0;
+  vertical-align: top;
+  font-size: var(--fs-12);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.fields-table th {
+  width: 34%;
+  color: var(--ink);
+  font-weight: var(--fw-regular);
+}
+
+.fields-table tbody tr:hover td {
+  background: none;
+}
+
+.field-zero th,
+.field-zero .field-value {
+  color: var(--muted);
+}
+
+.field-actions {
+  width: 1%;
+}
+
+.field-buttons {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 1100px) {
+  .results-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

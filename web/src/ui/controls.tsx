@@ -1,5 +1,4 @@
-import * as RadixDialog from '@radix-ui/react-dialog';
-import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Loader } from '../brand/Logo';
 import { Icon, type IconName } from './Icon';
 import './ui.css';
@@ -117,26 +116,68 @@ interface DialogProps {
   children: ReactNode;
 }
 
-export function Dialog({ open, onOpenChange, title, description, children }: DialogProps) {
+/**
+ * A modal dialog on the element the browser has for it: the browser keeps the focus inside, makes the page
+ * behind inert and closes on Escape, and nothing has to be injected into the document to do so.
+ */
+export function Dialog({ open, ...rest }: DialogProps) {
+  // Mounted only while open, so what was typed into it does not outlive it.
+  return open ? <Modal {...rest} /> : null;
+}
+
+function Modal({ onOpenChange, title, description, children }: Omit<DialogProps, 'open'>) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) {
+      return;
+    }
+    // A document without the modal API (a test's) still shows the dialog.
+    if (typeof el.showModal === 'function') {
+      el.showModal();
+    } else {
+      el.setAttribute('open', '');
+    }
+    return () => {
+      if (el.open && typeof el.close === 'function') {
+        el.close();
+      }
+    };
+  }, []);
   return (
-    <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
-      <RadixDialog.Portal>
-        <RadixDialog.Overlay className="scrim" />
-        <RadixDialog.Content className="dialog" aria-describedby={description === undefined ? undefined : 'dialog-description'}>
-          <div className="dialog-head">
-            <RadixDialog.Title className="dialog-title">{title}</RadixDialog.Title>
-            <RadixDialog.Close className="btn btn-ghost btn-small btn-icon" aria-label="Close">
-              <Icon name="close" />
-            </RadixDialog.Close>
-          </div>
-          {description === undefined ? null : (
-            <RadixDialog.Description id="dialog-description" className="muted">
-              {description}
-            </RadixDialog.Description>
-          )}
-          {children}
-        </RadixDialog.Content>
-      </RadixDialog.Portal>
-    </RadixDialog.Root>
+    <dialog
+      ref={ref}
+      className="dialog"
+      aria-labelledby={titleId}
+      aria-describedby={description === undefined ? undefined : descriptionId}
+      onCancel={(event) => {
+        event.preventDefault();
+        onOpenChange(false);
+      }}
+    >
+      <div className="dialog-head">
+        <h2 id={titleId} className="dialog-title">
+          {title}
+        </h2>
+        <button
+          type="button"
+          className="btn btn-ghost btn-small btn-icon"
+          aria-label="Close"
+          onClick={() => {
+            onOpenChange(false);
+          }}
+        >
+          <Icon name="close" />
+        </button>
+      </div>
+      {description === undefined ? null : (
+        <p id={descriptionId} className="muted">
+          {description}
+        </p>
+      )}
+      {children}
+    </dialog>
   );
 }

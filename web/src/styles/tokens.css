@@ -69,6 +69,11 @@
   --errBg: #FBE9E7;
   --onErr: #FFFFFF;
   --barI: #8D95A7;
+  /* The series of the timeline, by severity. Each is a colour above, so a theme changes them with it. */
+  --sev-error: var(--err);
+  --sev-warning: var(--warn);
+  --sev-info: var(--barI);
+  --sev-none: var(--ctlLine);
   --ring: rgba(47, 82, 184, .22);
   --scrim: rgba(27, 29, 32, .45);
   --shadow: 0 12px 32px rgba(0, 0, 0, .18);
@@ -139,6 +144,17 @@
   --w-menu: 220px;
   --w-meter: 80px;
   --w-file: 320px;
+  --w-axis: 56px;
+  --w-tick: 110px;
+  --w-detail: 520px;
+  --w-time: 200px;
+  --w-col: 160px;
+
+  /* Heights of the fixed parts of the search page. */
+  --h-timeline: 140px;
+  --h-query: 120px;
+  --h-results: 640px;
+  --h-raw: 280px;
 
   /* Motion. */
   --t-fast: 100ms;

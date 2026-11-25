@@ -9,8 +9,11 @@ export class ApiError extends Error {
   readonly code: string | undefined;
   /** Seconds the server asks the caller to wait. */
   readonly retryAfter: number | undefined;
+  /** Where in the query text a syntax error stands, in UTF-16 units as the server counts them. */
+  readonly offset: number | undefined;
+  readonly length: number | undefined;
 
-  constructor(init: { status: number; slug: string; title: string; detail?: string | undefined; code?: string | undefined; retryAfter?: number | undefined }) {
+  constructor(init: { status: number; slug: string; title: string; detail?: string | undefined; code?: string | undefined; retryAfter?: number | undefined; offset?: number | undefined; length?: number | undefined }) {
     super(init.title);
     this.name = 'ApiError';
     this.status = init.status;
@@ -18,6 +21,8 @@ export class ApiError extends Error {
     this.detail = init.detail;
     this.code = init.code;
     this.retryAfter = init.retryAfter;
+    this.offset = init.offset;
+    this.length = init.length;
   }
 
   /** No answer arrived: the backend is down or the network is. */
@@ -28,6 +33,10 @@ export class ApiError extends Error {
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function whole(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function seconds(header: string | null): number | undefined {
@@ -57,6 +66,8 @@ export async function problemOf(response: Response): Promise<ApiError> {
     detail: text(body['detail']),
     code: text(body['code']),
     retryAfter: seconds(response.headers.get('Retry-After')),
+    offset: whole(body['offset']),
+    length: whole(body['length']),
   });
 }
 

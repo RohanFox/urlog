@@ -1,6 +1,6 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router';
+import { Link, NavLink, useMatch } from 'react-router';
 import { Lockup } from '../brand/Logo';
 import { Banner } from '../ui/controls';
 import { Icon } from '../ui/Icon';
@@ -20,7 +20,8 @@ function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
   const { signOut } = useSession();
   const { choice, setChoice } = useTheme();
   return (
-    <Menu.Root>
+    // Not modal: a modal menu locks the page's scroll through a style element it injects, which the content policy refuses.
+    <Menu.Root modal={false}>
       <Menu.Trigger className="user-button" aria-label={`Signed in as ${user.name}. Account and theme`}>
         <span className="avatar" aria-hidden="true">
           {user.name.slice(0, 2).toUpperCase()}
@@ -73,6 +74,9 @@ function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
 /** The frame of every page behind the session: the header with the logo, the places and the user. */
 export function Shell({ children }: { children: ReactNode }) {
   const [signOutFailed, setSignOutFailed] = useState(false);
+  // Inside a case the header leads to its two pages.
+  const inCase = useMatch('/cases/:caseId/*');
+  const caseId = inCase !== null && /^[0-9]+$/.test(inCase.params.caseId ?? '') ? inCase.params.caseId : undefined;
 
   // Closing or reloading the tab while bytes have still to reach the server asks first. The browser words the
   // question itself; a page may only say that it has one.
@@ -94,10 +98,22 @@ export function Shell({ children }: { children: ReactNode }) {
           <Lockup label="" />
         </Link>
         <nav className="tabs" aria-label="Main">
-          <NavLink className="tab" to="/cases">
+          <NavLink className="tab" to="/cases" end>
             <Icon name="folder" />
             Cases
           </NavLink>
+          {caseId === undefined ? null : (
+            <>
+              <NavLink className="tab" to={`/cases/${caseId}`} end>
+                <Icon name="file" />
+                Evidence
+              </NavLink>
+              <NavLink className="tab" to={`/cases/${caseId}/search`}>
+                <Icon name="search" />
+                Search
+              </NavLink>
+            </>
+          )}
         </nav>
         <span className="grow" />
         <UserMenu
