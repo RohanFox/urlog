@@ -20,6 +20,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../Shared/TestServerMemory.cs" Link="Shared/TestServerMemory.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />
     <ProjectReference Include="../../src/Query/Query.csproj" />
     <ProjectReference Include="../../src/Api/Api.csproj" />

@@ -19,6 +19,7 @@
   <ItemGroup>
     <!-- A row-for-row dump of a metadata file: how the store identity tests assert that nothing was written. -->
     <Compile Include="../Shared/MetadataDump.cs" Link="Shared/MetadataDump.cs" />
+    <Compile Include="../Shared/TestServerMemory.cs" Link="Shared/TestServerMemory.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Core/Core.csproj" />

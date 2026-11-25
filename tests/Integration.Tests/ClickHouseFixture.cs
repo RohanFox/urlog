@@ -1,6 +1,7 @@
 using DotNet.Testcontainers.Builders;
 using Urlog.Core;
 using Testcontainers.ClickHouse;
+using Urlog.Tests.Shared;
 
 namespace Urlog.Integration.Tests;
 
@@ -30,6 +31,8 @@ public sealed class ClickHouseFixture : IAsyncLifetime
             .WithPortBinding(9000, assignRandomHostPort: true)
             .WithResourceMapping(new FileInfo(Path.Combine(deploy, "config.d", "urlog.xml")), "/etc/clickhouse-server/config.d/")
             .WithResourceMapping(new FileInfo(Path.Combine(deploy, "users.d", "urlog.xml")), "/etc/clickhouse-server/users.d/")
+            // A ceiling of its own, so the server's memory limit does not move with what else the box holds.
+            .WithResourceMapping(TestServerMemory.ConfigBytes, TestServerMemory.ContainerPath)
             .Build();
     }
 
