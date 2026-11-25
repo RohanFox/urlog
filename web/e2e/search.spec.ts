@@ -70,6 +70,16 @@ async function parsed(page: Page, name: string): Promise<'detected' | 'overridde
   return 'overridden';
 }
 
+/** Two lines with bytes that are not UTF-8: Latin-1 letters, a stray continuation byte, an overlong form, 0xFF. */
+const NOT_UTF8 = Buffer.concat([Buffer.from('2026-11-08T12:00:01+00:00 caf'), Buffer.from([0xe9]), Buffer.from(' na'), Buffer.from([0xef]), Buffer.from('ve')]);
+
+function notUtf8Log(): string {
+  mkdirSync(scratch, { recursive: true });
+  const path = join(scratch, 'not-utf8.log');
+  writeFileSync(path, Buffer.concat([NOT_UTF8, Buffer.from('\n2026-11-08T12:00:02+00:00 stray '), Buffer.from([0x80, 0xc0, 0xaf, 0xff]), Buffer.from(' end\n')]));
+  return path;
+}
+
 /** One syslog record with three thousand parameters of structured data, each a field of its event. */
 function manyFieldsLog(): string {
   const params = Array.from({ length: 3000 }, (_, i) => `p${String(i).padStart(4, '0')}="<b>v${i}</b>"`).join(' ');
@@ -161,16 +171,16 @@ test('a case is filled and its search page shows timeline, events and count', as
   await page.getByRole('dialog').getByRole('button', { name: 'Create case' }).click();
   await page.getByRole('link', { name: caseName }).click();
 
-  await page.getByLabel('Files to add').setInputFiles([nginxLog(), syslogSample, hostileLog(), longLineLog(), manyFieldsLog()]);
+  await page.getByLabel('Files to add').setInputFiles([nginxLog(), syslogSample, hostileLog(), longLineLog(), manyFieldsLog(), notUtf8Log()]);
   const how: Record<string, string> = {};
-  for (const name of ['paged.log', 'sample.log', 'hostile.log', 'long-line.log', 'many-fields.log']) {
+  for (const name of ['paged.log', 'sample.log', 'hostile.log', 'long-line.log', 'many-fields.log', 'not-utf8.log']) {
     how[name] = await parsed(page, name);
   }
   // Kept with the run: which of the hostile files detection took for a log by itself.
   test.info().annotations.push({ type: 'detection', description: JSON.stringify(how) });
   writeFileSync(join(scratch, 'detection.json'), JSON.stringify(how));
   // A log with a NUL, a bell and escapes in it is a log: nobody has to name its source by hand.
-  expect(how).toEqual({ 'paged.log': 'detected', 'sample.log': 'detected', 'hostile.log': 'detected', 'long-line.log': 'detected', 'many-fields.log': 'detected' });
+  expect(how).toEqual({ 'paged.log': 'detected', 'sample.log': 'detected', 'hostile.log': 'detected', 'long-line.log': 'detected', 'many-fields.log': 'detected', 'not-utf8.log': 'detected' });
 
   await page.getByRole('link', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(/\/cases\/\d+\/search$/);
@@ -547,14 +557,106 @@ test('an export is written to the file the reader chose as it arrives, and two e
   const lines = exported.trimEnd().split('\r\n');
   // A note of the sensitive columns, the header, and one line for each of the 65 events.
   expect(lines[0]).toMatch(/^# sensitive fields: /);
-  expect(lines[1]).toBe('ts,host,program,severity,source_ip,message');
+  // Every row with the file and offset it came from and its raw line.
+  expect(lines[1]).toBe('ts,host,program,severity,source_ip,message,file_id,file_offset,raw');
   expect(lines).toHaveLength(67);
+  expect(lines[2]).toMatch(/,\d+,\d+,"198\.51\.100\.\d+ - - \[07\/Nov\/2026:06:10:40 \+0000\] ""GET \/shop\/item\/640 HTTP\/1\.1"" 404 /);
   expect(lines[2]).toContain('404');
 
   await page.getByRole('button', { name: 'Export' }).click();
   await page.getByRole('menuitem', { name: 'CSV', exact: true }).click();
   await expect(page.getByText(/^Exported case-\d+-export\.csv/)).toBeVisible();
   expect(await stored()).toBe(exported);
+  await nothingRan(page);
+});
+
+test('the brief form, and the files a result drew from with their hashes, are exports of their own', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = async (options: { suggestedName: string }) => {
+      const root = await navigator.storage.getDirectory();
+      return root.getFileHandle(options.suggestedName, { create: true });
+    };
+  });
+  const stored = (name: string) =>
+    page.evaluate(async (wanted) => {
+      const root = await navigator.storage.getDirectory();
+      return (await (await root.getFileHandle(wanted)).getFile()).text();
+    }, name);
+
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  const caseId = new URL(page.url()).pathname.split('/')[2] ?? '';
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Brief columns' }).click();
+  await page.getByRole('menuitem', { name: 'CSV, brief' }).click();
+  await expect(page.getByText(/^Exported case-\d+-export\.csv, [\d.]+ KiB, 65 rows$/)).toBeVisible();
+  expect((await stored(`case-${caseId}-export.csv`)).split('\r\n')[1]).toBe('ts,host,program,severity,source_ip,message');
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'The files of this result, with their hashes (CSV)' }).click();
+  await expect(page.getByText(/^Exported case-\d+-export-files\.csv/)).toBeVisible();
+  const files = (await stored(`case-${caseId}-export-files.csv`)).trimEnd().split('\r\n');
+  expect(files[0]).toBe('file_id,name,host,size,sha256,rows');
+  // One file holds every 404 of the case: named, with its size, its SHA-256 at intake, and all 65 rows.
+  expect(files).toHaveLength(2);
+  expect(files[1]).toMatch(/^\d+,paged\.log,,\d+,[0-9a-f]{64},65$/);
+  await nothingRan(page);
+});
+
+test('the bytes of a line are shown as hex and saved exactly, and the page says when the text is not the bytes', async ({ page }) => {
+  await openSearch(page, '?from=2026-11-08T12%3A00%3A00Z&to=2026-11-08T12%3A00%3A02Z');
+  await expect(eventsStatus(page)).toContainText('1 of 1 events loaded');
+  await eventsRegion(page).getByRole('button', { name: /Open the event/ }).click();
+  const detail = page.getByRole('complementary', { name: 'Event' });
+
+  // The server, not a guess, says that this line's text is not its bytes.
+  await expect(detail.getByRole('note')).toContainText('This line holds bytes that are not valid UTF-8');
+  await expect(detail.getByLabel('Raw line', { exact: true })).toContainText('caf\uFFFD na\uFFFDve');
+
+  await detail.getByRole('button', { name: 'Show the bytes' }).click();
+  const hex = detail.getByLabel('Bytes of the line, as hex');
+  // Sixteen bytes to a row: the letter that is not UTF-8 stands as its byte, and as a dot beside it.
+  await expect(hex).toContainText('63 61 66 e9 20 6e');
+  await expect(hex).toContainText('61 ef 76 65');
+  await expect(hex).toContainText('|a.ve|');
+  await expect(detail).toContainText(`${NOT_UTF8.length} bytes, as stored`);
+  await expect(detail).toContainText(/SHA-256 [0-9a-f]{64}/);
+
+  const download = page.waitForEvent('download');
+  await detail.getByRole('button', { name: 'Save the bytes' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^case-\d+-file-\d+-offset-0\.bin$/);
+  expect(readFileSync(await file.path()).equals(NOT_UTF8)).toBe(true);
+
+  // A line of plain text carries no such note.
+  await page.goto(`${new URL(page.url()).pathname}?q=status%3D404`);
+  await eventsRegion(page).getByRole('button', { name: /Open the event/ }).first().click();
+  await expect(detail.getByLabel('Raw line', { exact: true })).toContainText('404');
+  await expect(detail.getByRole('note')).toHaveCount(0);
+  await nothingRan(page);
+});
+
+test('the pieces of a long line say which line they are, and the whole line is saved as one file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openSearch(page, '?from=2026-11-08T10%3A00%3A09Z&to=2026-11-08T10%3A00%3A10Z');
+  await expect(eventsStatus(page)).toContainText('2 of 2 events loaded');
+  await eventsRegion(page).getByRole('button', { name: /Open the event/ }).first().click();
+  const detail = page.getByRole('complementary', { name: 'Event' });
+  // The line begins after the 47 bytes of the line before it.
+  await expect(detail.getByRole('note')).toContainText('Part 2 of 2 of one line that begins at offset 47 of this file');
+
+  const download = page.waitForEvent('download');
+  await detail.getByRole('button', { name: 'Save the whole line' }).click();
+  const file = await download;
+  await expect(detail.getByRole('note')).toContainText('Saved 1,048,602 bytes from 2 parts.');
+  const whole = readFileSync(await file.path());
+  expect(whole.length).toBe(MEGABYTE + 26);
+  expect(whole.equals(Buffer.concat([Buffer.from('2026-11-08T10:00:09+00:00 '), Buffer.alloc(MEGABYTE, 'A')]))).toBe(true);
+
+  await detail.getByRole('button', { name: 'Show the parts of this line' }).click();
+  await expect(queryBox(page)).toHaveText(/^file\.id=\d+ line\.first_offset="47" \| sort file\.offset$/);
+  await expect(eventsStatus(page)).toContainText('2 of 2 events loaded');
   await nothingRan(page);
 });
 

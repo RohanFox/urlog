@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setCsrfToken } from '../api/http';
 import { fakeServer, problem } from '../test-server';
 import { complete, type Words } from './Editor';
-import { ExportJob, exportName, exportUrl } from './export';
+import { estimateBytes, EXPORT_ROWS, ExportJob, exportName, exportUrl, HELD_LIMIT_BYTES, mayHold } from './export';
 import type { SearchRequest } from './run';
 import { decode } from './stream';
 import { isWord, searchPart } from './terms';
@@ -82,6 +82,32 @@ describe('the address of an export', () => {
   it('asks for the formula guard only for CSV', () => {
     expect(exportUrl(request, 'csv', true)).toContain('&formula_guard=true');
     expect(exportUrl(request, 'json', true)).not.toContain('formula_guard');
+  });
+
+  it('asks for the brief columns by name, and for the files of the result at an address of its own', () => {
+    // The evidence form is the server's default and is asked for by saying nothing.
+    expect(exportUrl(request, 'csv', false, 'evidence')).toBe(exportUrl(request, 'csv', false));
+    expect(exportUrl(request, 'csv', true, 'brief')).toContain('&formula_guard=true&columns=brief');
+    expect(exportUrl(request, 'csv', true, 'files')).toBe('/api/v1/cases/7/search/export/files?format=csv&query=status%3D404+%22a+b%22+%7C+head+5&from=-7d%40d&tz=Europe%2FBucharest');
+    expect(exportName(request, 'csv', 'files')).toBe('case-7-export-files.csv');
+  });
+
+  it('estimates the size of the file from the rows and the lines, up to the row limit of the server', () => {
+    // Brief: the six columns. Evidence: those, the file, the offset and the line. JSON lines: half as much again.
+    expect(estimateBytes(1000, 400, 'csv', 'brief')).toBe(150_000);
+    expect(estimateBytes(1000, 400, 'csv', 'evidence')).toBe(590_000);
+    expect(estimateBytes(1000, 400, 'json', 'evidence')).toBe(885_000);
+    expect(estimateBytes(50_000_000, 400, 'csv', 'evidence')).toBe(EXPORT_ROWS * 590);
+    expect(estimateBytes(undefined, 400, 'csv', 'evidence')).toBe(EXPORT_ROWS * 590);
+    expect(estimateBytes(50_000_000, 400, 'csv', 'files')).toBe(0);
+  });
+
+  it('holds a file in the page up to the size whose cost in memory stays under the rule', () => {
+    expect(mayHold(HELD_LIMIT_BYTES)).toBe(true);
+    expect(mayHold(HELD_LIMIT_BYTES + 1)).toBe(false);
+    // The measured cost of holding is 1.5 to 1.65 times the file; the rule is 500 MB, with room left under it.
+    expect(HELD_LIMIT_BYTES).toBe(300_000_000);
+    expect(HELD_LIMIT_BYTES * 1.65).toBeLessThan(500_000_000);
   });
 
   it('names the file by the case and the format', () => {

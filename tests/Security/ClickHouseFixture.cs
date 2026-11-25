@@ -249,8 +249,16 @@ public sealed class ClickHouseFixture : IAsyncLifetime
             }
 
             writer.AppendString(EventColumn.Program, "nginx"u8);
-            writer.AppendString(EventColumn.Raw, "GET /index.html 200"u8);
-            writer.AppendMessage(0, 19);
+            if (seed[i].Raw is { } raw)
+            {
+                writer.AppendString(EventColumn.Raw, raw);
+                writer.AppendMessage(0, raw.Length);
+            }
+            else
+            {
+                writer.AppendString(EventColumn.Raw, "GET /index.html 200"u8);
+                writer.AppendMessage(0, 19);
+            }
             writer.CommitRow();
         }
 
@@ -295,5 +303,5 @@ public sealed class SeedReaders : ICollectionFixture<ClickHouseFixture>
     public const string Name = "seed readers";
 }
 
-/// <summary>One seeded event: its time in milliseconds, its host, and its severity (empty for none).</summary>
-public sealed record SeedRow(long Milliseconds, string Host, string Severity);
+/// <summary>One seeded event: its time in milliseconds, its host, its severity (empty for none), and the bytes of its line when a test wants its own.</summary>
+public sealed record SeedRow(long Milliseconds, string Host, string Severity, byte[]? Raw = null);

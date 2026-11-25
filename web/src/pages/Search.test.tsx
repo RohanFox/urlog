@@ -72,6 +72,8 @@ interface Event {
   file?: number;
   offset?: number;
   extras?: Record<string, string>;
+  /** What the server says of the line's bytes: 0 when its text holds replacements. */
+  valid?: number;
 }
 
 function row(e: Event) {
@@ -90,6 +92,7 @@ function row(e: Event) {
     'file.offset': e.offset ?? 100,
     'host.id': 3,
     extras: e.extras ?? {},
+    'raw.valid_utf8': e.valid ?? 1,
   };
   return COLUMNS.map((name) => values[name] ?? (name.endsWith('.pid') || name.endsWith('.code') || name.endsWith('.bytes') ? 0 : ''));
 }
@@ -576,10 +579,70 @@ describe('the fields, the zeros and the export on the search page', () => {
     expect(names).not.toContain('process.pid');
   });
 
-  it('says on an event whose line held bytes that are not UTF-8 that the text is not the exact bytes', async () => {
-    open({ [SEARCH]: listing({ rows: [{ offset: 100, raw: 'caf� na�ve', message: 'caf�' }] }) }, '/cases/7/search?sel=11:100');
+  it('says, on the word of the server, when the text of a line is not its bytes, and shows the bytes as hex', async () => {
+    const stored = new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0x20, 0x3c, 0x62, 0x3e, 0x00, 0xff]);
+    const server = open(
+      {
+        [SEARCH]: listing({ rows: [{ offset: 100, raw: 'caf� <b>', message: 'caf�', valid: 0 }, { offset: 200, raw: 'a line that says � itself', valid: 1 }] }),
+        'GET /api/v1/cases/7/files/11/events/100/raw': { status: 200, bytes: stored, headers: { 'X-Urlog-Raw-Sha256': 'ab'.repeat(32) } },
+      },
+      '/cases/7/search?sel=11:100',
+    );
+    const user = userEvent.setup();
     const detail = await screen.findByRole('complementary', { name: 'Event' });
-    expect(within(detail).getByText(/This line holds bytes that are not valid UTF-8/)).toHaveTextContent('what Copy gives are not the exact bytes of the file');
+    expect(within(detail).getByRole('note')).toHaveTextContent('This line holds bytes that are not valid UTF-8. The text above has a replacement character for each, so neither it nor Copy is the exact line. The bytes are.');
+
+    // Nothing is asked of the server until the reader asks for the bytes.
+    expect(server.sent.some((s) => s.path.includes('/raw'))).toBe(false);
+    await user.click(within(detail).getByRole('button', { name: 'Show the bytes' }));
+    const hex = await within(detail).findByLabelText('Bytes of the line, as hex');
+    expect(hex.textContent).toBe('00000000  63 61 66 e9 20 3c 62 3e  00 ff                    |caf. <b>..|');
+    expect(detail).toHaveTextContent('10 bytes, as stored');
+    expect(detail).toHaveTextContent(`SHA-256 ${'ab'.repeat(32)}`);
+    // Asked for by the key of the event: its file, its offset, its time and its host.
+    expect(server.sent.find((s) => s.path.includes('/raw'))?.path).toBe('/api/v1/cases/7/files/11/events/100/raw?ts=2026-03-01T00%3A00%3A05.000Z&host=web-01');
+    expect(document.querySelector('b')).toBeNull();
+
+    // The bytes leave the page as a file of bytes.
+    const made: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      made.push(blob as Blob);
+      return 'blob:bytes';
+    });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click(this: HTMLAnchorElement) {
+      clicked.push(this.download);
+    });
+    await user.click(within(detail).getByRole('button', { name: 'Save the bytes' }));
+    expect(clicked).toEqual(['case-7-file-11-offset-100.bin']);
+    expect(made[0]?.type).toBe('application/octet-stream');
+    expect(new Uint8Array(await (made[0] as Blob).arrayBuffer())).toEqual(stored);
+  });
+
+  it('does not take a line for damaged because it holds a replacement character of its own', async () => {
+    open({ [SEARCH]: listing({ rows: [{ offset: 200, raw: 'a line that says � itself', valid: 1 }] }) }, '/cases/7/search?sel=11:200');
+    const detail = await screen.findByRole('complementary', { name: 'Event' });
+    expect(within(detail).queryByRole('note')).toBeNull();
+    expect(within(detail).getByRole('button', { name: 'Show the bytes' })).toBeInTheDocument();
+  });
+
+  it('says why when the bytes cannot be read', async () => {
+    open({ [SEARCH]: listing({ rows: [{ offset: 100 }] }), 'GET /api/v1/cases/7/files/11/events/100/raw': problem(404, 'not-found', 'no event of this case has that file, offset, time and host') }, '/cases/7/search?sel=11:100');
+    const detail = await screen.findByRole('complementary', { name: 'Event' });
+    await userEvent.setup().click(within(detail).getByRole('button', { name: 'Show the bytes' }));
+    expect(await within(detail).findByRole('alert')).toHaveTextContent('The bytes could not be read: no event of this case has that file, offset, time and host');
+  });
+
+  it('says of a piece of a long line which line it is a piece of, and leads to its parts', async () => {
+    const server = open({ [SEARCH]: listing({ rows: [{ offset: 65_564, extras: { 'line.first_offset': '28', 'line.part': '2/3', 'timestamp.source': 'previous' } }] }) }, '/cases/7/search?sel=11:65564&from=-7d');
+    const user = userEvent.setup();
+    const detail = await screen.findByRole('complementary', { name: 'Event' });
+    expect(within(detail).getByRole('note')).toHaveTextContent('Part 2 of 3 of one line that begins at offset 28 of this file. A line this long is stored as several events.');
+
+    await user.click(within(detail).getByRole('button', { name: 'Show the parts of this line' }));
+    await waitFor(() => {
+      expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: 'file.id=11 line.first_offset="28" | sort file.offset', from: '-7d' });
+    });
   });
 
   it('exports the search of the address to a file the reader chose, and says where the server cut it', async () => {

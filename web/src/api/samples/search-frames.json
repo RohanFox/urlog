@@ -100,7 +100,8 @@
           "file.id",
           "file.offset",
           "host.id",
-          "extras"
+          "extras",
+          "raw.valid_utf8"
         ],
         "rows": [
           [
@@ -132,7 +133,8 @@
             "",
             {
               "k": "v"
-            }
+            },
+            1
           ],
           [
             "2026-03-01T00:00:04.000Z",
@@ -163,7 +165,8 @@
             "",
             {
               "k": "v"
-            }
+            },
+            1
           ]
         ],
         "next": "CURSOR",
@@ -211,7 +214,8 @@
           "file.id",
           "file.offset",
           "host.id",
-          "extras"
+          "extras",
+          "raw.valid_utf8"
         ],
         "rows": [
           [
@@ -243,7 +247,8 @@
             "",
             {
               "k": "v"
-            }
+            },
+            1
           ],
           [
             "2026-03-01T00:00:02.000Z",
@@ -274,7 +279,8 @@
             "",
             {
               "k": "v"
-            }
+            },
+            1
           ]
         ],
         "next": null,

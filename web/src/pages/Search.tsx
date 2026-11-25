@@ -211,6 +211,15 @@ export function Search() {
   const live = state !== undefined && (state.phase === 'waiting' || state.phase === 'busy' || state.phase === 'streaming');
   const rows = state?.rows;
   const at = useMemo(() => indexOf(state?.columns ?? []), [state?.columns]);
+  // How long a line of this result is, from the first rows the page holds: for the size of an export.
+  const averageRaw = useMemo(() => {
+    const sample = (rows ?? []).slice(0, 200);
+    const i = at('raw');
+    if (sample.length === 0 || i < 0) {
+      return 0;
+    }
+    return sample.reduce((n, row) => n + (typeof row[i] === 'string' ? row[i].length : 0), 0) / sample.length;
+  }, [rows, at]);
   const selectedKey = url.sel === undefined ? undefined : `${url.sel.file}:${url.sel.offset}`;
   const selectedRow = useMemo(() => (selectedKey === undefined || rows === undefined ? undefined : rows.find((row) => keyOf(row, at) === selectedKey)), [selectedKey, rows, at]);
 
@@ -378,7 +387,13 @@ export function Search() {
               This browser does not know the zone {plain(url.tz ?? '', 80)}. Times are shown in UTC.
             </p>
           )}
-          <ExportMenu request={request} disabled={state === undefined || state.phase === 'refused' || state.phase === 'waiting' || state.phase === 'busy'} />
+          <ExportMenu
+            request={request}
+            disabled={state === undefined || state.phase === 'refused' || state.phase === 'waiting' || state.phase === 'busy'}
+            rows={state?.counts?.total}
+            averageRaw={averageRaw}
+            listing={kind === 'events'}
+          />
         </section>
 
         {state?.phase === 'busy' && state.wait !== undefined ? (
@@ -490,6 +505,10 @@ export function Search() {
                   fields={fields}
                   shown={url.cols}
                   onFilter={filterBy}
+                  onQuery={(q) => {
+                    setDraft(q);
+                    go({ q, sel: undefined });
+                  }}
                   onColumn={(field) => {
                     go({ cols: [...url.cols, field].slice(0, MAX_COLUMNS) }, true);
                   }}

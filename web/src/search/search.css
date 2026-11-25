@@ -516,3 +516,19 @@
   white-space: normal;
   font-weight: var(--fw-regular);
 }
+
+/* The bytes of a line. */
+
+.line-bytes {
+  margin-top: var(--sp-8);
+}
+
+.hex {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.linklike:disabled {
+  color: var(--muted);
+  cursor: default;
+}

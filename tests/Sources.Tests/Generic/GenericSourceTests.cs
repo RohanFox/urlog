@@ -117,11 +117,92 @@ public sealed class GenericSourceTests
             Assert.Equal(i <= 32 ? 64 << 10 : 1 << 20, rows[i].RawBytes.Length);
             Assert.True(run.AsSpan((int)(position - 28), rows[i].RawBytes.Length).SequenceEqual(rows[i].RawBytes.Span), $"piece {i} is not the bytes at its offset");
             Assert.Equal("previous", rows[i].Extras["timestamp.source"]);
+            // Every piece says which line it is a piece of and where it stands in it.
+            Assert.Equal(("28", $"{i}/33"), (rows[i].Extras["line.first_offset"], rows[i].Extras["line.part"]));
             position += rows[i].RawBytes.Length;
         }
 
         Assert.Equal("2026-03-01T00:00:05Z after", rows[^1].Raw);
         Assert.DoesNotContain(rows, r => r.IsReject);
+        // The lines around it are whole lines and say nothing of the kind.
+        Assert.DoesNotContain("line.part", rows[0].Extras.Keys);
+        Assert.DoesNotContain("line.first_offset", rows[^1].Extras.Keys);
+    }
+
+    [Fact]
+    public void ALineOfExactlyOneMebibyteIsOneEventAndOneByteMoreIsTwoMarkedPieces()
+    {
+        var whole = new byte[1 << 20];
+        Array.Fill(whole, (byte)'x');
+        "2026-03-01T00:00:01Z "u8.CopyTo(whole);
+        var one = Fixtures.ParseBytes(new GenericSource(), [.. whole, (byte)'\n']);
+        Assert.Single(one);
+        Assert.Empty(one[0].Extras);
+
+        // One byte more: 64 KiB, then the rest. Inside the second piece stands what looks like a time; it is the
+        // middle of a line and not searched, so both pieces carry the time of the line's start.
+        byte[] longer = [.. whole, (byte)'y'];
+        "2031-01-01T00:00:00Z"u8.CopyTo(longer.AsSpan(70_000));
+        var two = Fixtures.ParseBytes(new GenericSource(), [.. longer, (byte)'\n', .. "2026-03-01T00:00:09Z next\n"u8]);
+        Assert.Equal(3, two.Count);
+        Assert.Equal((64 << 10, (1 << 20) + 1 - (64 << 10)), (two[0].RawBytes.Length, two[1].RawBytes.Length));
+        Assert.Equal(("0", "1/2"), (two[0].Extras["line.first_offset"], two[0].Extras["line.part"]));
+        Assert.Equal(("0", "2/2"), (two[1].Extras["line.first_offset"], two[1].Extras["line.part"]));
+        Assert.DoesNotContain("timestamp.source", two[0].Extras.Keys); // the first piece has the line's own time
+        Assert.Equal("previous", two[1].Extras["timestamp.source"]);
+        Assert.Equal(two[0].Ts, two[1].Ts);
+        Assert.Empty(two[2].Extras);
+
+        // The pieces in the order of their offsets are the line, byte for byte.
+        byte[] joined = [.. two[0].RawBytes.Span, .. two[1].RawBytes.Span];
+        Assert.True(joined.AsSpan().SequenceEqual(longer));
+        Assert.Equal((ulong)(64 << 10), two[1].FileOffset);
+    }
+
+    [Fact]
+    public void ALongLastLineWithoutALineBreakIsMarkedLikeAnyOther()
+    {
+        var line = new byte[(1 << 20) + (100 << 10)];
+        Array.Fill(line, (byte)'z');
+        byte[] data = [.. "2026-03-01T00:00:00Z first\n"u8, .. line];
+        var rows = Fixtures.ParseBytes(new GenericSource(), data);
+        Assert.Equal(1 + 3, rows.Count);
+        Assert.Equal(["1/3", "2/3", "3/3"], rows.Skip(1).Select(r => r.Extras["line.part"]));
+        Assert.All(rows.Skip(1), r => Assert.Equal("27", r.Extras["line.first_offset"]));
+        Assert.Equal(line.Length, rows.Skip(1).Sum(r => r.RawBytes.Length));
+    }
+
+    [Fact]
+    public async Task ALineTheReaderHadToCutAcrossChunksIsOneLineInItsMarks()
+    {
+        // The reader of this run cuts a record at 1 MiB. A line of 2.5 MiB reaches the source as three records in
+        // three chunks; the total is not known while the first two are written.
+        var line = new byte[(2 << 20) + (512 << 10)];
+        for (var i = 0; i < line.Length; i++)
+        {
+            line[i] = (byte)('a' + (i % 19));
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), $"urlog-long-line-{Guid.NewGuid():n}.log");
+        try
+        {
+            await File.WriteAllBytesAsync(path, [.. "2026-03-01T00:00:00Z before\n"u8, .. line, (byte)'\n', .. "2026-03-01T00:00:05Z after\n"u8], TestContext.Current.CancellationToken);
+            var rows = await Fixtures.ParseFileAsync(new GenericSource(), path);
+
+            Assert.Equal("2026-03-01T00:00:00Z before", rows[0].Raw);
+            Assert.Equal("2026-03-01T00:00:05Z after", rows[^1].Raw);
+            var pieces = rows.Skip(1).SkipLast(1).ToList();
+            Assert.Equal(["1", "2", "3/3"], pieces.Select(r => r.Extras["line.part"]));
+            Assert.All(pieces, r => Assert.Equal("28", r.Extras["line.first_offset"]));
+            Assert.Equal([28UL, 28UL + (1 << 20), 28UL + (2 << 20)], pieces.Select(r => r.FileOffset));
+            byte[] joined = [.. pieces.SelectMany(r => r.RawBytes.ToArray())];
+            Assert.True(joined.AsSpan().SequenceEqual(line));
+            Assert.Empty(rows[^1].Extras);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

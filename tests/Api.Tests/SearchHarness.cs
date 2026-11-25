@@ -19,7 +19,7 @@ internal sealed record FakeEvent(DateTime Ts, ulong FileId, ulong FileOffset, st
 /// </summary>
 internal sealed class FakeSearchBackend : ISearchBackend
 {
-    private static readonly string[] Columns = [.. FieldCatalog.Embedded.Fields.Where(f => f.Column is not null).Select(f => f.Name), "extras"];
+    private static readonly string[] Columns = [.. FieldCatalog.Embedded.Fields.Where(f => f.Column is not null).Select(f => f.Name), "extras", SearchPlan.RawValidColumn];
 
     public List<FakeEvent> Events { get; } = [];
 
@@ -53,6 +53,9 @@ internal sealed class FakeSearchBackend : ISearchBackend
         return source;
     }
 
+    /// <summary>The stored bytes of an event's line, by file and offset, when a test wants bytes that are not its message.</summary>
+    public Dictionary<(ulong File, ulong Offset), byte[]> RawBytes { get; } = [];
+
     public async Task<QueryRows> RunAsync(SearchStatement statement, ulong caseId, int maxRows, CancellationToken cancellationToken)
     {
         var kind = Kind(statement.Sql);
@@ -61,6 +64,43 @@ internal sealed class FakeSearchBackend : ISearchBackend
         if (Failures.TryGetValue(kind, out var failure))
         {
             throw failure;
+        }
+
+        if (kind == "generations")
+        {
+            // Every file of the stand-in is at its first generation.
+            var files = Matching(statement).GroupBy(e => e.FileId).OrderBy(g => g.Key).Select(g => new object?[] { g.Key, 1U, (ulong)g.Count() }).ToList();
+            return new QueryRows(["file_id", "any(parse_generation)", "count()"], files, false, TimeSpan.Zero);
+        }
+
+        if (kind == "cut")
+        {
+            var skip = int.Parse(statement.Parameters.Single(p => p.Name == "s_skip").Value, CultureInfo.InvariantCulture);
+            var last = Matching(statement).Skip(skip).Take(1).Select(e => new object?[] { e.Ts, e.FileId, e.FileOffset }).ToList();
+            return new QueryRows(["ts", "file_id", "file_offset"], last, false, TimeSpan.Zero);
+        }
+
+        if (kind == "files")
+        {
+            // The files of the rows an export would send: the newest rows up to its limit, grouped.
+            var sent = Matching(statement).Take(Limit(statement)).GroupBy(e => e.FileId).OrderBy(g => g.Key).Select(g => new object?[] { g.Key, (ulong)g.Count() }).ToList();
+            return new QueryRows(["file_id", "count()"], sent, false, TimeSpan.Zero);
+        }
+
+        if (kind == "bytes")
+        {
+            // The one event with that file, offset and time, as the store would find it by its key.
+            string P(string name) => statement.Parameters.Single(p => p.Name == name).Value;
+            var file = ulong.Parse(P("b_file"), CultureInfo.InvariantCulture);
+            var offset = ulong.Parse(P("b_offset"), CultureInfo.InvariantCulture);
+            var found = Events.FirstOrDefault(e => e.FileId == file && e.FileOffset == offset && e.Ts == Time(P("b_ts")) && P("b_host").Length == 0);
+            if (found is null)
+            {
+                return new QueryRows(["base64Encode(raw)"], [], false, TimeSpan.Zero);
+            }
+
+            var bytes = RawBytes.TryGetValue((file, offset), out var stored) ? stored : Encoding.UTF8.GetBytes(found.Message);
+            return new QueryRows(["base64Encode(raw)"], [[Convert.ToBase64String(bytes)]], false, TimeSpan.Zero);
         }
 
         var matching = Matching(statement);
@@ -112,8 +152,14 @@ internal sealed class FakeSearchBackend : ISearchBackend
             throw failure;
         }
 
-        var (columns, rows) = Export ?? (["ts", "host", "program", "severity", "source_ip", "message"],
-            [.. Events.OrderByDescending(e => (e.Ts, e.FileId, e.FileOffset)).Take(statement is null ? int.MaxValue : Limit(statement)).Select(e => new object?[] { e.Ts, "web-01", "nginx", e.Severity, IPAddress.Parse("::ffff:10.0.0.5"), e.Message })]);
+        // The default rows of an export: the listing's six columns, and for an evidence export the file, the offset
+        // and the raw line of each row after them, as the statement asks.
+        var evidence = statement?.Sql.Contains(", file_id, file_offset, raw FROM events_v", StringComparison.Ordinal) == true;
+        string[] names = evidence ? ["ts", "host", "program", "severity", "source_ip", "message", "file_id", "file_offset", "raw"] : ["ts", "host", "program", "severity", "source_ip", "message"];
+        var (columns, rows) = Export ?? (names,
+            [.. Events.OrderByDescending(e => (e.Ts, e.FileId, e.FileOffset)).Take(statement is null ? int.MaxValue : Limit(statement)).Select(e => evidence
+                ? new object?[] { e.Ts, "web-01", "nginx", e.Severity, IPAddress.Parse("::ffff:10.0.0.5"), e.Message, e.FileId, e.FileOffset, "raw of " + e.Message }
+                : new object?[] { e.Ts, "web-01", "nginx", e.Severity, IPAddress.Parse("::ffff:10.0.0.5"), e.Message })]);
         onColumns(columns);
         long sent = 0;
         foreach (var row in rows)
@@ -137,7 +183,11 @@ internal sealed class FakeSearchBackend : ISearchBackend
     }
 
     public static string Kind(string sql) =>
-        sql.StartsWith("SELECT min(ts), count() FROM (", StringComparison.Ordinal) ? "boundary"
+        sql.StartsWith("SELECT base64Encode(raw) FROM events_v", StringComparison.Ordinal) ? "bytes"
+        : sql.StartsWith("SELECT file_id, any(parse_generation), count() FROM events_v", StringComparison.Ordinal) ? "generations"
+        : sql.Contains(" LIMIT 1 OFFSET {s_skip:UInt64}", StringComparison.Ordinal) ? "cut"
+        : sql.StartsWith("SELECT file_id, count() FROM (SELECT file_id FROM events_v", StringComparison.Ordinal) ? "files"
+        : sql.StartsWith("SELECT min(ts), count() FROM (", StringComparison.Ordinal) ? "boundary"
         : sql.Contains("GROUPING SETS", StringComparison.Ordinal) ? "counts"
         : sql.StartsWith("SELECT count() FROM events_v", StringComparison.Ordinal) ? "count"
         : sql.Contains("FROM case_histogram_v", StringComparison.Ordinal) ? "stored"
@@ -192,6 +242,7 @@ internal sealed class FakeSearchBackend : ISearchBackend
                 "log.level" => e.Severity,
                 "source.ip" => IPAddress.Parse("::ffff:10.0.0.5"),
                 "extras" => new Dictionary<string, string> { ["k"] = "v" },
+                SearchPlan.RawValidColumn => (byte)1,
                 _ => string.Empty,
             };
         }

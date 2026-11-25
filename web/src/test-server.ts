@@ -17,6 +17,8 @@ interface Reply {
   text?: string;
   /** A body the test feeds by hand, to hold an answer open or to end it where it likes. */
   stream?: ReadableStream<Uint8Array>;
+  /** A body of bytes that are not text (the bytes of a line), sent as they are. */
+  bytes?: Uint8Array;
 }
 
 type Answer = Reply | (() => Reply);
@@ -53,6 +55,9 @@ export function fakeServer(routes: Record<string, Answer>) {
       return Promise.reject(new TypeError(`no route for ${method} ${path}`));
     }
     const answer = typeof route === 'function' ? route() : route;
+    if (answer.bytes !== undefined) {
+      return Promise.resolve(new Response(answer.bytes.slice().buffer, { status: answer.status, headers: { 'Content-Type': 'application/octet-stream', ...answer.headers } }));
+    }
     if (answer.text !== undefined || answer.stream !== undefined) {
       return Promise.resolve(new Response(answer.stream ?? answer.text ?? '', { status: answer.status, headers: { 'Content-Type': 'text/event-stream', ...answer.headers } }));
     }

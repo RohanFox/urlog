@@ -45,7 +45,7 @@ public sealed class CaseAccessTests
     public void TheRouteTableHasTheCaseRoutes()
     {
         var routes = CaseRoutes().Select(r => r.Data.Item1 + " " + r.Data.Item2).Order().ToList();
-        Assert.True(routes.Count == 39, string.Join(" | ", routes));
+        Assert.True(routes.Count == 41, string.Join(" | ", routes));
         Assert.Equal(
         [
             "DELETE /api/v1/cases/{caseId:long}/files/{fileId:long}/override",
@@ -56,11 +56,13 @@ public sealed class CaseAccessTests
             "GET /api/v1/cases/{caseId:long}/fields",
             "GET /api/v1/cases/{caseId:long}/files",
             "GET /api/v1/cases/{caseId:long}/files/{fileId:long}",
+            "GET /api/v1/cases/{caseId:long}/files/{fileId:long}/events/{offset:long}/raw",
             "GET /api/v1/cases/{caseId:long}/hosts",
             "GET /api/v1/cases/{caseId:long}/jobs",
             "GET /api/v1/cases/{caseId:long}/jobs/{jobId:long}",
             "GET /api/v1/cases/{caseId:long}/members",
             "GET /api/v1/cases/{caseId:long}/search/export",
+            "GET /api/v1/cases/{caseId:long}/search/export/files",
             "GET /api/v1/cases/{caseId:long}/sql/export",
             "GET /api/v1/cases/{caseId:long}/uploads/{uploadId}",
             "HEAD /api/v1/cases/{caseId:long}/uploads/{TusFileId?}",
@@ -145,9 +147,9 @@ public sealed class CaseAccessTests
         using var c = factory.Client();
         await c.LoginAsync("carol", Password);
         var asReader = await c.SendAsync(http, path, body);
-        if (needs == "ro" && (route.Contains("/search", StringComparison.Ordinal) || route.Contains("/sql", StringComparison.Ordinal)))
+        if (needs == "ro" && (route.Contains("/search", StringComparison.Ordinal) || route.Contains("/sql", StringComparison.Ordinal) || route.EndsWith("/raw", StringComparison.Ordinal)))
         {
-            // A search route lets a reader in. The theory sends no query, so what answers is the route's own
+            // A search route, and the route of one line's bytes, let a reader in. The theory sends no query, so what answers is the route's own
             // refusal of the request, which a caller who was stopped at the door never sees.
             Assert.Equal(HttpStatusCode.BadRequest, asReader.StatusCode);
             Assert.Contains("bad_request", await asReader.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
@@ -169,7 +171,7 @@ public sealed class CaseAccessTests
         Assert.NotEqual(bob.Id, carol.Id);
     }
 
-    private static string Ids(string path) => path.Replace("{hostId:long}", "1", StringComparison.Ordinal).Replace("{fileId:long}", "1", StringComparison.Ordinal).Replace("{jobId:long}", "1", StringComparison.Ordinal);
+    private static string Ids(string path) => path.Replace("{hostId:long}", "1", StringComparison.Ordinal).Replace("{fileId:long}", "1", StringComparison.Ordinal).Replace("{offset:long}", "1", StringComparison.Ordinal).Replace("{jobId:long}", "1", StringComparison.Ordinal);
 
     [Fact]
     public async Task AHiddenCaseIs404ForItsOwnMembers()

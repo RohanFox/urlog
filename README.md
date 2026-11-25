@@ -23,7 +23,8 @@ Pre-release. What is in the tree today:
 
 - **Web interface** (`web/`): sign-in, the case list, the evidence page of a case with resumable upload,
   the file list and parse progress, and the search page (query with completion, time range, timeline, events, the fields with
-  their values, one event in full, export), in light and dark. Text out of a log is drawn as text that cannot act, and every answer carries a
+  their values, one event in full with the exact bytes of its line, export with the file and offset of every
+  row), in light and dark. Text out of a log is drawn as text that cannot act, and every answer carries a
   strict content policy.
 
 Not in the tree yet: the other query verbs

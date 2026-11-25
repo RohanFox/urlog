@@ -443,14 +443,15 @@ public sealed class SearchEndpointTests
         var lines = (await csv.Content.ReadAsStringAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
         // The listing's columns hold an address and the message: named before the header. Then four rows, not five.
-        Assert.Equal("# sensitive fields: source.ip, message", lines[0]);
-        Assert.Equal("ts,host,program,severity,source_ip,message", lines[1]);
+        // By default every row also carries the file and offset it came from and its raw line.
+        Assert.Equal("# sensitive fields: source.ip, message, raw", lines[0]);
+        Assert.Equal("ts,host,program,severity,source_ip,message,file_id,file_offset,raw", lines[1]);
         Assert.Equal(6, lines.Length);
         Assert.StartsWith("2026-03-01T00:00:00.002Z,web-01,nginx,", lines[2], StringComparison.Ordinal);
 
         var json = await owner.GetAsync($"/api/v1/cases/{caseId}/search/export?format=json&query=");
         var objects = (await json.Content.ReadAsStringAsync(Ct)).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal("{\"sensitive_fields\":[\"source.ip\",\"message\"]}", objects[0]);
+        Assert.Equal("{\"sensitive_fields\":[\"source.ip\",\"message\",\"raw\"]}", objects[0]);
         Assert.Equal(5, objects.Length);
         Assert.Equal("10.0.0.5", JsonDocument.Parse(objects[1]).RootElement.GetProperty("source_ip").GetString());
 

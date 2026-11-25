@@ -66,7 +66,11 @@ public sealed record ListingColumn(string Name, string Expression);
 /// <param name="Head">The count of <c>head</c>, null when the query has none.</param>
 /// <param name="Rex">The groups the query's rex verbs define, in order.</param>
 /// <param name="Filtered">False when the query narrows nothing but the range.</param>
-public sealed record ListingParts(string Select, string Where, ImmutableArray<ListingSortKey> Sort, int? Head, ImmutableArray<ListingColumn> Rex, bool Filtered);
+public sealed record ListingParts(string Select, string Where, ImmutableArray<ListingSortKey> Sort, int? Head, ImmutableArray<ListingColumn> Rex, bool Filtered)
+{
+    /// <summary>True when the query chose its columns with <c>table</c>; false for the default columns of a listing.</summary>
+    public bool OwnColumns { get; init; }
+}
 
 public sealed record TranspileResult(
     string Sql,
@@ -226,7 +230,7 @@ public sealed class Transpiler
         if (built.Kind == ResultKind.Events)
         {
             var filtered = pipeline.Before.Count > 0 || (query.Search is not null && query.Search is not AndNode { Terms.Length: 0 });
-            listing = new ListingParts(built.Select, where.ToString(), [.. built.Sort], pipeline.Head?.Count, [.. _rexOrder.Select(g => new ListingColumn(g.Name, g.Expression))], filtered);
+            listing = new ListingParts(built.Select, where.ToString(), [.. built.Sort], pipeline.Head?.Count, [.. _rexOrder.Select(g => new ListingColumn(g.Name, g.Expression))], filtered) { OwnColumns = pipeline.Table is not null };
         }
 
         // A column that table left out takes its parameters with it: only what a text names is bound. The rex

@@ -4,8 +4,10 @@ import { Link } from 'react-router';
 import { call } from '../api/http';
 import { number } from '../app/format';
 import { Button, Tag } from '../ui/controls';
+import { linePart, partsQuery } from './bytes';
 import { cellText } from './EventTable';
 import { CopyButton, Inert, LongText, plain } from './inert';
+import { LineBytes } from './LineBytes';
 import type { Cell } from './stream';
 import { cannotFilter } from './terms';
 import { instant } from './time';
@@ -16,7 +18,7 @@ import './search.css';
 export const STEP_FIELDS = 200;
 
 /** Columns that are the event's identity or are shown in their own place, not in the list of fields. */
-const APART = new Set(['_time', 'raw', 'extras', 'file.id', 'file.offset', 'host.id']);
+const APART = new Set(['_time', 'raw', 'extras', 'file.id', 'file.offset', 'host.id', 'raw.valid_utf8']);
 
 export interface FieldInfo {
   type: string;
@@ -36,6 +38,8 @@ interface Props {
   shown: readonly string[];
   onFilter: (field: string, value: string, exclude: boolean) => void;
   onColumn: (field: string) => void;
+  /** Replaces the query of the page, keeping its range: for the parts of a long line. */
+  onQuery: (query: string) => void;
   onClose: () => void;
 }
 
@@ -82,12 +86,13 @@ function entries(columns: readonly string[], row: readonly Cell[], fields: Reado
  * One event in full, from the row the table already holds: its time, its raw line as it was stored, and every
  * field with a value. Nothing here is asked of the server but the name and hash of the file it came from.
  */
-export function Detail({ caseId, columns, row, zone, fields, shown, onFilter, onColumn, onClose }: Props) {
+export function Detail({ caseId, columns, row, zone, fields, shown, onFilter, onColumn, onQuery, onClose }: Props) {
   const at = (name: string) => row[columns.indexOf(name)];
   const time = cellText(at('_time'));
   const raw = cellText(at('raw'));
   const fileId = Number(at('file.id'));
   const offset = cellText(at('file.offset'));
+  const valid = at('raw.valid_utf8');
   const all = useMemo(() => entries(columns, row, fields), [columns, row, fields]);
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(STEP_FIELDS);
@@ -146,11 +151,14 @@ export function Detail({ caseId, columns, row, zone, fields, shown, onFilter, on
         <CopyButton value={raw} label="Copy the whole raw line" />
       </div>
       <LongText value={raw} label="Raw line" />
-      {raw.includes('�') ? (
-        <p className="sub detail-note">
-          This line holds bytes that are not valid UTF-8. The server sent a replacement character (<span className="mono">{'�'}</span>) for each, so the text here and what Copy gives are not the exact bytes of the file.
-        </p>
-      ) : null}
+      <LineBytes
+        event={{ caseId, fileId, offset: Number(offset), ts: time, host: cellText(at('host.name')) }}
+        validUtf8={valid === 0 || valid === false ? false : valid === 1 || valid === true ? true : undefined}
+        part={linePart(at('extras'))}
+        onParts={(firstOffset) => {
+          onQuery(partsQuery(fileId, firstOffset));
+        }}
+      />
 
       <div className="detail-sub">
         <h3>Fields</h3>

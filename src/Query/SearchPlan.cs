@@ -45,6 +45,10 @@ public sealed class SearchPlan
 
             select.Add("extras");
             columns.Add("extras");
+            // Every answer decodes a line as UTF-8; this cell says whether that changed anything, so a reader of the
+            // text knows when it is not the bytes.
+            select.Add("isValidUTF8(raw)");
+            columns.Add(RawValidColumn);
             var generated = 0;
             foreach (var group in _listing.Rex)
             {
@@ -67,6 +71,9 @@ public sealed class SearchPlan
         FileOffsetColumn = columns.IndexOf("file.offset");
     }
 
+    /// <summary>The cell of a page row that is 1 when the stored line is valid UTF-8 and 0 when the text sent for it holds replacements.</summary>
+    public const string RawValidColumn = "raw.valid_utf8";
+
     public TranspileResult Query { get; }
 
     public ResultKind Kind => Query.Kind;
@@ -83,7 +90,7 @@ public sealed class SearchPlan
     public int SortKeys => _listing?.Sort.Length ?? 0;
 
     /// <summary>
-    /// The cells of a page row, in order: every catalog column by its field name, <c>extras</c>, the query's rex
+    /// The cells of a page row, in order: every catalog column by its field name, <c>extras</c>, <c>raw.valid_utf8</c>, the query's rex
     /// groups, then one <c>sort:name</c> cell per sort key from <see cref="SortColumns"/> on, which the cursor reads.
     /// </summary>
     public ImmutableArray<string> PageColumns { get; }
@@ -261,15 +268,85 @@ public sealed class SearchPlan
     /// search are the same bytes and a cut at the limit falls on the same row. An aggregation: its own
     /// statement, whose order the plan already made total.
     /// </summary>
-    public SearchStatement Export(long cap)
+    /// <param name="evidence">
+    /// For a listing with the default columns: also the file and offset of every row and its raw line, so a row of
+    /// the file can be traced to its place in the evidence. A query that chose its columns with <c>table</c> keeps
+    /// exactly those.
+    /// </param>
+    /// <param name="pinned">
+    /// The files and generations the export reads, from <see cref="ExportGenerations"/>: with them a file committed
+    /// after they were taken adds no row. Null reads whatever is visible.
+    /// </param>
+    /// <param name="cut">
+    /// The last row of the export, from <see cref="ExportCut"/>: the statement then reads the rows up to and
+    /// including it, so the sort holds the rows of the file alone and not every row the search matches.
+    /// </param>
+    public SearchStatement Export(long cap, bool evidence = false, IReadOnlyList<FileGeneration>? pinned = null, RowKey? cut = null)
     {
         if (_listing is null)
         {
             return new SearchStatement(Query.Sql, Query.Parameters) { ValuesColumns = Query.ValuesColumns };
         }
 
-        var limit = Math.Min(cap, _listing.Head ?? cap).ToString(CultureInfo.InvariantCulture);
-        var sql = $"SELECT {_listing.Select} FROM events_v WHERE {_listing.Where} ORDER BY {Order(_listing)} LIMIT {{s_limit:UInt64}}";
+        var extra = new List<QueryParameter>();
+        var where = new StringBuilder(_listing.Where);
+        if (pinned is not null)
+        {
+            where.Append(Pinned(pinned));
+        }
+
+        if (cut is not null)
+        {
+            where.Append(" AND NOT ").Append(Later(_listing, cut, extra, "s_c"));
+        }
+
+        var select = evidence && DefaultListing ? _listing.Select + ", " + EvidenceSelect : _listing.Select;
+        var sql = $"SELECT {select} FROM events_v WHERE {where} ORDER BY {Order(_listing)} LIMIT {{s_limit:UInt64}}";
+        extra.Add(new QueryParameter("s_limit", "UInt64", ExportLimit(cap).ToString(CultureInfo.InvariantCulture)));
+        return Statement(sql, extra);
+    }
+
+    /// <summary>The most rows an export of the listing sends: the smaller of its <c>head</c> and <paramref name="cap"/>.</summary>
+    public long ExportLimit(long cap) => Math.Min(cap, Listing().Head ?? cap);
+
+    /// <summary>
+    /// What an export of the listing will read, taken once before it: every file with a matching row, the
+    /// generation of it that is visible, and how many of its rows match. Cells: file, generation, count.
+    /// </summary>
+    public SearchStatement ExportGenerations() =>
+        Statement($"SELECT file_id, any(parse_generation), count() FROM events_v WHERE {Listing().Where} GROUP BY file_id ORDER BY file_id", []);
+
+    /// <summary>
+    /// The row an export longer than its limit ends on: the last of the first <see cref="ExportLimit"/> rows in
+    /// the listing's whole order, read from the keys alone. Cells: the sort keys, then <c>ts</c>, <c>file_id</c>,
+    /// <c>file_offset</c>. No row when the listing is shorter than the limit.
+    /// </summary>
+    public SearchStatement ExportCut(long cap, IReadOnlyList<FileGeneration> pinned)
+    {
+        ArgumentNullException.ThrowIfNull(pinned);
+        var listing = Listing();
+        var keys = string.Concat(listing.Sort.Select((k, i) => $"{k.Expression} AS `{Names.Generated(i)}`, "));
+        var sql = $"SELECT {keys}ts, file_id, file_offset FROM events_v WHERE {listing.Where}{Pinned(pinned)} ORDER BY {Order(listing)} LIMIT 1 OFFSET {{s_skip:UInt64}}";
+        return Statement(sql, [new QueryParameter("s_skip", "UInt64", (ExportLimit(cap) - 1).ToString(CultureInfo.InvariantCulture))]);
+    }
+
+    private const string EvidenceSelect = "file_id, file_offset, raw";
+
+    /// <summary>The columns an evidence export adds to the default ones, as the file names them.</summary>
+    public static ImmutableArray<string> EvidenceColumns { get; } = ["file_id", "file_offset", "raw"];
+
+    /// <summary>True for a listing whose columns are the default ones: the query has no <c>table</c>.</summary>
+    public bool DefaultListing => _listing is { OwnColumns: false };
+
+    /// <summary>
+    /// The files the rows of an export come from, each with how many of those rows: over exactly the rows the
+    /// export sends, in its order and up to its limit, so the two files describe the same result.
+    /// </summary>
+    public SearchStatement ExportFiles(long cap)
+    {
+        var listing = Listing();
+        var limit = Math.Min(cap, listing.Head ?? cap).ToString(CultureInfo.InvariantCulture);
+        var sql = $"SELECT file_id, count() FROM (SELECT file_id FROM events_v WHERE {listing.Where} ORDER BY {Order(listing)} LIMIT {{s_limit:UInt64}}) GROUP BY file_id ORDER BY file_id";
         return Statement(sql, [new QueryParameter("s_limit", "UInt64", limit)]);
     }
 
@@ -324,12 +401,27 @@ public sealed class SearchPlan
             throw new CursorException("the cursor is not one this search issued");
         }
 
+        if (listing.Sort.IsEmpty)
+        {
+            // The plain bound first: it is what the sort key and the partitions prune on.
+            where.Append(" AND ts <= {s_ts:DateTime64(3)}");
+        }
+
+        return where.Append(" AND ").Append(Later(listing, new RowKey(after.SortValues, after.Ts, after.FileId, after.FileOffset), extra, "s_")).ToString();
+    }
+
+    /// <summary>
+    /// The predicate "later in the listing than <paramref name="row"/>": lexicographic over the sort keys and then
+    /// the key of the events, written out since the directions differ.
+    /// </summary>
+    private static string Later(ListingParts listing, RowKey row, List<QueryParameter> extra, string prefix)
+    {
         // The keys in order, each with the comparison that means "later in the listing".
         var keys = new List<(string Expression, string Compare, string Parameter)>();
         for (var i = 0; i < listing.Sort.Length; i++)
         {
             var key = listing.Sort[i];
-            var name = "s_k" + i.ToString(CultureInfo.InvariantCulture);
+            var name = prefix + "k" + i.ToString(CultureInfo.InvariantCulture);
             var (type, reference) = key.Type switch
             {
                 FieldType.Number => ("UInt64", $"{{{name}:UInt64}}"),
@@ -338,32 +430,32 @@ public sealed class SearchPlan
                 FieldType.Ip => ("String", $"toIPv6({{{name}:String}})"),
                 _ => ("String", $"{{{name}:String}}"),
             };
-            extra.Add(new QueryParameter(name, type, after.SortValues[i]));
+            extra.Add(new QueryParameter(name, type, row.SortValues[i]));
             keys.Add((key.Expression, key.Descending ? "<" : ">", reference));
         }
 
-        extra.Add(new QueryParameter("s_ts", "DateTime64(3)", after.Ts));
-        extra.Add(new QueryParameter("s_fid", "UInt64", after.FileId.ToString(CultureInfo.InvariantCulture)));
-        extra.Add(new QueryParameter("s_off", "UInt64", after.FileOffset.ToString(CultureInfo.InvariantCulture)));
-        keys.Add(("ts", "<", "{s_ts:DateTime64(3)}"));
-        keys.Add(("file_id", "<", "{s_fid:UInt64}"));
-        keys.Add(("file_offset", "<", "{s_off:UInt64}"));
+        extra.Add(new QueryParameter(prefix + "ts", "DateTime64(3)", row.Ts));
+        extra.Add(new QueryParameter(prefix + "fid", "UInt64", row.FileId.ToString(CultureInfo.InvariantCulture)));
+        extra.Add(new QueryParameter(prefix + "off", "UInt64", row.FileOffset.ToString(CultureInfo.InvariantCulture)));
+        keys.Add(("ts", "<", $"{{{prefix}ts:DateTime64(3)}}"));
+        keys.Add(("file_id", "<", $"{{{prefix}fid:UInt64}}"));
+        keys.Add(("file_offset", "<", $"{{{prefix}off:UInt64}}"));
 
-        if (listing.Sort.IsEmpty)
-        {
-            // The plain bound first: it is what the sort key and the partitions prune on.
-            where.Append(" AND ts <= {s_ts:DateTime64(3)}");
-        }
-
-        // Lexicographic "after": k1 later, or k1 equal and the rest later. Written out, since the directions differ.
+        // k1 later, or k1 equal and the rest later.
         var predicate = $"{keys[^1].Expression} {keys[^1].Compare} {keys[^1].Parameter}";
         for (var i = keys.Count - 2; i >= 0; i--)
         {
             predicate = $"({keys[i].Expression} {keys[i].Compare} {keys[i].Parameter} OR ({keys[i].Expression} = {keys[i].Parameter} AND {predicate}))";
         }
 
-        return where.Append(" AND ").Append(predicate).ToString();
+        return predicate;
     }
+
+    /// <summary>The files a pinned statement reads, each at one generation, as a filter. No file: no row.</summary>
+    private static string Pinned(IReadOnlyList<FileGeneration> pinned) =>
+        pinned.Count == 0
+            ? " AND 0"
+            : " AND (file_id, parse_generation) IN (" + string.Join(", ", pinned.Select(p => $"({p.FileId.ToString(CultureInfo.InvariantCulture)}, {p.Generation.ToString(CultureInfo.InvariantCulture)})")) + ")";
 
     private SearchStatement Statement(string sql, IReadOnlyList<QueryParameter> extra) =>
         new(sql, [.. Query.Parameters.Where(p => sql.Contains("{" + p.Name + ":", StringComparison.Ordinal)), .. extra]);

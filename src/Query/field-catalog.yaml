@@ -300,3 +300,13 @@ fields:
     type: extra
     description: Where the time of a generic row came from when its line carries none (previous, file, none)
     aliases: [ts_source]
+  - name: line.first_offset
+    extra: line.first_offset
+    type: extra
+    description: On a piece of a line that was stored as several events, the file offset of the first byte of the line (the same on every piece)
+    aliases: []
+  - name: line.part
+    extra: line.part
+    type: extra
+    description: The place of such a piece in its line, as 2/3, or 2 alone while the end of the line was not yet read
+    aliases: []

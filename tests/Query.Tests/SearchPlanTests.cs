@@ -13,7 +13,7 @@ namespace Urlog.Query.Tests;
 public sealed partial class SearchPlanTests
 {
     private const string Filter = "case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)}";
-    private const string Columns = "ts, host, program, severity, event_code, event_action, event_outcome, user_name, source_ip, destination_ip, process_name, url_path, http_status, message, raw, http_method, http_version, http_response_body_bytes, http_referrer, user_agent, url_query, syslog_facility, process_pid, file_id, file_offset, host_id, extras";
+    private const string Columns = "ts, host, program, severity, event_code, event_action, event_outcome, user_name, source_ip, destination_ip, process_name, url_path, http_status, message, raw, http_method, http_version, http_response_body_bytes, http_referrer, user_agent, url_query, syslog_facility, process_pid, file_id, file_offset, host_id, extras, isValidUTF8(raw)";
 
     private static readonly DateTimeOffset From = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset To = new(2026, 4, 1, 0, 0, 0, TimeSpan.Zero);
@@ -46,7 +46,7 @@ public sealed partial class SearchPlanTests
         Assert.Equal("file.id", plan.PageColumns[plan.FileIdColumn]);
         Assert.Equal("file.offset", plan.PageColumns[plan.FileOffsetColumn]);
         Assert.Equal(plan.PageColumns.Length, plan.SortColumns);
-        Assert.Equal("extras", plan.PageColumns[^1]);
+        Assert.Equal(["extras", SearchPlan.RawValidColumn], plan.PageColumns[^2..]);
     }
 
     [Fact]
@@ -194,6 +194,40 @@ public sealed partial class SearchPlanTests
         // The smaller of the query's head and the limit.
         Assert.Equal("50", Plan("| head 50").Export(1_000_000).Parameters.Single(p => p.Name == "s_limit").Value);
         Assert.Equal("1000", Plan("| head 5000").Export(1000).Parameters.Single(p => p.Name == "s_limit").Value);
+    }
+
+    [Fact]
+    public void AnExportOfAListingIsTwoStepsOverPinnedFilesSoItsSortHoldsTheKeysAlone()
+    {
+        var plan = Plan("| sort -bytes host");
+        FileGeneration[] pinned = [new(7, 1), new(9, 3)];
+
+        // What the export reads, taken once: every file with a matching row, at its visible generation, with its count.
+        Assert.Equal($"SELECT file_id, any(parse_generation), count() FROM events_v WHERE {Filter} GROUP BY file_id ORDER BY file_id", plan.ExportGenerations().Sql);
+
+        // The row the file ends on, from the sort keys and the key of the events, over those files alone.
+        var cut = plan.ExportCut(1000, pinned);
+        Assert.Equal(
+            $"SELECT http_response_body_bytes AS `c0`, host AS `c1`, ts, file_id, file_offset FROM events_v WHERE {Filter} AND (file_id, parse_generation) IN ((7, 1), (9, 3)) "
+            + "ORDER BY http_response_body_bytes DESC, host ASC, ts DESC, file_id DESC, file_offset DESC LIMIT 1 OFFSET {s_skip:UInt64}",
+            cut.Sql);
+        Assert.Equal("999", cut.Parameters.Single(p => p.Name == "s_skip").Value);
+        Assert.Equal("49", Plan("| head 50").ExportCut(1000, pinned).Parameters.Single(p => p.Name == "s_skip").Value);
+
+        // The rows up to and including that row, in the same order, from the same files.
+        var rows = plan.Export(1000, evidence: true, pinned, new RowKey(["1024", "web-01"], "2026-03-09 10:11:12.345", 4, 9000));
+        Assert.EndsWith(
+            " AND (file_id, parse_generation) IN ((7, 1), (9, 3)) AND NOT (http_response_body_bytes < {s_ck0:UInt64} OR (http_response_body_bytes = {s_ck0:UInt64} AND (host > {s_ck1:String} OR (host = {s_ck1:String} AND "
+            + "(ts < {s_cts:DateTime64(3)} OR (ts = {s_cts:DateTime64(3)} AND (file_id < {s_cfid:UInt64} OR (file_id = {s_cfid:UInt64} AND file_offset < {s_coff:UInt64})))))))) "
+            + "ORDER BY http_response_body_bytes DESC, host ASC, ts DESC, file_id DESC, file_offset DESC LIMIT {s_limit:UInt64}",
+            rows.Sql,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            [("s_ck0", "1024"), ("s_ck1", "web-01"), ("s_cts", "2026-03-09 10:11:12.345"), ("s_cfid", "4"), ("s_coff", "9000"), ("s_limit", "1000")],
+            rows.Parameters.Where(p => p.Name.StartsWith("s_", StringComparison.Ordinal)).Select(p => (p.Name, p.Value)));
+
+        // No file had a matching row: nothing is read.
+        Assert.Contains(" AND 0 ORDER BY ", plan.Export(1000, evidence: true, []).Sql, StringComparison.Ordinal);
     }
 
     [Fact]

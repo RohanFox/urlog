@@ -135,6 +135,18 @@ public sealed class QueryAudit(MetadataStore store)
             ["cut"] = record.Cut,
             ["complete"] = record.Complete,
         });
+        // Members only some requests have are written only for those, so every older row keeps its shape.
+        if (record.FileId is { } fileId)
+        {
+            details["file_id"] = fileId;
+            details["file_offset"] = record.FileOffset;
+        }
+
+        if (record.Columns is { } columns)
+        {
+            details["columns"] = columns;
+        }
+
         await using var db = store.CreateDbContext();
         await using var transaction = await AuditChain.BeginTransactionAsync(db, CancellationToken.None).ConfigureAwait(false);
         await store.Audit.AppendAsync(db, new AuditEntry(actor.Name, actor.UserId, AuditActions.Query, AuditTargets.Query, @case.Id, details), CancellationToken.None).ConfigureAwait(false);
@@ -149,8 +161,8 @@ public sealed class QueryAudit(MetadataStore store)
 }
 
 /// <summary>What the audit row of one query request says.</summary>
-/// <param name="Language"><c>spl</c> or <c>sql</c>.</param>
-/// <param name="Request"><c>search</c>, <c>page</c> or <c>export</c>.</param>
+/// <param name="Language"><c>spl</c>, <c>sql</c>, or <c>bytes</c> for the bytes of one line.</param>
+/// <param name="Request"><c>search</c>, <c>page</c>, <c>export</c>, <c>export_files</c> or <c>raw</c>.</param>
 /// <param name="Text">The query as the caller sent it.</param>
 public sealed record QueryRecord(string Language, string Request, string Text)
 {
@@ -183,4 +195,13 @@ public sealed record QueryRecord(string Language, string Request, string Text)
 
     /// <summary>For an export: false when the file stopped before its end (the client left, or the read failed).</summary>
     public bool? Complete { get; set; }
+
+    /// <summary>For the bytes of one line: the file of the event.</summary>
+    public long? FileId { get; set; }
+
+    /// <summary>For the bytes of one line: the offset of the event in its file.</summary>
+    public long? FileOffset { get; set; }
+
+    /// <summary>For an export of a listing: which columns it carried (<c>evidence</c>, <c>brief</c>, or <c>table</c> for the query's own).</summary>
+    public string? Columns { get; set; }
 }

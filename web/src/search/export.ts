@@ -7,8 +7,15 @@ import type { Refusal, SearchRequest } from './run';
 
 export type ExportFormat = 'csv' | 'json';
 
+/**
+ * What is exported. `evidence`: the rows, each with the file and offset it came from and its raw line, which
+ * is the server's default. `brief`: the rows with the listing's six columns alone. `files`: the files those
+ * rows came from, with their hashes.
+ */
+export type ExportWhat = 'evidence' | 'brief' | 'files';
+
 /** The address of an export: the search of the page, in the format asked for. */
-export function exportUrl(request: SearchRequest, format: ExportFormat, formulaGuard: boolean): string {
+export function exportUrl(request: SearchRequest, format: ExportFormat, formulaGuard: boolean, what: ExportWhat = 'evidence'): string {
   const params = new URLSearchParams({ format, query: request.q });
   if (request.from !== undefined) {
     params.set('from', request.from);
@@ -19,14 +26,46 @@ export function exportUrl(request: SearchRequest, format: ExportFormat, formulaG
   if (request.tz !== undefined) {
     params.set('tz', request.tz);
   }
+  if (what === 'files') {
+    return `/api/v1/cases/${request.caseId}/search/export/files?${params.toString()}`;
+  }
   if (formulaGuard && format === 'csv') {
     params.set('formula_guard', 'true');
+  }
+  if (what === 'brief') {
+    params.set('columns', 'brief');
   }
   return `/api/v1/cases/${request.caseId}/search/export?${params.toString()}`;
 }
 
-export function exportName(request: SearchRequest, format: ExportFormat): string {
-  return `case-${request.caseId}-export.${format === 'csv' ? 'csv' : 'jsonl'}`;
+export function exportName(request: SearchRequest, format: ExportFormat, what: ExportWhat = 'evidence'): string {
+  return `case-${request.caseId}-export${what === 'files' ? '-files' : ''}.${format === 'csv' ? 'csv' : 'jsonl'}`;
+}
+
+/** The most rows the server puts into one export. */
+export const EXPORT_ROWS = 1_000_000;
+
+/**
+ * About how large an export will be, from the rows the search matches and the lines the page has loaded: enough
+ * to tell a file a page can hold from one it cannot, and no more exact than that.
+ */
+export function estimateBytes(rows: number | undefined, averageRaw: number, format: ExportFormat, what: ExportWhat): number {
+  if (what === 'files') {
+    return 0;
+  }
+  const row = (what === 'brief' ? 150 : 190 + averageRaw) * (format === 'json' ? 1.5 : 1);
+  return Math.min(rows ?? EXPORT_ROWS, EXPORT_ROWS) * row;
+}
+
+/**
+ * The largest file a page holds for a browser that cannot write a file it chose. Holding costs one and a half
+ * to 1.65 times the file in the browser's memory (measured), and the rule is 500 MB.
+ */
+export const HELD_LIMIT_BYTES = 300_000_000;
+
+/** True when a file of about that size may be held in the page; false when the browser must download it itself. */
+export function mayHold(estimatedBytes: number): boolean {
+  return estimatedBytes <= HELD_LIMIT_BYTES;
 }
 
 // The part of the File System Access API this module uses. Chromium has it; the type library does not.
@@ -46,12 +85,6 @@ function picker(): Picker | undefined {
   const candidate = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
   return typeof candidate === 'function' ? candidate.bind(window) : undefined;
 }
-
-/**
- * What a browser without that does. True: the page holds the file until the browser has saved it. False: the
- * browser downloads the address by itself. Decided by measurement (design record, The search page).
- */
-export const HOLDS: boolean = true;
 
 /** True when this browser lets the page write the file as it arrives. */
 export function writesAsItArrives(): boolean {
@@ -103,9 +136,9 @@ export class ExportJob {
   private readonly suggested: string;
   private gone = false;
 
-  constructor(request: SearchRequest, format: ExportFormat, formulaGuard: boolean) {
-    this.url = exportUrl(request, format, formulaGuard);
-    this.suggested = exportName(request, format);
+  constructor(request: SearchRequest, format: ExportFormat, formulaGuard: boolean, what: ExportWhat = 'evidence') {
+    this.url = exportUrl(request, format, formulaGuard, what);
+    this.suggested = exportName(request, format, what);
     this.state = { phase: 'choosing', format, file: undefined, bytes: 0, rows: undefined, cut: false, refusal: undefined };
   }
 
@@ -135,9 +168,7 @@ export class ExportJob {
   async start(): Promise<void> {
     const pick = picker();
     if (pick === undefined) {
-      if (HOLDS) {
-        await this.hold();
-      }
+      await this.hold();
       return;
     }
     let handle: FileHandle;

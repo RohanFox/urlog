@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -62,6 +63,8 @@ public static class SearchEndpoints
         ArgumentNullException.ThrowIfNull(oneCase);
         oneCase.MapPost("/search", SearchAsync).RequireCaseRole(MemberRole.Ro).WithName("SearchCase");
         oneCase.MapGet("/search/export", ExportSearchAsync).RequireCaseRole(MemberRole.Ro).WithName("ExportCaseSearch");
+        oneCase.MapGet("/search/export/files", ExportFilesAsync).RequireCaseRole(MemberRole.Ro).WithName("ExportCaseSearchFiles");
+        oneCase.MapGet("/files/{fileId:long}/events/{offset:long}/raw", RawBytesAsync).RequireCaseRole(MemberRole.Ro).WithName("GetCaseEventRaw");
         oneCase.MapPost("/sql", SqlAsync).RequireCaseRole(MemberRole.Ro).WithName("QueryCaseSql");
         oneCase.MapGet("/sql/export", ExportSqlAsync).RequireCaseRole(MemberRole.Ro).WithName("ExportCaseSql");
     }
@@ -512,7 +515,8 @@ public static class SearchEndpoints
         [FromQuery] string? from,
         [FromQuery] string? to,
         [FromQuery] string? tz,
-        [FromQuery(Name = "formula_guard")] bool? formulaGuard)
+        [FromQuery(Name = "formula_guard")] bool? formulaGuard,
+        [FromQuery] string? columns)
     {
         var @case = http.Features.GetRequiredFeature<CaseContext>().Case;
         var limits = options.Value.Query;
@@ -525,6 +529,12 @@ public static class SearchEndpoints
         if (query is null)
         {
             await ProblemAsync(http, StatusCodes.Status400BadRequest, "bad_request", "query is required").ConfigureAwait(false);
+            return;
+        }
+
+        if (columns is not (null or "evidence" or "brief"))
+        {
+            await ProblemAsync(http, StatusCodes.Status400BadRequest, "bad_request", "columns: evidence (the default: with the file, the offset and the raw line of every row) or brief").ConfigureAwait(false);
             return;
         }
 
@@ -556,10 +566,155 @@ public static class SearchEndpoints
         record.To = plan.Query.RangeTo;
         record.Zone = zoneId;
 
+        // A listing with the default columns is exported as evidence unless the caller asks for the brief form: every
+        // row with the file and offset it came from and its raw line. The query's own table is never added to.
+        var evidence = plan.DefaultListing && columns != "brief";
+        record.Columns = plan.Kind != ResultKind.Events ? null : !plan.DefaultListing ? "table" : evidence ? "evidence" : "brief";
+
         // The names the analyst sees, and which of them the catalog marks sensitive.
-        var columns = plan.Query.Columns;
-        var sensitive = columns.Select(SensitiveName).Where(n => n is not null).Select(n => n!).Distinct(StringComparer.Ordinal).ToList();
-        await ExportAsync(http, me, backend, slots, audit, limits, loggers, @case, record, sw, kind, formulaGuard == true, plan.Export(limits.MaxExportRows), null, plan.Kind == ResultKind.Events ? plan.Count() : null, plan.Head, columns, sensitive, plan.ExportCapped(limits.MaxExportRows)).ConfigureAwait(false);
+        IReadOnlyList<string> names = evidence ? [.. plan.Query.Columns, .. SearchPlan.EvidenceColumns] : plan.Query.Columns;
+        var sensitive = names.Select(SensitiveName).Where(n => n is not null).Select(n => n!).Distinct(StringComparer.Ordinal).ToList();
+        await ExportAsync(http, me, backend, slots, audit, limits, loggers, @case, record, sw, kind, formulaGuard == true, plan.Kind == ResultKind.Events ? null : plan.Export(limits.MaxExportRows), null, plan.Kind == ResultKind.Events ? plan : null, evidence, names, sensitive, plan.ExportCapped(limits.MaxExportRows)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The files a listing's export drew from, as a small file of its own: for each, its id, name, host, size and
+    /// SHA-256 at intake, and how many rows of the export came from it. Counted over exactly the rows the export of
+    /// the same request sends, so a row's <c>file_id</c> in one file is a line of the other. Audited as its own kind
+    /// of request, with the bytes and their hash like any export.
+    /// </summary>
+    private static async Task ExportFilesAsync(
+        HttpContext http,
+        CurrentUser me,
+        ISearchBackend backend,
+        QuerySlots slots,
+        QueryAudit audit,
+        MetadataDb db,
+        IOptions<UrlogOptions> options,
+        TimeProvider clock,
+        ILoggerFactory loggers,
+        [FromQuery] string? format,
+        [FromQuery] string? query,
+        [FromQuery] string? from,
+        [FromQuery] string? to,
+        [FromQuery] string? tz)
+    {
+        var @case = http.Features.GetRequiredFeature<CaseContext>().Case;
+        var limits = options.Value.Query;
+        var sw = Stopwatch.StartNew();
+        if (!await SearchableAsync(http, @case).ConfigureAwait(false) || await FormatAsync(http, format).ConfigureAwait(false) is not { } kind)
+        {
+            return;
+        }
+
+        if (query is null)
+        {
+            await ProblemAsync(http, StatusCodes.Status400BadRequest, "bad_request", "query is required").ConfigureAwait(false);
+            return;
+        }
+
+        var record = new QueryRecord(Spl, "export_files", query);
+        if (query.Length > limits.MaxQueryLength)
+        {
+            await RefuseAsync(http, audit, me, @case, record, sw, QueryOutcome.Invalid, StatusCodes.Status400BadRequest, "query_syntax", $"the query is longer than {limits.MaxQueryLength:N0} characters").ConfigureAwait(false);
+            return;
+        }
+
+        SearchPlan plan;
+        try
+        {
+            (plan, var zoneId, _) = Plan(@case, query, tz, from, to, null, clock);
+            record.From = plan.Query.RangeFrom;
+            record.To = plan.Query.RangeTo;
+            record.Zone = zoneId;
+        }
+        catch (QueryException e)
+        {
+            await RefuseAsync(http, audit, me, @case, record, sw, QueryOutcome.Invalid, StatusCodes.Status400BadRequest, "query_syntax", e.Message, e.Offset, e.Length).ConfigureAwait(false);
+            return;
+        }
+        catch (ArgumentException e)
+        {
+            await RefuseAsync(http, audit, me, @case, record, sw, QueryOutcome.Invalid, StatusCodes.Status400BadRequest, "bad_request", e.Message).ConfigureAwait(false);
+            return;
+        }
+
+        if (plan.Kind != ResultKind.Events)
+        {
+            await RefuseAsync(http, audit, me, @case, record, sw, QueryOutcome.Invalid, StatusCodes.Status400BadRequest, "bad_request", "the files of a result are those of a listing of events: this query is an aggregation").ConfigureAwait(false);
+            return;
+        }
+
+        using var lease = await slots.AcquireAsync(me.Id, 1, export: false, http.RequestAborted).ConfigureAwait(false);
+        if (lease is null)
+        {
+            await BusyAsync(http, audit, me, @case, record, sw, slots).ConfigureAwait(false);
+            return;
+        }
+
+        var aborted = http.RequestAborted;
+        var counted = new List<(long FileId, long Rows)>();
+        try
+        {
+            var rows = (await backend.RunAsync(plan.ExportFiles(limits.MaxExportRows), (ulong)@case.Id, int.MaxValue, aborted).ConfigureAwait(false)).Rows;
+            counted.AddRange(rows.Select(r => (Convert.ToInt64(r[0], CultureInfo.InvariantCulture), Convert.ToInt64(r[1], CultureInfo.InvariantCulture))));
+        }
+        catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+        {
+            record.Outcome = QueryOutcome.Abandoned;
+            await AuditAfterStreamAsync(audit, me, @case, record, sw, loggers).ConfigureAwait(false);
+            return;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Classify(e, record);
+            await FinishRefusedAsync(http, audit, me, @case, record, sw, e, slots).ConfigureAwait(false);
+            return;
+        }
+
+        // The records of those files, of this case alone: an id the store names and the case does not hold gets no line.
+        var files = new Dictionary<long, (string Name, long? HostId, long Size, string Sha256)>();
+        foreach (var chunk in counted.Select(c => c.FileId).Chunk(500))
+        {
+            var found = await db.Files.AsNoTracking().Where(f => f.CaseId == @case.Id && chunk.Contains(f.Id))
+                .Select(f => new { f.Id, Name = f.ArchivePath ?? f.OriginalName, f.HostId, f.Size, f.Sha256 }).ToListAsync(aborted).ConfigureAwait(false);
+            foreach (var f in found)
+            {
+                files[f.Id] = (f.Name, f.HostId, f.Size, f.Sha256);
+            }
+        }
+
+        var hosts = await db.Hosts.AsNoTracking().Where(h => h.CaseId == @case.Id).ToDictionaryAsync(h => h.Id, h => h.Name, aborted).ConfigureAwait(false);
+
+        using var writer = new ExportWriter(http.Response.BodyWriter, kind, formulaGuard: false);
+        http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+        http.Response.ContentType = kind == ExportFormat.Csv ? "text/csv; charset=utf-8" : "application/x-ndjson";
+        http.Response.Headers.ContentDisposition = $"attachment; filename=\"case-{@case.Id.ToString(CultureInfo.InvariantCulture)}-export-files.{(kind == ExportFormat.Csv ? "csv" : "jsonl")}\"";
+        http.Response.Headers.CacheControl = "no-store";
+        http.Response.Headers["X-Urlog-Rows"] = counted.Count.ToString(CultureInfo.InvariantCulture);
+        try
+        {
+            writer.Begin(["file_id", "name", "host", "size", "sha256", "rows"], []);
+            foreach (var (fileId, rows) in counted)
+            {
+                var known = files.TryGetValue(fileId, out var file);
+                await writer.WriteAsync(
+                    [fileId, known ? file.Name : null, known && file.HostId is { } hostId && hosts.TryGetValue(hostId, out var host) ? host : null, known ? file.Size : null, known ? file.Sha256 : null, rows],
+                    aborted).ConfigureAwait(false);
+            }
+
+            await writer.CompleteAsync(aborted).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            record.Outcome = QueryOutcome.Abandoned;
+        }
+
+        record.Rows = writer.Rows;
+        record.Bytes = writer.Bytes;
+        record.SentSha256 = writer.Sha256();
+        record.Complete = record.Outcome == QueryOutcome.Ok;
+        await AuditAfterStreamAsync(audit, me, @case, record, sw, loggers).ConfigureAwait(false);
     }
 
     private static async Task ExportSqlAsync(
@@ -588,7 +743,7 @@ public static class SearchEndpoints
         }
 
         var record = new QueryRecord(RawSql, "export", sql);
-        await ExportAsync(http, me, backend, slots, audit, options.Value.Query, loggers, @case, record, sw, kind, formulaGuard == true, null, sql, null, null, null, null).ConfigureAwait(false);
+        await ExportAsync(http, me, backend, slots, audit, options.Value.Query, loggers, @case, record, sw, kind, formulaGuard == true, null, sql, null, false, null, null).ConfigureAwait(false);
     }
 
     private static async Task ExportAsync(
@@ -606,8 +761,8 @@ public static class SearchEndpoints
         bool formulaGuard,
         SearchStatement? statement,
         string? sql,
-        SearchStatement? count,
-        int? head,
+        SearchPlan? listing,
+        bool evidence,
         IReadOnlyList<string>? columns,
         IReadOnlyList<string>? sensitive,
         SearchStatement? capped = null)
@@ -625,20 +780,48 @@ public static class SearchEndpoints
         using var writer = new ExportWriter(http.Response.BodyWriter, format, formulaGuard);
         try
         {
-            // How many rows there are, before the first byte: a file cut at the limit says so in its headers.
-            if (count is not null)
+            // A listing is exported in two steps, so the sort never holds the columns of every row the search
+            // matches. Before the first byte: the files it reads, each at the generation visible now, with how many
+            // rows match, and for a result longer than the limit the key of the row the file ends on, sorted from
+            // the keys alone. Then the rows up to that key. Both steps read those files at those generations, so a
+            // file committed in between adds nothing. A generation that left in between takes rows away, so what was
+            // taken is taken again after the last row and compared before the file is ended.
+            long? expected = null;
+            IReadOnlyList<object?[]> taken = [];
+            if (listing is not null)
             {
-                var total = (await backend.RunAsync(count, (ulong)@case.Id, 1, aborted).ConfigureAwait(false)).Rows;
-                var matched = total.Count == 0 ? 0 : Convert.ToInt64(total[0][0], CultureInfo.InvariantCulture);
+                var files = (await backend.RunAsync(listing.ExportGenerations(), (ulong)@case.Id, int.MaxValue, aborted).ConfigureAwait(false)).Rows;
+                taken = files;
+                var pinned = files.Select(f => new FileGeneration(Convert.ToUInt64(f[0], CultureInfo.InvariantCulture), Convert.ToUInt32(f[1], CultureInfo.InvariantCulture))).ToList();
+                var matched = files.Sum(f => Convert.ToInt64(f[2], CultureInfo.InvariantCulture));
+                var limit = listing.ExportLimit(limits.MaxExportRows);
 
                 // A head in the query is the result's own end, not a cut.
-                matched = Math.Min(matched, head ?? long.MaxValue);
-                http.Response.Headers["X-Urlog-Rows"] = matched.ToString(CultureInfo.InvariantCulture);
-                if (matched > limits.MaxExportRows)
+                http.Response.Headers["X-Urlog-Rows"] = Math.Min(matched, listing.Head ?? long.MaxValue).ToString(CultureInfo.InvariantCulture);
+                if (Math.Min(matched, listing.Head ?? long.MaxValue) > limits.MaxExportRows)
                 {
                     http.Response.Headers["X-Urlog-Truncated"] = "true";
                     cut = true;
                 }
+
+                RowKey? last = null;
+                if (matched > limit)
+                {
+                    var keys = (await backend.RunAsync(listing.ExportCut(limits.MaxExportRows, pinned), (ulong)@case.Id, 1, aborted).ConfigureAwait(false)).Rows;
+                    if (keys.Count == 1)
+                    {
+                        var key = keys[0];
+                        var sort = listing.SortKeys;
+                        last = new RowKey(
+                            [.. key.Take(sort).Select(ClickHouseQueryClient.Text)],
+                            ClickHouseQueryClient.Text(key[sort]),
+                            Convert.ToUInt64(key[sort + 1], CultureInfo.InvariantCulture),
+                            Convert.ToUInt64(key[sort + 2], CultureInfo.InvariantCulture));
+                    }
+                }
+
+                expected = Math.Min(matched, limit);
+                statement = listing.Export(limits.MaxExportRows, evidence, pinned, last);
             }
 
             // Which values(f) columns hold a group over the cap, before the first byte: the file says so at its start.
@@ -678,6 +861,27 @@ public static class SearchEndpoints
                     return true;
                 },
                 aborted).ConfigureAwait(false);
+            if (listing is not null && expected is { } rows)
+            {
+                // A file of the result parsed again or removed while the export ran: this is not the result that was
+                // counted, and it must not pass for it. Files that came since are no part of it and are not looked at.
+                if (writer.Rows != rows)
+                {
+                    throw new ExportChangedException($"{rows.ToString(CultureInfo.InvariantCulture)} rows were counted and {writer.Rows.ToString(CultureInfo.InvariantCulture)} were read");
+                }
+
+                var now = (await backend.RunAsync(listing.ExportGenerations(), (ulong)@case.Id, int.MaxValue, aborted).ConfigureAwait(false)).Rows
+                    .ToDictionary(f => Convert.ToUInt64(f[0], CultureInfo.InvariantCulture), f => (Convert.ToUInt32(f[1], CultureInfo.InvariantCulture), Convert.ToInt64(f[2], CultureInfo.InvariantCulture)));
+                foreach (var file in taken)
+                {
+                    var id = Convert.ToUInt64(file[0], CultureInfo.InvariantCulture);
+                    if (!now.TryGetValue(id, out var seen) || seen != (Convert.ToUInt32(file[1], CultureInfo.InvariantCulture), Convert.ToInt64(file[2], CultureInfo.InvariantCulture)))
+                    {
+                        throw new ExportChangedException($"file {id.ToString(CultureInfo.InvariantCulture)} is no longer as it was counted");
+                    }
+                }
+            }
+
             await writer.CompleteAsync(aborted).ConfigureAwait(false);
         }
         catch (Exception e) when (e is not OperationCanceledException || !aborted.IsCancellationRequested)
@@ -710,6 +914,119 @@ public static class SearchEndpoints
         record.SentSha256 = writer.Sha256();
         record.Cut = cut;
         record.Complete = record.Outcome == QueryOutcome.Ok;
+        await AuditAfterStreamAsync(audit, me, @case, record, sw, loggers).ConfigureAwait(false);
+    }
+
+    // ---- the bytes of one line ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The stored bytes of one event's line (design record, "Query language", The bytes of a line). Every other
+    /// answer decodes a line as UTF-8 and writes a replacement for what is not; this one answers the bytes, as a
+    /// download and as nothing a browser renders. The caller names the event by its file and offset and gives its
+    /// time and host from the row it holds, so the read stands on the sort key of the events; without them the
+    /// request is refused, so the route cannot be used to walk a case. One query slot, one audit row with the
+    /// SHA-256 of what was sent.
+    /// </summary>
+    private static async Task RawBytesAsync(
+        long fileId,
+        long offset,
+        HttpContext http,
+        CurrentUser me,
+        ISearchBackend backend,
+        QuerySlots slots,
+        QueryAudit audit,
+        ILoggerFactory loggers,
+        [FromQuery] string? ts,
+        [FromQuery] string? host)
+    {
+        var @case = http.Features.GetRequiredFeature<CaseContext>().Case;
+        var sw = Stopwatch.StartNew();
+        if (!await SearchableAsync(http, @case).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (ts is null || host is null || fileId < 0 || offset < 0
+            || !DateTimeOffset.TryParse(ts, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at))
+        {
+            await ProblemAsync(http, StatusCodes.Status400BadRequest, "bad_request", "ts and host are required: the time and the host of the event, as its row gives them").ConfigureAwait(false);
+            return;
+        }
+
+        var record = new QueryRecord("bytes", "raw", string.Create(CultureInfo.InvariantCulture, $"file {fileId} offset {offset}"))
+        {
+            From = at,
+            To = at,
+            FileId = fileId,
+            FileOffset = offset,
+        };
+        using var lease = await slots.AcquireAsync(me.Id, 1, export: false, http.RequestAborted).ConfigureAwait(false);
+        if (lease is null)
+        {
+            await BusyAsync(http, audit, me, @case, record, sw, slots).ConfigureAwait(false);
+            return;
+        }
+
+        // Base64 on the way out of the store: whatever a driver does with a String, these are ASCII.
+        var statement = new SearchStatement(
+            "SELECT base64Encode(raw) FROM events_v WHERE case_id = {case:UInt64} AND host = {b_host:String} AND ts = {b_ts:DateTime64(3)} AND file_id = {b_file:UInt64} AND file_offset = {b_offset:UInt64} LIMIT 1",
+            [
+                new QueryParameter("case", "UInt64", @case.Id.ToString(CultureInfo.InvariantCulture)),
+                new QueryParameter("b_host", "String", host),
+                new QueryParameter("b_ts", "DateTime64(3)", Transpiler.Fmt(at)),
+                new QueryParameter("b_file", "UInt64", fileId.ToString(CultureInfo.InvariantCulture)),
+                new QueryParameter("b_offset", "UInt64", offset.ToString(CultureInfo.InvariantCulture)),
+            ]);
+        byte[] bytes;
+        try
+        {
+            var rows = (await backend.RunAsync(statement, (ulong)@case.Id, 1, http.RequestAborted).ConfigureAwait(false)).Rows;
+            if (rows.Count == 0)
+            {
+                record.Reason = "no such event";
+                record.DurationMs = sw.ElapsedMilliseconds;
+                await audit.WriteAsync(me.Actor, @case, record).ConfigureAwait(false);
+                await ProblemAsync(http, StatusCodes.Status404NotFound, "not_found", "no event of this case has that file, offset, time and host").ConfigureAwait(false);
+                return;
+            }
+
+            bytes = Convert.FromBase64String(rows[0][0] switch { byte[] ascii => Encoding.ASCII.GetString(ascii), var text => Convert.ToString(text, CultureInfo.InvariantCulture) ?? string.Empty });
+        }
+        catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested)
+        {
+            record.Outcome = QueryOutcome.Abandoned;
+            await AuditAfterStreamAsync(audit, me, @case, record, sw, loggers).ConfigureAwait(false);
+            return;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Classify(e, record);
+            await FinishRefusedAsync(http, audit, me, @case, record, sw, e, slots).ConfigureAwait(false);
+            return;
+        }
+
+        // Bytes, and said to be bytes: a fixed type that no request can change, as a file to save, never to show.
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        http.Response.StatusCode = StatusCodes.Status200OK;
+        http.Response.ContentType = "application/octet-stream";
+        http.Response.ContentLength = bytes.Length;
+        http.Response.Headers.ContentDisposition = string.Create(CultureInfo.InvariantCulture, $"attachment; filename=\"case-{@case.Id}-file-{fileId}-offset-{offset}.bin\"");
+        http.Response.Headers["X-Urlog-Raw-Sha256"] = hash;
+        http.Response.Headers.CacheControl = "no-store";
+        record.Rows = 1;
+        record.Bytes = bytes.Length;
+        record.SentSha256 = hash;
+        try
+        {
+            await http.Response.Body.WriteAsync(bytes, http.RequestAborted).ConfigureAwait(false);
+            record.Complete = true;
+        }
+        catch (OperationCanceledException)
+        {
+            record.Outcome = QueryOutcome.Abandoned;
+            record.Complete = false;
+        }
+
         await AuditAfterStreamAsync(audit, me, @case, record, sw, loggers).ConfigureAwait(false);
     }
 
@@ -838,6 +1155,10 @@ public static class SearchEndpoints
                 record.Outcome = QueryOutcome.Failed;
                 record.Reason = failed.Message;
                 break;
+            case ExportChangedException:
+                record.Outcome = QueryOutcome.Failed;
+                record.Reason = e.Message;
+                break;
             case QueryException or CursorException:
                 record.Outcome = QueryOutcome.Invalid;
                 record.Reason = e.Message;
@@ -847,6 +1168,11 @@ public static class SearchEndpoints
                 record.Reason = "the event store did not answer";
                 break;
         }
+    }
+
+    /// <summary>The rows of an export changed between its count and its end.</summary>
+    private sealed class ExportChangedException(string what) : Exception("the evidence of the result changed while it was exported: " + what)
+    {
     }
 
     /// <summary>The answer to a request whose statement failed before its first byte: audited, then the problem.</summary>

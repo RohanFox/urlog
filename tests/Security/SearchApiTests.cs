@@ -124,6 +124,60 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
     }
 
     [Fact]
+    public async Task TheBytesOfALineComeBackExactlyAndToMembersOfItsCaseOnly()
+    {
+        var (api, alice, mallory) = await StartAsync();
+        await using var host = api;
+
+        // A file of case 1 with one line whose bytes are not UTF-8, and one that is plain text.
+        byte[] line = [.. "caf"u8, 0xE9, .. " <script>x</script> "u8, 0x80, 0xC0, 0xAF, 0xFF, 0x00, .. " end"u8];
+        var at = new DateTimeOffset(2026, 1, 20, 8, 0, 0, TimeSpan.Zero);
+        await ch.InsertRowsAsync(1, 7001, 1, [new SeedRow(at.ToUnixTimeMilliseconds(), "web-01", string.Empty, line), new SeedRow(at.ToUnixTimeMilliseconds() + 1000, "web-01", string.Empty, "plain text"u8.ToArray())]);
+        await using (var ingest = ch.Ingest())
+        {
+            await new EventStoreAdmin(ingest).CommitFileGenerationAsync(7001, 1, Ct);
+        }
+
+        const string Route = "/api/v1/cases/1/files/7001/events/0/raw?ts=2026-01-20T08:00:00.000Z&host=web-01";
+        var answer = await alice.GetAsync(Route);
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.Equal(line, await answer.Content.ReadAsByteArrayAsync(Ct));
+        Assert.Equal("application/octet-stream", answer.Content.Headers.ContentType?.ToString());
+        Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(line)), answer.Headers.GetValues("X-Urlog-Raw-Sha256").Single());
+
+        // The page says which of the two lines is not what its text shows; the text holds a replacement for each such byte.
+        var page = (await EventsAsync(await alice.PostAsync("/api/v1/cases/1/search", new { query = "", from = "2026-01-20T08:00:00Z", to = "2026-01-20T08:00:02Z" }))).Single(e => e.Name == "page").Data;
+        var columns = page.GetProperty("columns").EnumerateArray().Select(c => c.GetString()).ToList();
+        var rows = page.GetProperty("rows").EnumerateArray().OrderBy(r => r[columns.IndexOf("file.offset")].GetInt64()).ToList();
+        Assert.Equal([0, 1], rows.Select(r => r[columns.IndexOf(SearchPlan.RawValidColumn)].GetInt32()));
+        Assert.Contains('�', rows[0][columns.IndexOf("raw")].GetString()!);
+        Assert.Equal("plain text", rows[1][columns.IndexOf("raw")].GetString());
+
+        // The same key in another case, the same key as someone outside the case, a key that is no event: no byte.
+        Assert.Equal(HttpStatusCode.NotFound, (await alice.GetAsync(Route.Replace("/cases/1/", "/cases/2/", StringComparison.Ordinal))).StatusCode);
+        var refused = await mallory.GetAsync(Route);
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.DoesNotContain("caf", await refused.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        var fromHerCase = await mallory.GetAsync(Route.Replace("/cases/1/", "/cases/3/", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.NotFound, fromHerCase.StatusCode);
+        Assert.DoesNotContain("caf", await fromHerCase.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.NotFound, (await alice.GetAsync(Route.Replace("host=web-01", "host=web-02", StringComparison.Ordinal))).StatusCode);
+
+        // An evidence export carries the file, the offset and the line; the files export lists the file by its id.
+        var export = await (await alice.GetAsync("/api/v1/cases/1/search/export?format=csv&query=&from=2026-01-20T08:00:00Z&to=2026-01-20T08:00:02Z")).Content.ReadAsStringAsync(Ct);
+        Assert.Contains("ts,host,program,severity,source_ip,message,file_id,file_offset,raw\r\n", export, StringComparison.Ordinal);
+        Assert.Contains(",7001,1,plain text\r\n", export, StringComparison.Ordinal);
+        var files = await (await alice.GetAsync("/api/v1/cases/1/search/export/files?format=csv&query=&from=2026-01-20T08:00:00Z&to=2026-01-20T08:00:02Z")).Content.ReadAsStringAsync(Ct);
+        Assert.Equal("file_id,name,host,size,sha256,rows\r\n7001,,,,,2\r\n", files);
+        Assert.Equal(HttpStatusCode.NotFound, (await mallory.GetAsync("/api/v1/cases/1/search/export/files?format=csv&query=")).StatusCode);
+
+        // On the trail: alice's reads, with what was sent; nothing of mallory's against case 1.
+        var trail = await QueryRowsAsync(api);
+        Assert.DoesNotContain(trail, r => r.Actor == "mallory" && r.TargetId == 1);
+        output.WriteLine($"{trail.Count} query rows");
+    }
+
+    [Fact]
     public async Task AUserOutsideTheCaseReadsNothingOfItThroughAnyRoute()
     {
         var (api, alice, mallory) = await StartAsync();
@@ -292,7 +346,8 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
         Assert.Equal("200", csv.Headers.GetValues("X-Urlog-Rows").Single());
         Assert.Equal("true", csv.Headers.GetValues("X-Urlog-Truncated").Single());
         var lines = (await csv.Content.ReadAsStringAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal("# sensitive fields: source.ip, message", lines[0]);
+        Assert.Equal("# sensitive fields: source.ip, message, raw", lines[0]);
+        Assert.Equal("ts,host,program,severity,source_ip,message,file_id,file_offset,raw", lines[1]);
         Assert.Equal(152, lines.Length);
 
         // Newest first, instants in UTC.
@@ -329,6 +384,10 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
             ("csv", "host=web-01 | sort host"),
             ("csv", "| stats count by host | sort -count"),
             ("json", "| stats count, dc(host) as hosts by file.id"),
+            ("csv", string.Empty),
+            ("json", string.Empty),
+            ("csv", "| sort host"),
+            ("json", "| sort host, -_time"),
         };
         var hashes = new List<string>();
         foreach (var (format, query) in searches)
@@ -356,11 +415,110 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
 
         // The limit cut the listing (600 rows against 500) and the row says so; the aggregations are whole.
         var cut = rows.Select(r => JsonDocument.Parse(r.DetailsJson).RootElement.GetProperty("cut").GetBoolean()).ToList();
-        Assert.Equal([true, true, true, true, false, false, false, false, false, false], cut);
+        Assert.Equal([true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, true, true, true], cut);
+
+        // The evidence form, cut at the limit: the 500 rows a listing in one statement would begin with, each with
+        // its file, its offset and its line, newest first.
+        var evidence = System.Text.Encoding.UTF8.GetString(await (await mallory.GetAsync($"/api/v1/cases/3/search/export?format=csv&query={Range}")).Content.ReadAsByteArrayAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("ts,host,program,severity,source_ip,message,file_id,file_offset,raw", evidence[1]);
+        var places = evidence.Skip(2).Select(l => l.Split(',')).Select(c => (Ts: c[0], File: long.Parse(c[6], CultureInfo.InvariantCulture), Offset: long.Parse(c[7], CultureInfo.InvariantCulture))).ToList();
+        Assert.Equal(keys, places);
+        Assert.All(evidence.Skip(2), l => Assert.EndsWith(",GET /index.html 200", l, StringComparison.Ordinal));
+
+        // Sorted by host, the cut falls inside the rows of one host: every row of web-01 (300), then the newest 200 of web-02.
+        var sorted = System.Text.Encoding.UTF8.GetString(await (await mallory.GetAsync($"/api/v1/cases/3/search/export?format=csv&query={Uri.EscapeDataString("| sort host")}{Range}")).Content.ReadAsByteArrayAsync(Ct)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(2).Select(l => l.Split(',')).ToList();
+        Assert.Equal(500, sorted.Count);
+        Assert.All(sorted.Take(300), c => Assert.Equal("web-01", c[1]));
+        Assert.All(sorted.Skip(300), c => Assert.Equal("web-02", c[1]));
+        var rest = sorted.Skip(300).Select(c => (Ts: c[0], File: long.Parse(c[6], CultureInfo.InvariantCulture), Offset: long.Parse(c[7], CultureInfo.InvariantCulture))).ToList();
+        Assert.Equal(rest.OrderByDescending(k => k.Ts, StringComparer.Ordinal).ThenByDescending(k => k.File).ThenByDescending(k => k.Offset), rest);
 
         // Equal counts keep their places in the stream as well: web-01 before web-02, both 300.
         var table = (await EventsAsync(await mallory.PostAsync("/api/v1/cases/3/search", new { query = "| stats count by host | sort -count", from = "2026-04-01T00:00:00Z", to = "2026-05-01T00:00:00Z" }))).Single(e => e.Name == "table").Data;
         Assert.Equal([("web-01", "300"), ("web-02", "300")], table.GetProperty("rows").EnumerateArray().Select(r => (r[0].GetString()!, r[1].GetString()!)));
+    }
+
+    [Fact]
+    public async Task AFileCommittedBetweenTheTwoStepsOfAnExportDoesNotChangeItAndAGenerationThatLeftBreaksItOff()
+    {
+        // Two files of case 3 in July, a row a minute on the same 200 instants; the limit of 300 cuts their 400 rows.
+        await using var ingest = ch.Ingest();
+        var store = new EventStoreAdmin(ingest);
+        foreach (var file in new ulong[] { 61, 62 })
+        {
+            await ch.InsertAsync(3, file, 1, 7, 200);
+            await store.CommitFileGenerationAsync(file, 1, Ct);
+        }
+
+        var (api, _, mallory) = await StartAsync(new Dictionary<string, string?> { ["Urlog:Query:MaxExportRows"] = "300" });
+        await using var host = api;
+        const string Path = "/api/v1/cases/3/search/export?format=csv&query=&from=2026-07-01T00:00:00Z&to=2026-08-01T00:00:00Z";
+        async Task<byte[]> ExportAsync() => await (await mallory.GetAsync(Path)).Content.ReadAsByteArrayAsync(Ct);
+        static int Rows(byte[] file) => System.Text.Encoding.UTF8.GetString(file).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Length - 2;
+
+        var before = await ExportAsync();
+        Assert.Equal(300, Rows(before));
+
+        // A file is committed after the export took what it reads and before it looks for its last row. Its rows are
+        // on the same instants and its id is the highest, so a statement that saw it would send them first.
+        var steps = new List<string>();
+        api.AfterStatement = async sql =>
+        {
+            steps.Add(sql);
+            if (steps.Count == 1)
+            {
+                Assert.StartsWith("SELECT file_id, any(parse_generation), count()", sql, StringComparison.Ordinal);
+                await ch.InsertAsync(3, 63, 1, 7, 200);
+                await store.CommitFileGenerationAsync(63, 1, Ct);
+            }
+        };
+        Assert.Equal(before, await ExportAsync());
+        // What it reads, its last row, and what it read once more after the rows.
+        Assert.Equal(3, steps.Count);
+        Assert.Contains(" LIMIT 1 OFFSET {s_skip:UInt64}", steps[1], StringComparison.Ordinal);
+        Assert.Equal(steps[0], steps[2]);
+
+        // And one committed after the last row was found, before the rows are read.
+        api.AfterStatement = async sql =>
+        {
+            if (sql.Contains(" LIMIT 1 OFFSET {s_skip:UInt64}", StringComparison.Ordinal))
+            {
+                await ch.InsertAsync(3, 64, 1, 7, 200);
+                await store.CommitFileGenerationAsync(64, 1, Ct);
+            }
+        };
+        var withThird = await ExportAsync();
+        Assert.NotEqual(before, withThird);
+        Assert.DoesNotContain(",64,", System.Text.Encoding.UTF8.GetString(withThird), StringComparison.Ordinal);
+        Assert.Contains(",63,", System.Text.Encoding.UTF8.GetString(withThird), StringComparison.Ordinal);
+
+        // Both commits were real: the next export has the rows of the newest file.
+        api.AfterStatement = null;
+        var after = await ExportAsync();
+        Assert.Equal(300, Rows(after));
+        Assert.Contains(",64,", System.Text.Encoding.UTF8.GetString(after), StringComparison.Ordinal);
+
+        // A file of the result is parsed again between the steps: its counted generation is no longer visible, other
+        // rows would take the place of its rows, and the download breaks instead of ending as another result.
+        var parsedAgain = false;
+        api.AfterStatement = async sql =>
+        {
+            if (!parsedAgain)
+            {
+                parsedAgain = true;
+                await ch.InsertAsync(3, 64, 2, 7, 200);
+                await store.CommitFileGenerationAsync(64, 2, Ct);
+            }
+        };
+        await Assert.ThrowsAnyAsync<Exception>(ExportAsync);
+        api.AfterStatement = null;
+        var row = JsonDocument.Parse((await QueryRowsAsync(api))[^1].DetailsJson).RootElement;
+        Assert.Equal("failed", row.GetProperty("outcome").GetString());
+        Assert.False(row.GetProperty("complete").GetBoolean());
+        Assert.Equal("the evidence of the result changed while it was exported: file 64 is no longer as it was counted", row.GetProperty("reason").GetString());
+
+        // After it, the export is whole again and is the one before the second parse: the same rows at the new generation.
+        Assert.Equal(after, await ExportAsync());
     }
 
     [Fact]
@@ -553,6 +711,9 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
 
         public MetadataDb Open() => Store.CreateDbContext();
 
+        /// <summary>Runs after each statement a search route ran and before the route goes on, given the statement's text.</summary>
+        public Func<string, Task>? AfterStatement { get; set; }
+
         public async Task AddUserAsync(string name, string password)
         {
             await using var db = Open();
@@ -593,7 +754,11 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
                 await db.SaveChangesAsync();
             }).GetAwaiter().GetResult();
             SqliteConnection.ClearAllPools();
-            builder.ConfigureTestServices(services => services.AddSingleton<IStoreIdentitySource>(new Identity(id)));
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<IStoreIdentitySource>(new Identity(id));
+                services.AddSingleton<ISearchBackend>(provider => new Stepped(ActivatorUtilities.CreateInstance<QuerySearchBackend>(provider), this));
+            });
         }
 
         protected override void Dispose(bool disposing)
@@ -611,6 +776,28 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
                     // A straggling handle on Windows: the OS cleans the temp directory eventually.
                 }
             }
+        }
+
+        /// <summary>The real backend, with a pause after each of its statements for a test to change the store in.</summary>
+        private sealed class Stepped(ISearchBackend inner, Host host) : ISearchBackend
+        {
+            public async Task<QueryRows> RunAsync(SearchStatement statement, ulong caseId, int maxRows, CancellationToken cancellationToken)
+            {
+                var rows = await inner.RunAsync(statement, caseId, maxRows, cancellationToken);
+                if (host.AfterStatement is { } after)
+                {
+                    await after(statement.Sql);
+                }
+
+                return rows;
+            }
+
+            public Task<QueryTable> RunAsync(TranspileResult query, ulong caseId, CancellationToken cancellationToken) => inner.RunAsync(query, caseId, cancellationToken);
+
+            public Task<QueryRows> RunSqlAsync(string sql, ulong caseId, int maxRows, CancellationToken cancellationToken) => inner.RunSqlAsync(sql, caseId, maxRows, cancellationToken);
+
+            public Task<long> StreamAsync(SearchStatement? statement, string? sql, ulong caseId, Action<IReadOnlyList<string>> onColumns, Func<object?[], ValueTask<bool>> onRow, CancellationToken cancellationToken) =>
+                inner.StreamAsync(statement, sql, caseId, onColumns, onRow, cancellationToken);
         }
 
         private sealed class Identity(string id) : IStoreIdentitySource
