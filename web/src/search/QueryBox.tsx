@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, useMemo, type RefObject } from 'react';
+import { lazy, Suspense, useId, useMemo, type ReactNode, type RefObject } from 'react';
 import { number } from '../app/format';
 import { Button } from '../ui/controls';
 import type { Mark, Words } from './Editor';
@@ -27,10 +27,12 @@ interface Props {
   onRun: (text?: string) => void;
   onCancel: () => void;
   focusRef: RefObject<(() => void) | null>;
+  /** What stands between the box and its button: the time range. */
+  range?: ReactNode;
 }
 
 /** The query, the button that runs it, and what the server said about the text that ran. */
-export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraft, onRun, onCancel, focusRef }: Props) {
+export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraft, onRun, onCancel, focusRef, range }: Props) {
   const notes = useId();
   const current = draft === ran;
   const tooLong = draft.length > MAX_QUERY;
@@ -56,6 +58,7 @@ export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraf
             <Editor value={draft} words={words} marks={marks} label="Query" describedBy={said || tooLong || marks.length > 0 ? notes : undefined} onChange={onDraft} onRun={onRun} focusRef={focusRef} />
           </Suspense>
         </div>
+        {range}
         {running ? (
           <Button onClick={onCancel} icon="close">
             Cancel

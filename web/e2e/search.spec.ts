@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Page, Request } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import { accounts, expect, signIn, test } from './fixtures';
 
 // The search page against the real backend and a real store: a case of an nginx log long enough to page, the
@@ -106,6 +106,30 @@ async function openSearch(page: Page, query = '', account = accounts.owner()): P
 const queryBox = (page: Page) => page.getByRole('textbox', { name: 'Query' });
 const eventsRegion = (page: Page) => page.getByRole('region', { name: 'Events' });
 const eventsStatus = (page: Page) => eventsRegion(page).locator('.events-head');
+const rangeButton = (page: Page) => page.getByRole('button', { name: /^Time range: / });
+const SHOP = '?q=url.path%3D%2Fshop%2F*&from=2026-11-07T06%3A00%3A00Z&to=2026-11-07T06%3A11%3A00Z';
+
+/** How the document and each pane of the search page stand: what scrolls, and where the events end. */
+async function frame(page: Page) {
+  return page.evaluate(() => {
+    const doc = document.documentElement;
+    const box = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!(el instanceof HTMLElement)) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, scrolls: el.scrollHeight > el.clientHeight, overflow: getComputedStyle(el).overflowY };
+    };
+    return {
+      document: { tall: doc.scrollHeight > doc.clientHeight, wide: doc.scrollWidth > doc.clientWidth },
+      window: { width: window.innerWidth, height: window.innerHeight },
+      rail: box('.rail'),
+      events: box('.events-scroll'),
+      detail: box('.panes > .detail'),
+    };
+  });
+}
 
 async function run(page: Page, query: string): Promise<void> {
   await queryBox(page).fill(query);
@@ -134,6 +158,38 @@ async function nothingRan(page: Page): Promise<void> {
   // image of its own as a spacer beside its placeholder; no log text reaches the editor.)
   expect(await built(':is(.region, .detail) :is(img, iframe, object, embed, script, style, link, form, input[type="hidden"])')).toEqual([]);
   expect(await built('[onerror], [onclick], [onmouseover], [onload], a[href^="javascript"]')).toEqual([]);
+}
+
+/**
+ * What of an element the reader cannot see: the edges that stand outside the window or outside the scroller
+ * that holds it, and the points (its corners, a pixel in, and its middle) where something else is drawn on top.
+ */
+async function uncovered(part: Locator) {
+  return part.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const cut: string[] = [];
+    const scroller = el.closest('.events-scroll');
+    const clip = scroller === null ? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } : (() => {
+      const b = scroller.getBoundingClientRect();
+      return { left: b.left, top: b.top, right: b.left + scroller.clientWidth, bottom: b.top + scroller.clientHeight };
+    })();
+    if (r.left < Math.max(0, clip.left) - 0.5) cut.push('left');
+    if (r.right > Math.min(window.innerWidth, clip.right) + 0.5) cut.push('right');
+    if (r.top < Math.max(0, clip.top) - 0.5) cut.push('top');
+    if (r.bottom > Math.min(window.innerHeight, clip.bottom) + 0.5) cut.push('bottom');
+    const points: Array<[string, number, number]> = [
+      ['top left', r.left + 2, r.top + 2],
+      ['top right', r.right - 2, r.top + 2],
+      ['bottom left', r.left + 2, r.bottom - 2],
+      ['bottom right', r.right - 2, r.bottom - 2],
+      ['middle', (r.left + r.right) / 2, (r.top + r.bottom) / 2],
+    ];
+    const covered = points.filter(([, x, y]) => {
+      const hit = document.elementFromPoint(x, y);
+      return hit === null || !(hit === el || el.contains(hit));
+    }).map(([name, x, y]) => `${name} under ${document.elementFromPoint(x, y)?.className.toString() ?? 'nothing'}`);
+    return { cut, covered };
+  });
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -308,7 +364,10 @@ test('a drag on the timeline, and the arrow keys on it, narrow the range in the 
   await page.mouse.up();
   await expect(page).toHaveURL(/from=2026-11-07T06%3A02%3A\d\d\.000Z&to=2026-11-07T06%3A05%3A\d\d\.000Z/);
   await expect(eventsStatus(page)).toContainText(/of (1\d\d|2\d\d) events loaded/);
+  await rangeButton(page).click();
   await expect(page.getByLabel('From')).toHaveValue(/^2026-11-07T06:0/);
+  await page.keyboard.press('Escape');
+  await expect(page.getByLabel('From')).toHaveCount(0);
 
   // The same by keyboard, from the whole range again.
   await page.goBack();
@@ -321,6 +380,137 @@ test('a drag on the timeline, and the arrow keys on it, narrow the range in the 
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/from=2026-11-07T06%3A1/);
   await expect(eventsStatus(page)).not.toContainText('of 650');
+});
+
+test('the page is the window: the document does not scroll, and the fields, the events and the detail each do', async ({ page }) => {
+  for (const size of [{ width: 1920, height: 911 }, { width: 1366, height: 768 }]) {
+    await page.setViewportSize(size);
+    if (size.width === 1920) {
+      await openSearch(page, SHOP);
+    }
+    await expect(eventsStatus(page)).toContainText('200 of 650 events loaded');
+    const at = await frame(page);
+    const where = `${size.width}x${size.height}`;
+    expect(at.document, where).toEqual({ tall: false, wide: false });
+    // The panes reach the bottom of the window and each has its own scroller.
+    expect(at.events?.bottom, where).toBeGreaterThan(size.height - 2);
+    expect(at.events?.bottom, where).toBeLessThanOrEqual(size.height);
+    expect(at.events?.overflow, where).toBe('auto');
+    expect(at.events?.scrolls, where).toBe(true);
+    expect(at.rail?.overflow, where).toBe('auto');
+    expect(at.rail?.bottom, where).toBeGreaterThan(size.height - 2);
+    expect(at.detail?.overflow, where).toBe('auto');
+    // The strip draws its chart with no event open.
+    await expect(page.locator('.timeline-plot canvas'), where).toBeVisible();
+    // The case is named in the top bar, and the case's facts stand at the foot of the fields.
+    await expect(page.getByRole('banner').getByText(caseName)).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Fields' }).getByText(/your role: Owner/)).toBeInViewport();
+  }
+  // A window shorter than 600 pixels scrolls as a page does, with the panes at their least height.
+  await page.setViewportSize({ width: 1366, height: 560 });
+  const short = await frame(page);
+  expect(short.document.tall).toBe(true);
+  expect(short.document.wide).toBe(false);
+});
+
+test('an open event covers no part of the message column or of Export, and the fields fold for it under 1600', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 911 });
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  const empty = page.getByRole('complementary', { name: 'No event open' });
+  const detail = page.getByRole('complementary', { name: 'Event', exact: true });
+  const fields = page.getByRole('complementary', { name: 'Fields' });
+  const showFields = page.getByRole('button', { name: 'Show the fields' });
+  await expect(empty).toBeVisible();
+  await expect(empty).toContainText('status=404');
+  await expect(empty).toContainText('65 match, 65 loaded');
+
+  for (const size of [{ width: 1920, height: 911 }, { width: 1536, height: 864 }, { width: 1366, height: 768 }]) {
+    const where = `${size.width}x${size.height}`;
+    await page.setViewportSize(size);
+    // Closed: the fields are there, and under 1600 nothing stands right of the events.
+    await expect(fields, where).toBeVisible();
+    await expect(empty, where).toBeVisible({ visible: size.width >= 1600 });
+
+    const third = eventsRegion(page).locator('tbody tr.event td.col-message').nth(2);
+    const plain = await third.evaluate((td) => getComputedStyle(td).backgroundColor);
+    await eventsRegion(page).getByRole('button', { name: /Open the event of/ }).first().click();
+    await expect(detail.getByLabel('Raw line', { exact: true }), where).toBeVisible();
+    // Only the open event's row is marked: the others keep their colour.
+    expect(await third.evaluate((td) => getComputedStyle(td).backgroundColor), where).toBe(plain);
+    if (size.width < 1600) {
+      await expect(fields, where).toBeHidden();
+      await expect(showFields, where).toBeVisible();
+    } else {
+      await expect(fields, where).toBeVisible();
+    }
+    const parts = {
+      'the heading Message': eventsRegion(page).getByRole('columnheader', { name: 'Message' }),
+      'the first message': eventsRegion(page).locator('tbody td.col-message').first(),
+      'the last message in view': eventsRegion(page).locator('tbody td.col-message').nth(8),
+      Export: eventsRegion(page).getByRole('button', { name: 'Export' }),
+    };
+    for (const [name, part] of Object.entries(parts)) {
+      expect(await uncovered(part), `${name} at ${where}`).toEqual({ cut: [], covered: [] });
+    }
+    expect((await frame(page)).document, where).toEqual({ tall: false, wide: false });
+
+    await page.keyboard.press('Escape');
+    await expect(detail, where).toHaveCount(0);
+    await expect(fields, where).toBeVisible();
+  }
+
+  // Taken back while an event is open, the fields stay until it closes; the next event folds them again.
+  await eventsRegion(page).getByRole('button', { name: /Open the event of/ }).first().click();
+  await showFields.click();
+  await expect(fields).toBeVisible();
+  await expect(detail).toBeVisible();
+  expect(await uncovered(eventsRegion(page).getByRole('columnheader', { name: 'Message' }))).toEqual({ cut: [], covered: [] });
+  await page.keyboard.press('Escape');
+  await eventsRegion(page).getByRole('button', { name: /Open the event of/ }).nth(1).click();
+  await expect(fields).toBeHidden();
+  await page.keyboard.press('Escape');
+
+  // Folded by hand, the fields stay folded over a reload and come back with their button.
+  await page.getByRole('button', { name: 'Hide the fields' }).click();
+  await expect(fields).toBeHidden();
+  await page.reload();
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  await expect(fields).toBeHidden();
+  await showFields.click();
+  await expect(fields).toBeVisible();
+});
+
+test('the timeline folds to its caption line, the panes take the room, and the fold is kept over a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 911 });
+  await openSearch(page, SHOP);
+  await expect(eventsStatus(page)).toContainText('200 of 650 events loaded');
+  await expect(page.locator('.timeline-plot canvas')).toBeVisible();
+  const open = await frame(page);
+
+  await page.getByRole('button', { name: 'Hide the timeline' }).click();
+  await expect(page.locator('.timeline-plot')).toHaveCount(0);
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(timeline).toContainText('Searched 2026-11-07 06:00:00 to 2026-11-07 06:11:00 UTC');
+  await expect(page.locator('#timeline-text')).toContainText('650 events');
+  const folded = await frame(page);
+  expect((folded.events?.top ?? 0) + 40).toBeLessThan(open.events?.top ?? 0);
+  expect(folded.document.tall).toBe(false);
+  expect(page.url()).not.toContain('timeline');
+
+  await page.reload();
+  await expect(eventsStatus(page)).toContainText('200 of 650 events loaded');
+  await expect(page.getByRole('button', { name: 'Show the timeline' })).toBeVisible();
+  await expect(page.locator('.timeline-plot')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Show the timeline' }).click();
+  await expect(page.locator('.timeline-plot canvas')).toBeVisible();
+  // The range in one button: it opens a panel with the zone in it, and says the zone it shows times in.
+  await expect(rangeButton(page)).toContainText('2026-11-07T06:00:00Z to 2026-11-07T06:11:00Z · UTC');
+  await rangeButton(page).click();
+  await expect(page.getByRole('group', { name: 'Time range and zone' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'Time range and zone' })).toHaveCount(0);
 });
 
 test('a syntax error is marked where the server found it, and the results before stay', async ({ page }) => {

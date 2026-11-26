@@ -22,6 +22,24 @@
   color: var(--ink);
 }
 
+.header-case {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+  margin: 0 var(--sp-4);
+  padding: 0 var(--sp-10);
+  border-left: var(--hair) solid var(--line);
+}
+
+.header-case-name {
+  max-width: var(--w-case);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-semibold);
+}
+
 .tabs {
   display: flex;
   align-self: stretch;
@@ -145,7 +163,8 @@
     padding: 0 var(--sp-12);
   }
 
-  .user-name {
+  .user-name,
+  .header-case .tag {
     display: none;
   }
 }

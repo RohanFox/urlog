@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { FieldsResponse } from '../api/schema.gen';
 import { number } from '../app/format';
 import { Banner, Button } from '../ui/controls';
@@ -37,6 +37,10 @@ interface Props {
   live: boolean;
   ended: boolean;
   onFilter: (field: string, value: string, exclude: boolean) => void;
+  /** A line at the foot of the list, kept in view: how the run went, and the case's files, hosts and role. */
+  foot?: ReactNode;
+  /** Folds the list to a narrow strip. Absent: the list cannot be folded. */
+  onFold?: () => void;
 }
 
 function Values({ field, values, onFilter }: { field: string; values: readonly TopValue[]; onFilter: Props['onFilter'] }) {
@@ -187,7 +191,7 @@ function Field({ field, request, counts, live, ended, onFilter }: { field: Liste
  * under a field are of the search on the page. What the statistics do not hold is asked for when a field is
  * opened, and what cannot be asked for says why.
  */
-export function FieldRail({ catalog, catalogError, request, counts, live, ended, onFilter }: Props) {
+export function FieldRail({ catalog, catalogError, request, counts, live, ended, onFilter, foot, onFold }: Props) {
   const [filter, setFilter] = useState('');
   const [others, setOthers] = useState(OTHER_STEP);
   const fields = useMemo<Listed[]>(
@@ -203,9 +207,12 @@ export function FieldRail({ catalog, catalogError, request, counts, live, ended,
   const statistics = catalog?.statistics;
 
   return (
-    <aside className="rail section" aria-label="Fields">
+    <aside className="rail" aria-label="Fields">
       <div className="rail-head">
-        <h2>Fields</h2>
+        <div className="rail-title">
+          <h2>Fields</h2>
+          {onFold === undefined ? null : <Button small kind="ghost" icon="left" aria-label="Hide the fields" title="Hide the fields" onClick={onFold} />}
+        </div>
         <label className="sr-only" htmlFor="rail-filter">
           Part of a field name
         </label>
@@ -272,6 +279,7 @@ export function FieldRail({ catalog, catalogError, request, counts, live, ended,
         </>
       ) : null}
       {catalog !== undefined && needle !== '' && shownFields.length === 0 && matchingExtras.length === 0 ? <p className="sub rail-note">No field has that in its name.</p> : null}
+      {foot === undefined ? null : <div className="rail-foot sub">{foot}</div>}
     </aside>
   );
 }

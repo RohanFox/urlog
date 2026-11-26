@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { count, number } from '../app/format';
@@ -13,6 +13,12 @@ interface Props {
   from: string;
   to: string;
   zone: string;
+  /** Only the caption line is drawn: the reader folded the chart away. */
+  collapsed: boolean;
+  /** The searched range, written out, for the caption. */
+  range: ReactNode;
+  /** The button that folds the chart, at the end of the caption. */
+  toggle: ReactNode;
   onSelect: (from: string, to: string) => void;
 }
 
@@ -74,7 +80,7 @@ function useThemeKey(): string {
  * in focus (shift extends, Enter applies, Escape drops). The colours are named in the legend and the selection
  * is read out as text, so nothing is said by colour or by position alone.
  */
-export default function Timeline({ histogram, from, to, zone, onSelect }: Props) {
+export default function Timeline({ histogram, from, to, zone, collapsed, range, toggle, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const all = useMemo(() => slots(histogram), [histogram]);
@@ -93,7 +99,9 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
     const ink = token('--muted');
     const grid = token('--line');
     const font = `${token('--fs-11')} ${token('--data')}`;
-    const axis = { stroke: ink, font, grid: { stroke: grid, width: 1 }, ticks: { stroke: grid, width: 1 } };
+    const axis = { stroke: ink, font, gap: pixels('--sp-2'), grid: { stroke: grid, width: 1 }, ticks: { stroke: grid, width: 1, size: pixels('--sp-4') } };
+    // Without a count axis the first and last labels of the time axis would stand past the canvas.
+    const side = pixels('--w-tick') / 2;
     const bars = uPlot.paths.bars?.({ size: [0.9, 64, 1], align: 1 });
     const u = new uPlot(
       {
@@ -101,9 +109,11 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
         height: pixels('--h-timeline'),
         tzDate: (seconds) => uPlot.tzDate(new Date(seconds * 1000), zone),
         legend: { show: false },
+        padding: [pixels('--sp-4'), side, 0, side],
         cursor: { drag: { x: true, y: false, setScale: false }, points: { show: false }, y: false },
         scales: { x: { time: true, range: () => [new Date(from).getTime() / 1000, new Date(to).getTime() / 1000] }, y: { range: (_u, _min, max) => [0, Math.max(1, max)] } },
-        axes: [{ ...axis, space: pixels('--w-tick'), values: (_u, ticks, _axis, _space, step) => tickLabels(ticks, step, zone) }, { ...axis, size: pixels('--w-axis'), values: (_u, ticks) => ticks.map((t) => (Number.isInteger(t) ? number(t) : '')) }],
+        // A strip: the time axis alone. The counts are in the caption, the tallest bucket by its number.
+        axes: [{ ...axis, size: pixels('--h-axis'), space: pixels('--w-tick'), values: (_u, ticks, _axis, _space, step) => tickLabels(ticks, step, zone) }, { show: false }],
         series: [
           {},
           ...ORDER.map((name) => {
@@ -137,7 +147,7 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
       u.destroy();
       plot.current = null;
     };
-  }, [all, from, to, zone, theme]);
+  }, [all, from, to, zone, theme, collapsed]);
 
   // The selection of the keyboard, drawn with the chart's own selection box.
   useEffect(() => {
@@ -153,7 +163,7 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
     }
     const left = u.valToPos(first.start / 1000, 'x');
     u.setSelect({ left, top: 0, width: Math.max(2, u.valToPos(last.end / 1000, 'x') - left), height: u.bbox.height / uPlot.pxRatio }, false);
-  }, [selection, all, theme, from, to, zone]);
+  }, [selection, all, theme, from, to, zone, collapsed]);
 
   const picked = selection === undefined ? undefined : rangeOf(all, selection);
   const tallest = all.reduce<Slot | undefined>((best, slot) => (best === undefined || slot.total > best.total ? slot : best), undefined);
@@ -162,30 +172,32 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
   return (
     <div className="timeline">
       {/* The chart is one control for the keyboard: the arrows move a selection across its buckets. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- a chart that is operated has no native element; the role and the keys are given here */}
-      <div
-        ref={host}
-        className="timeline-plot"
-        role="application"
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the same: the chart takes the focus so the keys reach it
-        tabIndex={0}
-        aria-label="Timeline of the events. Arrow keys select a stretch of time, shift extends it, Enter searches it, Escape drops it."
-        aria-describedby="timeline-text"
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
-            event.preventDefault();
-            setSelection(move(selection, event.key, event.shiftKey, all.length));
-          } else if (event.key === 'Enter' && picked !== undefined) {
-            event.preventDefault();
-            setSelection(undefined);
-            onSelect(picked.from, picked.to);
-          } else if (event.key === 'Escape' && selection !== undefined) {
-            event.preventDefault();
-            event.stopPropagation();
-            setSelection(undefined);
-          }
-        }}
-      />
+      {collapsed ? null : (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- a chart that is operated has no native element; the role and the keys are given here
+        <div
+          ref={host}
+          className="timeline-plot"
+          role="application"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the same: the chart takes the focus so the keys reach it
+          tabIndex={0}
+          aria-label="Timeline of the events. Arrow keys select a stretch of time, shift extends it, Enter searches it, Escape drops it."
+          aria-describedby="timeline-text"
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+              event.preventDefault();
+              setSelection(move(selection, event.key, event.shiftKey, all.length));
+            } else if (event.key === 'Enter' && picked !== undefined) {
+              event.preventDefault();
+              setSelection(undefined);
+              onSelect(picked.from, picked.to);
+            } else if (event.key === 'Escape' && selection !== undefined) {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelection(undefined);
+            }
+          }}
+        />
+      )}
       <div className="timeline-foot">
         <ul className="legend" aria-label="Severity of the bars">
           {seen.map((name) => (
@@ -195,13 +207,16 @@ export default function Timeline({ histogram, from, to, zone, onSelect }: Props)
             </li>
           ))}
         </ul>
+        {range}
         <span id="timeline-text" className="sub" role="status">
           {picked !== undefined
             ? `Selected ${instant(picked.from, zone, 's')} to ${instant(picked.to, zone, 's')}, ${count(picked.events, 'event', 'events')}. Enter searches it.`
             : tallest === undefined
               ? 'No events in this range.'
-              : `${count(histogram.total, 'event', 'events')} in buckets of ${histogram.span}. Most in the bucket from ${instant(new Date(tallest.start).toISOString(), zone, 's')}: ${number(tallest.total)}.`}
+              : `${count(histogram.total, 'event', 'events')} in buckets of ${histogram.span}, most ${number(tallest.total)}`}
         </span>
+        <span className="grow" />
+        {toggle}
       </div>
     </div>
   );

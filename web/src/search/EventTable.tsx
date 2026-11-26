@@ -28,6 +28,27 @@ export function keyOf(row: readonly Cell[], at: (name: string) => number): strin
   return `${cellText(row[at('file.id')])}:${cellText(row[at('file.offset')])}`;
 }
 
+/**
+ * The widest value of a column in the loaded rows, in characters, at least its heading's and at most `cap`:
+ * what the column's width is made from. The stylesheet caps the width in pixels as well.
+ */
+function widest(rows: readonly (readonly Cell[])[], i: number, least: number, cap: number): number {
+  let n = least;
+  if (i < 0) {
+    return n;
+  }
+  for (const row of rows) {
+    const length = cellText(row[i]).length;
+    if (length > n) {
+      n = Math.min(length, cap);
+      if (n === cap) {
+        break;
+      }
+    }
+  }
+  return n;
+}
+
 /** How near the end of the loaded rows the reader must be before the next page is asked for. */
 const AHEAD = 60;
 
@@ -43,6 +64,8 @@ interface Props {
   onOpen: (key: string) => void;
   onMore: () => void;
   onRemoveColumn: (name: string) => void;
+  /** Controls for what the pane shows, at the right of its head: the export. */
+  tools?: ReactNode;
 }
 
 /** Sets the height of a spacer row. A style attribute would be a second home for sizes; this is a measurement. */
@@ -71,7 +94,7 @@ function Spacer({ height, columns }: { height: number; columns: number }) {
  * The events of a search, newest first unless the query sorts them. Only the rows in view are in the document:
  * ten thousand loaded rows cost what forty do. The next page is asked for as the reader nears the end.
  */
-export function EventTable({ run, zone, extra, selected, total, onOpen, onMore, onRemoveColumn }: Props) {
+export function EventTable({ run, zone, extra, selected, total, onOpen, onMore, onRemoveColumn, tools }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const { rows, columns } = run;
   const at = useMemo(() => indexOf(columns), [columns]);
@@ -98,6 +121,18 @@ export function EventTable({ run, zone, extra, selected, total, onOpen, onMore, 
   }, [selectedIndex]);
 
   const width = 5 + extra.length;
+  const host = useMemo(() => widest(rows, at('host.name'), 4, 20), [rows, at]);
+  const program = useMemo(() => widest(rows, at('program'), 7, 14), [rows, at]);
+  const level = useMemo(() => widest(rows, at('log.level'), 5, 8), [rows, at]);
+  // The counts go to the stylesheet through the element's style object, as the spacer rows' heights do.
+  const sized = useCallback(
+    (el: HTMLTableElement | null) => {
+      el?.style.setProperty('--n-host', String(host));
+      el?.style.setProperty('--n-program', String(program));
+      el?.style.setProperty('--n-level', String(level));
+    },
+    [host, program, level],
+  );
   const before = items[0]?.start ?? 0;
   const after = virtual.getTotalSize() - (items[items.length - 1]?.end ?? 0);
 
@@ -136,11 +171,24 @@ export function EventTable({ run, zone, extra, selected, total, onOpen, onMore, 
 
   return (
     <div className="events">
-      <div className="events-head sub" role="status">
-        {total === undefined ? `${number(rows.length)} loaded, counting` : `${number(rows.length)} of ${number(total)} events loaded`}
+      <div className="events-head pane-head">
+        <span className="sub" role="status">
+          {total === undefined ? `${number(rows.length)} loaded, counting` : `${number(rows.length)} of ${number(total)} events loaded`}
+        </span>
+        {tools}
       </div>
       <div ref={scroller} className="events-scroll">
-        <table className="table events-table">
+        <table ref={sized} className="table events-table">
+          <colgroup>
+            <col className="c-time" />
+            <col className="c-host" />
+            <col className="c-program" />
+            <col className="c-level" />
+            <col />
+            {extra.map((name) => (
+              <col key={name} className="c-extra" />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th className="col-time">Time</th>

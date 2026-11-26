@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { setCsrfToken } from '../api/http';
 import samples from '../api/samples/search-frames.json';
@@ -37,19 +38,25 @@ vi.mock('../search/Editor', () => ({
 }));
 
 vi.mock('../search/Timeline', () => ({
-  default: ({ histogram, from, to, onSelect }: { histogram: { total: number; span: string }; from: string; to: string; onSelect: (from: string, to: string) => void }) => (
+  default: ({ histogram, from, to, collapsed, range, toggle, onSelect }: { histogram: { total: number; span: string }; from: string; to: string; collapsed: boolean; range: ReactNode; toggle: ReactNode; onSelect: (from: string, to: string) => void }) => (
     <div>
-      <span>
-        timeline of {histogram.total} in {histogram.span} over {from} to {to}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          onSelect('2026-03-01T00:00:01.000Z', '2026-03-01T00:00:03.000Z');
-        }}
-      >
-        select a stretch
-      </button>
+      {collapsed ? null : (
+        <>
+          <span>
+            timeline of {histogram.total} in {histogram.span} over {from} to {to}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              onSelect('2026-03-01T00:00:01.000Z', '2026-03-01T00:00:03.000Z');
+            }}
+          >
+            select a stretch
+          </button>
+        </>
+      )}
+      {range}
+      {toggle}
     </div>
   ),
 }));
@@ -168,10 +175,12 @@ beforeAll(() => {
 afterEach(() => {
   setCsrfToken(undefined);
   vi.unstubAllGlobals();
+  window.localStorage.clear();
   delete (window as unknown as { pwned?: number }).pwned;
 });
 
 const region = (name: string) => screen.getByRole('region', { name });
+const rangeButton = () => screen.getByRole('button', { name: /^Time range: / });
 
 describe('the search page', () => {
   it('runs the address: the whole case with no query, and draws timeline, events, count and duration', async () => {
@@ -403,7 +412,9 @@ describe('the search page', () => {
     await waitFor(() => {
       expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: '', from: '1970-01-01T00:00:00Z', to: '1980-01-01T00:00:00Z' });
     });
+    await user.click(rangeButton());
     expect(screen.getByLabelText('From')).toHaveValue('1970-01-01T00:00:00Z');
+    await user.keyboard('{Escape}');
 
     await user.click(await screen.findByRole('button', { name: '1 event dated after their file arrived' }));
     await waitFor(() => {
@@ -481,17 +492,28 @@ describe('the search page', () => {
     const user = userEvent.setup();
     await screen.findByText('GET /admin 404');
 
+    // One button says the range and the zone; its panel holds the presets, From, To and the zone.
+    expect(rangeButton()).toHaveTextContent('Whole case · UTC');
+    expect(rangeButton()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('Time range')).toBeNull();
+    await user.click(rangeButton());
+    expect(rangeButton()).toHaveAttribute('aria-expanded', 'true');
     await user.selectOptions(screen.getByLabelText('Time range'), 'Last 24 hours');
     await waitFor(() => {
       expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: '', from: '-24h' });
     });
-    expect(screen.getByLabelText('Time range')).toHaveValue('-24h');
+    // A preset is a search: the panel closes and the button says what is searched now.
+    expect(screen.queryByLabelText('Time range')).toBeNull();
+    expect(rangeButton()).toHaveTextContent('Last 24 hours · UTC');
 
+    await user.click(rangeButton());
+    expect(screen.getByLabelText('Time range')).toHaveValue('-24h');
     await user.click(screen.getByRole('button', { name: 'Europe/Bucharest' }));
     await waitFor(() => {
       expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: '', from: '-24h', tz: 'Europe/Bucharest' });
     });
     expect(screen.getByRole('button', { name: 'Europe/Bucharest' })).toHaveAttribute('aria-pressed', 'true');
+    expect(rangeButton()).toHaveTextContent('Last 24 hours · Europe/Bucharest');
     expect(await screen.findAllByRole('button', { name: /Open the event of 2026-03-01 02:00:05.000/ })).toHaveLength(2);
 
     await user.clear(screen.getByLabelText('From'));
@@ -501,7 +523,123 @@ describe('the search page', () => {
     await waitFor(() => {
       expect(server.calls(SEARCH).at(-1)?.body).toEqual({ query: '', from: '2026-03-01T00:00:00Z', to: '2026-03-01T00:00:03Z', tz: 'Europe/Bucharest' });
     });
+    expect(rangeButton()).toHaveTextContent('2026-03-01T00:00:00Z to 2026-03-01T00:00:03Z · Europe/Bucharest');
+    await user.click(rangeButton());
     expect(screen.getByLabelText('Time range')).toHaveValue('custom');
+  });
+
+  it('closes the range panel with Escape and leaves the open event open', async () => {
+    open({ [SEARCH]: listing({ rows: [{ offset: 100 }] }) }, '/cases/7/search?sel=11:100');
+    const user = userEvent.setup();
+    await screen.findByRole('complementary', { name: 'Event' });
+
+    await user.click(rangeButton());
+    screen.getByLabelText('From').focus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByLabelText('From')).toBeNull();
+    expect(rangeButton()).toHaveFocus();
+    expect(screen.getByRole('complementary', { name: 'Event' })).toBeInTheDocument();
+    expect(window.location.search).toBe('?sel=11:100');
+
+    // A press outside closes it too.
+    await user.click(rangeButton());
+    await user.click(within(region('Events')).getByText(/events loaded/));
+    expect(screen.queryByLabelText('From')).toBeNull();
+  });
+
+  it('puts the case in the top bar, the export in the head of the events, and the case facts at the foot of the fields', async () => {
+    open({ [SEARCH]: listing() });
+    await screen.findByText('GET /admin 404');
+    const header = screen.getByRole('banner');
+    expect(within(header).getByText('payroll portal')).toBeInTheDocument();
+    expect(within(header).getByText('Active')).toBeInTheDocument();
+    // The page has no head of its own: the top bar names the case.
+    expect(screen.queryByRole('heading', { level: 1, name: 'payroll portal' })).toBeNull();
+    expect(within(region('Events')).getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    const rail = screen.getByRole('complementary', { name: 'Fields' });
+    expect(await within(rail).findByText(/Finished in 42 ms · 1 file · 1 host · your role: Owner/)).toBeInTheDocument();
+  });
+
+  it('folds the timeline to its caption and keeps the fold in this browser', async () => {
+    open({ [SEARCH]: listing({ total: 6 }) });
+    const user = userEvent.setup();
+    expect(await screen.findByText(/timeline of 6 in 1s/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide the timeline' }));
+    expect(screen.queryByText(/timeline of 6/)).toBeNull();
+    // The caption stays: what was searched, and the way back.
+    expect(within(region('Timeline')).getByText(/Searched/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show the timeline' })).toHaveAttribute('aria-expanded', 'false');
+    expect(window.localStorage.getItem('urlog.search.timeline')).toBe('folded');
+    // Not in the address: a shared address does not fold anyone's timeline.
+    expect(window.location.search).toBe('');
+
+    await user.click(screen.getByRole('button', { name: 'Show the timeline' }));
+    expect(await screen.findByText(/timeline of 6 in 1s/)).toBeInTheDocument();
+    expect(window.localStorage.getItem('urlog.search.timeline')).toBeNull();
+  });
+
+  it('folds the fields to a strip with one button, keeps the fold, and lets an open event fold them only while it is open', async () => {
+    open({ [SEARCH]: listing() });
+    const user = userEvent.setup();
+    await screen.findByText('GET /admin 404');
+    const panes = () => region('Events').parentElement as HTMLElement;
+
+    await user.click(screen.getByRole('button', { name: 'Hide the fields' }));
+    expect(panes()).toHaveClass('panes-folded');
+    expect(window.localStorage.getItem('urlog.search.fields')).toBe('folded');
+    await user.click(screen.getByRole('button', { name: 'Show the fields' }));
+    expect(panes()).not.toHaveClass('panes-folded');
+    expect(window.localStorage.getItem('urlog.search.fields')).toBeNull();
+
+    // An open event asks for the room of the fields (the stylesheet gives it from 1024 to 1599 pixels).
+    await user.click(screen.getAllByRole('button', { name: /Open the event of/ })[0] as HTMLElement);
+    expect(panes()).toHaveClass('panes-for-event');
+    // The reader may take the fields back while the event is open; that is not kept.
+    await user.click(screen.getByRole('button', { name: 'Show the fields' }));
+    expect(panes()).not.toHaveClass('panes-for-event');
+    expect(window.localStorage.getItem('urlog.search.fields')).toBeNull();
+    // Closing the event ends it, and the next event asks again.
+    await user.keyboard('{Escape}');
+    expect(panes()).not.toHaveClass('panes-for-event');
+    await user.keyboard('j');
+    expect(panes()).toHaveClass('panes-for-event');
+  });
+
+  it('opens with the fields folded when this browser folded them before', async () => {
+    window.localStorage.setItem('urlog.search.fields', 'folded');
+    open({ [SEARCH]: listing() });
+    await screen.findByText('GET /admin 404');
+    expect(region('Events').parentElement).toHaveClass('panes-folded');
+  });
+
+  it('opens with the timeline folded when this browser folded it before', async () => {
+    window.localStorage.setItem('urlog.search.timeline', 'folded');
+    open({ [SEARCH]: listing({ total: 6 }) });
+    expect(await screen.findByText('GET /admin 404')).toBeInTheDocument();
+    expect(screen.queryByText(/timeline of 6/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show the timeline' })).toBeInTheDocument();
+  });
+
+  it('fills the column of the detail, while no event is open, with the keys and the search', async () => {
+    open({ [SEARCH]: listing({ total: 6 }) }, '/cases/7/search?q=status%3D404');
+    const user = userEvent.setup();
+    await screen.findByText('GET /admin 404');
+    const empty = screen.getByRole('complementary', { name: 'No event open' });
+    expect(within(empty).getByText('j')).toBeInTheDocument();
+    expect(within(empty).getByText('k')).toBeInTheDocument();
+    expect(within(empty).getByText('Enter')).toBeInTheDocument();
+    expect(within(empty).getByText('Esc')).toBeInTheDocument();
+    expect(empty).toHaveTextContent('Querystatus=404');
+    expect(empty).toHaveTextContent('Range2026-03-01 00:00:00 to 2026-03-01 00:00:05 UTC');
+    expect(await within(empty).findByText('6 match, 2 loaded')).toBeInTheDocument();
+    expect(empty).toHaveTextContent('complete, 42 ms');
+
+    await user.click(screen.getAllByRole('button', { name: /Open the event of/ })[0] as HTMLElement);
+    expect(await screen.findByRole('complementary', { name: 'Event' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'No event open' })).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(await screen.findByRole('complementary', { name: 'No event open' })).toBeInTheDocument();
   });
 
   it('counts a query that is longer than the server reads, before it is sent', async () => {

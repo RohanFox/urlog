@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { number } from '../app/format';
 import { Tag } from '../ui/controls';
 import { Inert } from './inert';
@@ -27,7 +27,7 @@ function Spacer({ height, columns }: { height: number; columns: number }) {
  * The result of an aggregation, as the server ordered it. What the server cut is said above the rows: a table
  * of more rows than it sends, and a cell of values(f) that stands for more values than it lists.
  */
-export function StatsTable({ table }: { table: Table }) {
+export function StatsTable({ table, tools }: { table: Table; tools?: ReactNode }) {
   const scroller = useRef<HTMLDivElement>(null);
   const rowHeight = useMemo(() => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rowH')) || 30, []);
   const virtual = useVirtualizer({ count: table.rows.length, getScrollElement: () => scroller.current, estimateSize: () => rowHeight, overscan: 12 });
@@ -39,7 +39,8 @@ export function StatsTable({ table }: { table: Table }) {
 
   return (
     <div className="events">
-      <div className="events-head sub" role="status">
+      <div className="events-head pane-head">
+        <span className="sub" role="status">
         {table.truncated ? (
           <span className="warn-text">
             {number(table.rows.length)} of {number(table.total_rows)} rows shown. Export for all of them.
@@ -48,6 +49,8 @@ export function StatsTable({ table }: { table: Table }) {
           `${number(table.rows.length)} ${table.rows.length === 1 ? 'row' : 'rows'}`
         )}
         {capped.size > 0 ? <span className="warn-text"> · {number(capped.size)} {capped.size === 1 ? 'row has' : 'rows have'} a list of values capped at 100: the marked cell may stand for more.</span> : null}
+        </span>
+        {tools}
       </div>
       <div ref={scroller} className="events-scroll">
         <table className="table events-table">

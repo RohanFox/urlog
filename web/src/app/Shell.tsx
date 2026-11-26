@@ -1,9 +1,12 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useMatch } from 'react-router';
+import { call } from '../api/http';
 import { Lockup } from '../brand/Logo';
-import { Banner } from '../ui/controls';
+import { Banner, Tag } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { stateName } from './format';
 import { useSession, useUser } from './session';
 import { useTheme, type ThemeChoice } from './theme';
 import { uploads } from '../upload/queue';
@@ -71,6 +74,26 @@ function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
   );
 }
 
+/**
+ * The case the address is in, by name and state. It reads the dashboard under the key the case's pages use, so
+ * it asks nothing they do not ask already. A case that cannot be read shows nothing here: the page says why.
+ */
+function CaseTitle({ caseId }: { caseId: number }) {
+  const dashboard = useQuery({ queryKey: ['dashboard', caseId], queryFn: ({ signal }) => call('GetCaseDashboard', { params: { caseId }, signal }) });
+  const c = dashboard.data?.case;
+  if (c === undefined) {
+    return null;
+  }
+  return (
+    <div className="header-case">
+      <span className="header-case-name" title={c.name}>
+        {c.name}
+      </span>
+      <Tag accent={c.state === 'active'}>{stateName(c.state)}</Tag>
+    </div>
+  );
+}
+
 /** The frame of every page behind the session: the header with the logo, the places and the user. */
 export function Shell({ children }: { children: ReactNode }) {
   const [signOutFailed, setSignOutFailed] = useState(false);
@@ -104,6 +127,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </NavLink>
           {caseId === undefined ? null : (
             <>
+              <CaseTitle caseId={Number(caseId)} />
               <NavLink className="tab" to={`/cases/${caseId}`} end>
                 <Icon name="file" />
                 Evidence

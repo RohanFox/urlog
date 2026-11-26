@@ -1,13 +1,26 @@
-/* The search page: the query, the range, the timeline, the events and one event in full. */
+/* The search page: the query, the range, the timeline, the events and one event in full.
+   From 1024 by 600 pixels the page is the window's height: the controls and the timeline take what they need,
+   and the three panes below share the rest, each with its own scroller. The window itself does not scroll. */
 
-.search {
-  max-width: none;
+@media (min-width: 1024px) and (min-height: 600px) {
+  .app:has(.search-page) {
+    height: 100vh;
+  }
+}
+
+.search-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16) var(--sp-4);
+  background: var(--surface);
+  border-bottom: var(--hair) solid var(--line);
 }
 
 .search-controls {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-12);
+  gap: var(--sp-4);
 }
 
 /* The query. */
@@ -62,7 +75,52 @@
   overflow-wrap: anywhere;
 }
 
-/* The range. */
+/* The range: one button that says what is searched, and its panel. */
+
+.range {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.range-button {
+  max-width: var(--w-range);
+  font-weight: var(--fw-regular);
+}
+
+.range-button-bad {
+  border-color: var(--err);
+}
+
+.range-panel {
+  position: absolute;
+  top: calc(100% + var(--sp-4));
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: var(--w-range-panel);
+  max-width: calc(100vw - var(--sp-32));
+  padding: var(--sp-16);
+  border: var(--hair) solid var(--line2);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.range-panel .range-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.range-panel .range-form > .field:first-child {
+  grid-column: 1 / -1;
+}
+
+.range-panel .seg {
+  align-self: flex-start;
+}
 
 .range-form {
   display: flex;
@@ -81,8 +139,11 @@
 }
 
 .range-said {
-  margin: var(--sp-8) 0 0;
   overflow-wrap: anywhere;
+}
+
+.range-line {
+  margin: 0;
 }
 
 .linklike {
@@ -109,6 +170,7 @@
 .region {
   position: relative;
   min-width: 0;
+  background: var(--surface);
 }
 
 .region-stale > * {
@@ -119,14 +181,15 @@
   padding: var(--sp-6) var(--sp-12) 0;
 }
 
-/* The timeline. */
+/* The timeline: a strip of bars on a time axis, with one caption line that stays when the strip is folded. */
 
-.timeline {
-  padding: var(--sp-8) var(--sp-12);
+.strip .banner {
+  margin-bottom: var(--sp-4);
 }
 
 .timeline-plot {
-  min-height: var(--h-timeline);
+  height: var(--h-timeline);
+  overflow: hidden;
   border-radius: var(--r-sm);
 }
 
@@ -137,7 +200,6 @@
 
 .timeline-skeleton {
   height: var(--h-timeline);
-  margin: var(--sp-8) var(--sp-12);
   border-radius: var(--r-sm);
   background: var(--sunken);
   animation: skel-pulse var(--t-pulse) ease-in-out infinite;
@@ -148,7 +210,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4) var(--sp-16);
-  margin-top: var(--sp-4);
+  min-height: var(--ctl-sm);
 }
 
 .legend {
@@ -186,32 +248,109 @@
   border-right: var(--hair) solid var(--accent);
 }
 
-/* The events. */
+/* The panes: fields, events, and the detail's column. Nothing lies over the events: from 1600 the detail's
+   column is always there; under 1600 it is there while an event is open. The first and last columns take the
+   width of what stands in them, so a folded field list or a closed event gives its room to the events. */
 
-.results {
+.panes {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: var(--w-rail) minmax(0, 1fr);
-  gap: var(--sp-16);
-  align-items: start;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: var(--h-panes);
 }
 
-.results-split {
-  grid-template-columns: var(--w-rail) minmax(0, 1fr) minmax(0, var(--w-detail));
+.panes > .rail {
+  width: var(--w-rail);
 }
 
-.events-head {
-  padding: var(--sp-8) var(--sp-12);
+.panes > .detail {
+  width: var(--w-detail);
+}
+
+/* The field list folded: a strip with one button that brings it back. */
+.rail-strip {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  width: var(--w-strip);
+  padding-top: var(--sp-8);
+  background: var(--surface);
+  border-right: var(--hair) solid var(--line);
+}
+
+.rail-strip .btn {
+  width: var(--ctl);
+  height: auto;
+  padding: var(--sp-10) 0;
+  writing-mode: vertical-rl;
+}
+
+.panes.panes-folded > .rail {
+  display: none;
+}
+
+.panes.panes-folded > .rail-strip {
+  display: flex;
+}
+
+@media (min-width: 1024px) and (min-height: 600px) {
+  .panes {
+    min-height: 0;
+  }
+}
+
+.panes.panes-one {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.pane-events {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane-events > .events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pane-foot {
+  margin: 0;
+  padding: var(--sp-6) var(--sp-16);
+  border-top: var(--hair) solid var(--line);
+  background: var(--surface);
+}
+
+/* The head of a pane: what it holds, and at its right what can be done with it. */
+.pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-12);
+  min-height: var(--ctl-lg);
+  padding: var(--sp-2) var(--sp-12);
   border-bottom: var(--hair) solid var(--line);
 }
 
+.pane-head .export {
+  margin-left: auto;
+}
+
 .events-scroll {
-  max-height: var(--h-results);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
 .events-table {
   table-layout: fixed;
-  min-width: var(--w-page);
+  min-width: var(--w-table);
 }
 
 .events-table th {
@@ -242,11 +381,26 @@
   background: none;
 }
 
-.col-time { width: var(--w-time); }
-.col-host { width: var(--w-col); }
-.col-program { width: var(--w-col); }
-.col-level { width: var(--w-meter); }
-.col-extra { width: var(--w-col); }
+/* The widths of the columns. Host, program and level take the widest value of the loaded rows, counted in
+   characters of the data face (the list sets the counts on the table), up to a small cap; the time has one
+   length. Message takes the rest. A col has the data face so that its ch is that face's character. */
+.events-table {
+  --n-time: 23;
+  --n-host: 4;
+  --n-program: 7;
+  --n-level: 5;
+}
+
+.events-table col {
+  font-family: var(--data);
+  font-size: var(--fs-12);
+}
+
+.events-table .c-time { width: calc(var(--n-time) * 1ch + var(--sp-24)); }
+.events-table .c-host { width: min(calc(var(--n-host) * 1ch + var(--sp-24)), var(--w-col)); }
+.events-table .c-program { width: min(calc(var(--n-program) * 1ch + var(--sp-24)), var(--w-col-narrow)); }
+.events-table .c-level { width: min(calc(var(--n-level) * 1ch + var(--sp-24)), var(--w-meter)); }
+.events-table .c-extra { width: var(--w-col); }
 
 .event-time {
   padding: 0;
@@ -257,7 +411,7 @@
   cursor: pointer;
 }
 
-.event-open td {
+.events-table tr.event-open td {
   background: var(--accentBg);
 }
 
@@ -269,10 +423,6 @@
   padding: var(--sp-10) var(--sp-12);
   border-top: var(--hair) solid var(--line);
   overflow-wrap: anywhere;
-}
-
-.search-foot {
-  margin: 0;
 }
 
 /* Text out of a log. Its direction is set by the page, never by the text; what would act is shown as a mark. */
@@ -299,12 +449,45 @@
 
 /* One event. */
 
+/* Each pane is the containing block of what it places absolutely (a label kept for screen readers), so its own
+   scroller clips it and it cannot stretch the page. */
 .detail {
+  position: relative;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
   padding: var(--sp-12) var(--sp-16) var(--sp-16);
   background: var(--surface);
-  border: var(--hair) solid var(--line);
-  border-radius: var(--r);
+  border-left: var(--hair) solid var(--line);
+}
+
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+.detail-empty h2 {
+  font-size: var(--fs-14);
+}
+
+.detail-empty-sub {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--fs-12);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+}
+
+.keys kbd {
+  display: inline-block;
+  min-width: var(--ctl-sm);
+  padding: 0 var(--sp-4);
+  border: var(--hair) solid var(--ctlLine);
+  border-radius: var(--r-xs);
+  background: var(--sunken);
+  font-family: var(--data);
+  font-size: var(--fs-11);
+  text-align: center;
 }
 
 .detail-head,
@@ -391,19 +574,27 @@
   gap: var(--sp-2);
 }
 
-@media (max-width: 1100px) {
-  .results,
-  .results-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* The fields of the case, beside the events. */
+/* The fields of the case, beside the events. The foot stays at the bottom of the pane. */
 
 .rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  max-height: calc(var(--h-results) + var(--ctl-lg));
+  min-height: 0;
   overflow: auto;
+  background: var(--surface);
+  border-right: var(--hair) solid var(--line);
+}
+
+.rail-foot {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: var(--sp-6) var(--sp-12);
+  border-top: var(--hair) solid var(--line);
+  background: var(--surface);
+  overflow-wrap: anywhere;
 }
 
 .rail-head {
@@ -412,6 +603,13 @@
   gap: var(--sp-8);
   padding: var(--sp-10) var(--sp-12);
   border-bottom: var(--hair) solid var(--line);
+}
+
+.rail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
 }
 
 .rail-head h2,
@@ -531,4 +729,92 @@
 .linklike:disabled {
   color: var(--muted);
   cursor: default;
+}
+
+/* Widths. 1024 to 1599: no column for the detail while no event is open; an open event has a column of a third
+   of the window (360 to 520 px), and the field list folds to its strip for as long as the event is open.
+   1024 to 1279: the field list is narrower. Under 1024 the panes stand one under the other and the window
+   scrolls. */
+
+@media (max-width: 1599px) {
+  .panes > .detail {
+    width: clamp(var(--w-detail-min), var(--w-detail-share), var(--w-detail));
+  }
+
+  .panes > .detail-empty {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1599px) {
+  .panes.panes-for-event > .rail {
+    display: none;
+  }
+
+  .panes.panes-for-event > .rail-strip {
+    display: flex;
+  }
+}
+
+@media (max-width: 1279px) {
+  .panes > .rail {
+    width: var(--w-rail-narrow);
+  }
+}
+
+@media (max-width: 1023px) {
+  .query-row {
+    flex-wrap: wrap;
+  }
+
+  .query-box {
+    flex-basis: 100%;
+  }
+
+  .range {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .range-button {
+    width: 100%;
+    max-width: none;
+    justify-content: space-between;
+  }
+
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+
+  .panes > .rail {
+    width: auto;
+    max-height: var(--h-panes);
+    border-right: 0;
+    border-bottom: var(--hair) solid var(--line);
+  }
+
+  .rail-strip {
+    width: auto;
+    padding: var(--sp-4) var(--sp-12);
+    border-right: 0;
+    border-bottom: var(--hair) solid var(--line);
+  }
+
+  .rail-strip .btn {
+    width: auto;
+    height: var(--ctl);
+    padding: 0 var(--sp-12);
+    writing-mode: horizontal-tb;
+  }
+
+  .panes > .pane-events {
+    height: var(--h-results);
+  }
+
+  .panes > .detail {
+    width: auto;
+    border-left: 0;
+    border-top: var(--hair) solid var(--line);
+  }
 }
