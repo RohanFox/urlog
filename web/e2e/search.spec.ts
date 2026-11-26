@@ -523,6 +523,44 @@ test('a syntax error is marked where the server found it, and the results before
   await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
 });
 
+test('the panes keep their place while the timeline waits for its answer and for its code', async ({ page }) => {
+  // Both held back, as on a slow link: the search's answer, then the timeline's own code.
+  let answer: (() => void) | undefined;
+  const answered = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  let code: (() => void) | undefined;
+  const loaded = new Promise<void>((resolve) => {
+    code = resolve;
+  });
+  await page.route('**/api/v1/cases/*/search', async (route) => {
+    await answered;
+    await route.continue().catch(() => undefined);
+  });
+  await page.route('**/assets/Timeline-*.js', async (route) => {
+    await loaded;
+    await route.continue().catch(() => undefined);
+  });
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const bottom = () => timeline.evaluate((el) => el.getBoundingClientRect().bottom);
+
+  await openSearch(page, '?q=status%3D404');
+  await expect(page.getByRole('status', { name: 'Loading the timeline' })).toBeVisible();
+  const asking = await bottom();
+
+  answer?.();
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  await expect(page.locator('.timeline-skeleton')).toBeVisible();
+  await expect(page.locator('.timeline-plot')).toHaveCount(0);
+  const waiting = await bottom();
+  const head = await eventsStatus(page).evaluate((el) => el.getBoundingClientRect().top);
+
+  code?.();
+  await expect(page.locator('.timeline-plot canvas')).toBeVisible();
+  expect([waiting, await bottom()]).toEqual([asking, asking]);
+  expect(await eventsStatus(page).evaluate((el) => el.getBoundingClientRect().top)).toBe(head);
+});
+
 test('a search started while another is in flight leaves nothing of the first on the page', async ({ page }) => {
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => {

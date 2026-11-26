@@ -562,14 +562,15 @@ export function Search() {
             {histogram !== undefined && histogramOf?.meta !== undefined ? (
               <Suspense
                 fallback={
-                  <>
+                  // The box Timeline draws in, so the page below does not move when it arrives.
+                  <div className="timeline">
                     {timelineFolded ? null : <div className="timeline-skeleton" aria-hidden="true" />}
                     <div className="timeline-foot">
                       {rangeLine}
                       <span className="grow" />
                       {toggle}
                     </div>
-                  </>
+                  </div>
                 }
               >
                 <Timeline
@@ -587,15 +588,14 @@ export function Search() {
               </Suspense>
             ) : (
               <>
-                {ended ? (
-                  <RegionFailure what="The timeline could not be drawn" state={state} onAgain={runAgain} />
-                ) : live && !timelineFolded ? (
-                  <div className="timeline-skeleton" role="status" aria-label="Loading the timeline" />
-                ) : null}
-                <div className="timeline-foot">
-                  {rangeLine}
-                  <span className="grow" />
-                  {toggle}
+                {ended ? <RegionFailure what="The timeline could not be drawn" state={state} onAgain={runAgain} /> : null}
+                <div className="timeline">
+                  {!ended && live && !timelineFolded ? <div className="timeline-skeleton" role="status" aria-label="Loading the timeline" /> : null}
+                  <div className="timeline-foot">
+                    {rangeLine}
+                    <span className="grow" />
+                    {toggle}
+                  </div>
                 </div>
               </>
             )}
