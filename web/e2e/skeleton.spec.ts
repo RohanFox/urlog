@@ -95,21 +95,73 @@ test('a session the server has ended sends the page to sign-in and back to the s
   await expect(page.getByRole('heading', { name: caseName })).toBeVisible();
 });
 
-test('the theme follows the system until the user chooses, and the choice survives a reload', async ({ page }) => {
+test('the theme follows the system until a press of the theme button, which a reload keeps', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/login');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-theme', 'dark');
   const dark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
   await signIn(page, accounts.owner());
-  await page.getByRole('button', { name: /Signed in as/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Light' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  const toLight = page.getByRole('button', { name: 'Switch to the light theme', exact: true });
+  await expect(toLight).toBeVisible();
+  await expect(toLight).toHaveAttribute('title', 'Switch to the light theme');
+
+  // While nothing is stored the system's setting is followed as it changes.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(html).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate(() => window.localStorage.getItem('urlog.theme'))).toBeNull();
+
+  // The menu holds the account only.
+  const account = page.getByRole('button', { name: `Signed in as ${accounts.owner().name}. Account`, exact: true });
+  await account.click();
+  await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('menuitemradio')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect(account).toBeFocused();
+
+  // In the tab order right before the account; Enter and Space press it.
+  await page.keyboard.press('Shift+Tab');
+  await expect(toLight).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(html).toHaveAttribute('data-theme', 'light');
   const light = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(light).not.toBe(dark);
+  const toDark = page.getByRole('button', { name: 'Switch to the dark theme', exact: true });
+  await expect(toDark).toBeFocused();
+  expect(await page.evaluate(() => window.localStorage.getItem('urlog.theme'))).toBe('light');
 
+  // A stored choice outlasts a reload and a change of the system.
   await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(html).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(html).toHaveAttribute('data-theme', 'light');
+
+  await toDark.focus();
+  await page.keyboard.press('Space');
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate(() => window.localStorage.getItem('urlog.theme'))).toBe('dark');
+
+  // The same size as the other controls of the top bar.
+  const sizes = await page.evaluate(() =>
+    ['.theme-button', '.user-button'].map((selector) => document.querySelector(selector)?.getBoundingClientRect().height),
+  );
+  expect(sizes[0]).toBe(sizes[1]);
+  // Its icon is drawn larger than the icons of the tabs, which keep theirs.
+  const icons = await page.evaluate(() =>
+    ['.theme-button .icon', '.tab .icon'].map((selector) => {
+      const box = document.querySelector(selector)?.getBoundingClientRect();
+      return [box?.width, box?.height];
+    }),
+  );
+  expect(icons).toEqual([
+    [18, 18],
+    [16, 16],
+  ]);
 });
 
 test('with reduced motion the loader stands still', async ({ page }) => {

@@ -19,6 +19,10 @@ const PATHS = {
   copy: 'M9 9h10.5v10.5H9ZM5.5 15h-1V4.5H15v1',
   download: 'M12 4.5V16M7.5 11.5 12 16l4.5-4.5M4.5 19.5h15',
   search: 'M10.5 4.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM15 15l4.5 4.5',
+  // A disc of radius 4 with eight rays from 6.5 to 8.5, the reach of the circle in "info".
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18',
+  // The circle of "info" with a bite of radius 6.5 taken from its upper right.
+  moon: 'M12 3.5a8.5 8.5 0 1 0 8.5 8.5 6.5 6.5 0 0 1-8.5-8.5Z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

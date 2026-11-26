@@ -1,64 +1,63 @@
 import { useCallback, useEffect, useState } from 'react';
 
-// The theme is the system's until the user chooses one. The choice stays in this browser. public/theme.js
-// applies the same rule before the first paint, so a page never starts in the wrong colours.
+// The theme is the system's until the user chooses one. The choice stays in this browser, and nothing in the page
+// leads back to the system's setting; clearing the site's data does. public/theme.js applies the same rule before
+// the first paint, so a page never starts in the wrong colours.
 
-export type ThemeChoice = 'system' | 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 
 export const THEME_KEY = 'urlog.theme';
 
-function stored(): ThemeChoice {
+const DARK = '(prefers-color-scheme: dark)';
+
+function stored(): Theme | undefined {
   try {
     const value = window.localStorage.getItem(THEME_KEY);
-    return value === 'light' || value === 'dark' ? value : 'system';
+    return value === 'light' || value === 'dark' ? value : undefined;
   } catch {
-    return 'system';
+    return undefined;
   }
 }
 
-function systemDark(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+function system(): Theme {
+  return typeof window.matchMedia === 'function' && window.matchMedia(DARK).matches ? 'dark' : 'light';
 }
 
-export function resolve(choice: ThemeChoice): 'light' | 'dark' {
-  return choice === 'system' ? (systemDark() ? 'dark' : 'light') : choice;
-}
-
-function apply(choice: ThemeChoice): void {
-  document.documentElement.setAttribute('data-theme', resolve(choice));
-}
-
-export function useTheme(): { choice: ThemeChoice; setChoice: (choice: ThemeChoice) => void } {
-  const [choice, setState] = useState<ThemeChoice>(stored);
+/** The theme the page shows, and the press that switches to the other one and keeps it. */
+export function useTheme(): { theme: Theme; toggle: () => void } {
+  const [choice, setChoice] = useState<Theme | undefined>(stored);
+  const [followed, setFollowed] = useState<Theme>(system);
+  const theme = choice ?? followed;
 
   useEffect(() => {
-    apply(choice);
-    if (choice !== 'system' || typeof window.matchMedia !== 'function') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (choice !== undefined || typeof window.matchMedia !== 'function') {
       return;
     }
-    // While the system decides, follow it when it changes.
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    // While nothing is stored, follow the system when it changes.
+    const media = window.matchMedia(DARK);
     const follow = () => {
-      apply('system');
+      setFollowed(media.matches ? 'dark' : 'light');
     };
+    follow();
     media.addEventListener('change', follow);
     return () => {
       media.removeEventListener('change', follow);
     };
   }, [choice]);
 
-  const setChoice = useCallback((next: ThemeChoice) => {
+  const toggle = useCallback(() => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark';
     try {
-      if (next === 'system') {
-        window.localStorage.removeItem(THEME_KEY);
-      } else {
-        window.localStorage.setItem(THEME_KEY, next);
-      }
+      window.localStorage.setItem(THEME_KEY, next);
     } catch {
       // Storage refused: the choice lasts for this page.
     }
-    setState(next);
-  }, []);
+    setChoice(next);
+  }, [theme]);
 
-  return { choice, setChoice };
+  return { theme, toggle };
 }

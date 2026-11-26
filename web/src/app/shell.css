@@ -72,6 +72,18 @@
   flex-grow: 1;
 }
 
+.theme-button {
+  width: var(--ctl);
+  padding: 0;
+}
+
+/* Larger than the tab icons, with the same stroke in pixels: 1.6 of 24 at 16 px is 1.42 of 24 at 18 px. */
+.theme-button > .icon {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+  stroke-width: 1.42;
+}
+
 .user-button {
   display: flex;
   align-items: center;

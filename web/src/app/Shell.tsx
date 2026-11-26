@@ -8,24 +8,17 @@ import { Banner, Tag } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { stateName } from './format';
 import { useSession, useUser } from './session';
-import { useTheme, type ThemeChoice } from './theme';
+import { ThemeButton } from './ThemeButton';
 import { uploads } from '../upload/queue';
 import './shell.css';
-
-const THEMES: ReadonlyArray<{ key: ThemeChoice; label: string }> = [
-  { key: 'system', label: 'As the system' },
-  { key: 'light', label: 'Light' },
-  { key: 'dark', label: 'Dark' },
-];
 
 function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
   const user = useUser();
   const { signOut } = useSession();
-  const { choice, setChoice } = useTheme();
   return (
     // Not modal: a modal menu locks the page's scroll through a style element it injects, which the content policy refuses.
     <Menu.Root modal={false}>
-      <Menu.Trigger className="user-button" aria-label={`Signed in as ${user.name}. Account and theme`}>
+      <Menu.Trigger className="user-button" aria-label={`Signed in as ${user.name}. Account`}>
         <span className="avatar" aria-hidden="true">
           {user.name.slice(0, 2).toUpperCase()}
         </span>
@@ -37,25 +30,6 @@ function UserMenu({ onSignOutFailed }: { onSignOutFailed: () => void }) {
           <Menu.Label className="menu-label">
             {user.name} · {user.role}
           </Menu.Label>
-          <Menu.Separator className="menu-line" />
-          <Menu.Label className="menu-label">Theme</Menu.Label>
-          <Menu.RadioGroup
-            value={choice}
-            onValueChange={(value) => {
-              setChoice(value as ThemeChoice);
-            }}
-          >
-            {THEMES.map((t) => (
-              <Menu.RadioItem key={t.key} value={t.key} className="menu-item">
-                <span className="menu-check">
-                  <Menu.ItemIndicator>
-                    <Icon name="check" />
-                  </Menu.ItemIndicator>
-                </span>
-                {t.label}
-              </Menu.RadioItem>
-            ))}
-          </Menu.RadioGroup>
           <Menu.Separator className="menu-line" />
           <Menu.Item
             className="menu-item"
@@ -140,6 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
           )}
         </nav>
         <span className="grow" />
+        <ThemeButton />
         <UserMenu
           onSignOutFailed={() => {
             setSignOutFailed(true);
