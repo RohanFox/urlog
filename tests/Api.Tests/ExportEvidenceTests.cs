@@ -304,7 +304,15 @@ public sealed class ExportEvidenceTests
             await answer.Content.ReadAsByteArrayAsync(Ct);
         });
 
-        var row = (await AuditAsync(factory)).Single();
+        // The server writes the row after it has broken off the download, so the client can see the break first.
+        var rows = await AuditAsync(factory);
+        for (var i = 0; i < 300 && rows.Count == 0; i++)
+        {
+            await Task.Delay(10, Ct);
+            rows = await AuditAsync(factory);
+        }
+
+        var row = Assert.Single(rows);
         Assert.Equal("failed", row.GetProperty("outcome").GetString());
         Assert.False(row.GetProperty("complete").GetBoolean());
         Assert.Equal("the evidence of the result changed while it was exported: 6 rows were counted and 5 were read", row.GetProperty("reason").GetString());
