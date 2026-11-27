@@ -187,6 +187,57 @@
   overflow-wrap: anywhere;
 }
 
+/* Text that warns or reports a failure, on any page. */
+.warn-text {
+  color: var(--warn);
+}
+
+.err-text {
+  color: var(--err);
+}
+
+/* A label and its value, in two columns. */
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-8) var(--sp-24);
+  margin: 0;
+  max-width: var(--w-prose);
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: var(--fs-12);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* How far a file or a job has got. */
+.meter {
+  appearance: none;
+  width: var(--w-meter);
+  height: var(--sp-4);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--line);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.meter::-webkit-progress-bar {
+  background: var(--line);
+}
+
+.meter::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.meter::-moz-progress-bar {
+  background: var(--accent);
+}
+
 .section {
   background: var(--surface);
   border: var(--hair) solid var(--line);

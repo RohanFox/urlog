@@ -4,12 +4,6 @@
 
 @import '../styles/breakpoints.css';
 
-@media (--fills-window) {
-  .app:has(.search-page) {
-    height: 100vh;
-  }
-}
-
 .search-top {
   display: flex;
   flex-direction: column;
@@ -185,7 +179,13 @@
 
 /* The timeline: a strip of bars on a time axis, with one caption line that stays when the strip is folded. */
 
-.strip .banner {
+.timeline-region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.timeline-region .banner {
   margin-bottom: var(--sp-4);
 }
 

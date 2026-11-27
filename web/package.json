@@ -12,7 +12,7 @@
     "dev": "npm run gen && vite",
     "build": "npm run gen && tsc --noEmit && vite build",
     "typecheck": "npm run gen && tsc --noEmit",
-    "lint": "eslint . --max-warnings 0 && stylelint \"src/**/*.css\" --max-warnings 0",
+    "lint": "eslint . --max-warnings 0 && stylelint \"src/**/*.css\" --max-warnings 0 && node scripts/check-class-names.mjs",
     "test": "npm run gen && vitest run",
     "check": "npm run typecheck && npm run lint && vitest run",
     "licenses": "node scripts/check-licenses.mjs",

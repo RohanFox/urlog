@@ -8,6 +8,13 @@
   flex-direction: column;
 }
 
+/* The search page is the window's height (search.css), so the frame around it is too. */
+@media (--fills-window) {
+  .app:has(.search-page) {
+    height: 100vh;
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -80,7 +87,7 @@
 }
 
 /* Larger than the tab icons, with the same stroke in pixels: 1.6 of 24 at 16 px is 1.42 of 24 at 18 px. */
-.theme-button > .icon {
+.theme-button > svg {
   width: var(--icon-lg);
   height: var(--icon-lg);
   stroke-width: 1.42;

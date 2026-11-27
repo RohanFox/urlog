@@ -11,7 +11,7 @@
   background: var(--surface);
 }
 
-.drop > .icon {
+.drop > svg {
   color: var(--accent);
 }
 

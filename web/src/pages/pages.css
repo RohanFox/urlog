@@ -43,23 +43,6 @@
   font-weight: var(--fw-medium);
 }
 
-.facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: var(--sp-8) var(--sp-24);
-  margin: 0;
-  max-width: var(--w-prose);
-}
-
-.facts dt {
-  color: var(--muted);
-  font-size: var(--fs-12);
-}
-
-.facts dd {
-  margin: 0;
-}
-
 /* Sign-in: the form on the left, what this instance is on the right. */
 
 .signin {

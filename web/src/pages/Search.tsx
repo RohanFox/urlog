@@ -558,7 +558,7 @@ export function Search() {
         ) : null}
 
         {kind === 'events' ? (
-          <Region label="Timeline" className="strip" stale={live && oldTimeline} incomplete={ended && state.histogram !== undefined}>
+          <Region label="Timeline" className="timeline-region" stale={live && oldTimeline} incomplete={ended && state.histogram !== undefined}>
             {histogram !== undefined && histogramOf?.meta !== undefined ? (
               <Suspense
                 fallback={
