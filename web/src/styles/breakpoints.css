@@ -1,0 +1,26 @@
+/* The widths at which a page changes shape, beside the tokens: a media query cannot read a variable, so these
+   are named media queries, resolved when the stylesheets are built. A stylesheet that changes shape imports
+   this file; nothing else writes a width or height in a media query.
+
+   Between two breakpoints a page is fluid: it takes the window's width, and the parts that grow are shares of
+   it within a least and a greatest width. At a breakpoint the layout changes shape. */
+
+/* From 1600: the search page keeps a column for the event; pages have margins of 40 and the whole SHA-256. */
+@custom-media --from-1600 (min-width: 1600px);
+@custom-media --under-1600 (max-width: 1599px);
+
+/* Under 1280: the evidence page puts a file's flags under its name. */
+@custom-media --under-1280 (max-width: 1279px);
+
+/* From 1024: the search page has its panes side by side; under 1024 they stand one under another. */
+@custom-media --from-1024 (min-width: 1024px);
+@custom-media --under-1024 (max-width: 1023px);
+
+/* From 1024 by 600 the search page is the window's height and the window does not scroll. */
+@custom-media --fills-window (min-width: 1024px) and (min-height: 600px);
+
+/* Up to 900 the sign-in page stands in one column. */
+@custom-media --to-900 (max-width: 900px);
+
+/* Up to 720: touch sizes and smaller margins. */
+@custom-media --to-720 (max-width: 720px);

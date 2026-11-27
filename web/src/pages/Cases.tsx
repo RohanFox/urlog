@@ -85,19 +85,19 @@ function CaseTable({ rows }: { rows: readonly CaseSummaryResponse[] }) {
       {rows.map((c) => (
         <tr key={c.id}>
           <td className="case-cell">
-            <Link className="case-link" to={`/cases/${c.id}`}>
+            <Link className="case-link cut" to={`/cases/${c.id}`}>
               <span className="mono muted">{c.id}</span>
               <span className="ellipsis" title={c.name}>
                 {c.name}
               </span>
             </Link>
           </td>
-          <td>
+          <td className="fit">
             <Tag accent={c.state === 'active'}>{stateName(c.state)}</Tag>
           </td>
-          <td>{roleName(c.role)}</td>
-          <td className="mono">{c.owner}</td>
-          <td className="mono muted">{utcMinute(c.created_at)}</td>
+          <td className="fit">{roleName(c.role)}</td>
+          <td className="fit mono">{c.owner}</td>
+          <td className="fit mono muted">{utcMinute(c.created_at)}</td>
         </tr>
       ))}
     </>
@@ -210,11 +210,11 @@ function Table({ children }: { children: React.ReactNode }) {
       <table className="table">
         <thead>
           <tr>
-            <th>Case</th>
-            <th>State</th>
-            <th>Your role</th>
-            <th>Owner</th>
-            <th>Created</th>
+            <th className="case-cell">Case</th>
+            <th className="fit">State</th>
+            <th className="fit">Your role</th>
+            <th className="fit">Owner</th>
+            <th className="fit">Created</th>
           </tr>
         </thead>
         <tbody>{children}</tbody>

@@ -1,5 +1,7 @@
 /* Page layouts. */
 
+@import '../styles/breakpoints.css';
+
 .page {
   flex: 1;
   display: flex;
@@ -7,9 +9,10 @@
   min-height: 0;
 }
 
+/* A page takes the window's width between its side margins: 24, from 1600 40, up to 720 12. Text read as
+   sentences keeps its own measure (--w-prose, --w-form, dialogs). */
 .page-pad {
   padding: var(--sp-20) var(--sp-24) var(--sp-40);
-  max-width: var(--w-page);
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -28,7 +31,7 @@
 }
 
 .case-cell {
-  max-width: var(--w-name);
+  width: 100%;
 }
 
 .case-link {
@@ -114,7 +117,14 @@
   gap: var(--sp-24);
 }
 
-@media (max-width: 900px) {
+@media (--from-1600) {
+  .page-pad {
+    padding-left: var(--sp-40);
+    padding-right: var(--sp-40);
+  }
+}
+
+@media (--to-900) {
   .signin {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -125,7 +135,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (--to-720) {
   .page-pad {
     padding: var(--sp-16) var(--sp-12) var(--sp-32);
   }

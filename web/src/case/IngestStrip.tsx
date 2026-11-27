@@ -137,27 +137,31 @@ export function IngestStrip({ dashboard, onFilter }: Props) {
           <table className="table">
             <thead>
               <tr>
-                <th>Host</th>
-                <th>Zone</th>
-                <th className="right">Files</th>
-                <th className="right">Rows</th>
-                <th className="right">Rejected</th>
-                <th>From</th>
-                <th>To</th>
+                <th className="host-cell">Host</th>
+                <th className="fit">Zone</th>
+                <th className="fit right">Files</th>
+                <th className="fit right">Rows</th>
+                <th className="fit right">Rejected</th>
+                <th className="fit">From</th>
+                <th className="fit">To</th>
               </tr>
             </thead>
             <tbody>
               {[...hosts, ...(unassigned === null ? [] : [unassigned])].map((host) => (
                 <tr key={host.id}>
-                  <td className="mono">{host.id === 0 ? 'no host assigned' : host.name}</td>
-                  <td>
+                  <td className="host-cell mono">
+                    <span className="ellipsis cut" title={host.id === 0 ? undefined : host.name}>
+                      {host.id === 0 ? 'no host assigned' : host.name}
+                    </span>
+                  </td>
+                  <td className="fit">
                     <span className="mono">{host.timezone}</span> {host.timezone_assumed ? <Tag>assumed</Tag> : null}
                   </td>
-                  <td className="right num">{number(host.files)}</td>
-                  <td className="right num">{number(host.rows)}</td>
-                  <td className="right num">{number(host.rejects)}</td>
-                  <td className="mono muted">{host.from === null ? '' : utcMinute(host.from)}</td>
-                  <td className="mono muted">{host.to === null ? '' : utcMinute(host.to)}</td>
+                  <td className="fit right num">{number(host.files)}</td>
+                  <td className="fit right num">{number(host.rows)}</td>
+                  <td className="fit right num">{number(host.rejects)}</td>
+                  <td className="fit mono muted">{host.from === null ? '' : utcMinute(host.from)}</td>
+                  <td className="fit mono muted">{host.to === null ? '' : utcMinute(host.to)}</td>
                 </tr>
               ))}
             </tbody>

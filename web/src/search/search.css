@@ -2,7 +2,9 @@
    From 1024 by 600 pixels the page is the window's height: the controls and the timeline take what they need,
    and the three panes below share the rest, each with its own scroller. The window itself does not scroll. */
 
-@media (min-width: 1024px) and (min-height: 600px) {
+@import '../styles/breakpoints.css';
+
+@media (--fills-window) {
   .app:has(.search-page) {
     height: 100vh;
   }
@@ -260,12 +262,14 @@
   min-height: var(--h-panes);
 }
 
+/* The fields and the detail are shares of the window between a least and a greatest width, so the events
+   take the rest at any width and neither side pane grows past what its text can use. */
 .panes > .rail {
-  width: var(--w-rail);
+  width: clamp(var(--w-rail-min), var(--w-rail-share), var(--w-rail-max));
 }
 
 .panes > .detail {
-  width: var(--w-detail);
+  width: clamp(var(--w-detail-min), var(--w-detail-share), var(--w-detail-max));
 }
 
 /* The field list folded: a strip with one button that brings it back. */
@@ -294,7 +298,7 @@
   display: flex;
 }
 
-@media (min-width: 1024px) and (min-height: 600px) {
+@media (--fills-window) {
   .panes {
     min-height: 0;
   }
@@ -731,22 +735,16 @@
   cursor: default;
 }
 
-/* Widths. 1024 to 1599: no column for the detail while no event is open; an open event has a column of a third
-   of the window (360 to 520 px), and the field list folds to its strip for as long as the event is open.
-   1024 to 1279: the field list is narrower. Under 1024 the panes stand one under the other and the window
-   scrolls. */
+/* Shapes. 1024 to 1599: no column for the detail while no event is open, and the field list folds to its strip
+   for as long as an event is open. Under 1024 the panes stand one under the other and the window scrolls. */
 
-@media (max-width: 1599px) {
-  .panes > .detail {
-    width: clamp(var(--w-detail-min), var(--w-detail-share), var(--w-detail));
-  }
-
+@media (--under-1600) {
   .panes > .detail-empty {
     display: none;
   }
 }
 
-@media (min-width: 1024px) and (max-width: 1599px) {
+@media (--from-1024) and (--under-1600) {
   .panes.panes-for-event > .rail {
     display: none;
   }
@@ -756,13 +754,7 @@
   }
 }
 
-@media (max-width: 1279px) {
-  .panes > .rail {
-    width: var(--w-rail-narrow);
-  }
-}
-
-@media (max-width: 1023px) {
+@media (--under-1024) {
   .query-row {
     flex-wrap: wrap;
   }

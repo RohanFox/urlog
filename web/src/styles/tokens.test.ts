@@ -69,4 +69,37 @@ describe('the design tokens', () => {
       }
     }
   });
+
+  it('write sizes of text and of space in rem, each its name in pixels at the default font size of 16', () => {
+    const sized = [...light].filter(([name]) => /^--(fs|sp)-\d+$/.test(name));
+    expect(sized.length).toBe(20);
+    for (const [name, value] of sized) {
+      expect(value, name).toMatch(/^\d+(\.\d+)?rem$/);
+      expect(Number.parseFloat(value) * 16, name).toBe(Number(name.split('-').pop()));
+    }
+  });
+});
+
+describe('the breakpoints', () => {
+  const named = readFileSync(join(SRC, 'styles', 'breakpoints.css'), 'utf8');
+  const defined = new Map([...named.matchAll(/@custom-media (--[a-z0-9-]+) ([^;]+);/g)].map((m) => [m[1] ?? '', m[2] ?? '']));
+
+  it('are 1600, 1280, 1024 and 720, with the window height of the search page and the sign-in at 900', () => {
+    const widths = new Set([...defined.values()].flatMap((query) => [...query.matchAll(/(\d+)px/g)].map((m) => Number(m[1]))));
+    expect([...widths].sort((a, b) => a - b)).toEqual([600, 720, 900, 1023, 1024, 1279, 1599, 1600]);
+  });
+
+  it('are the only widths a media query reads, and a stylesheet that uses one imports them', () => {
+    for (const path of files(SRC, '.css').filter((p) => !p.endsWith('breakpoints.css'))) {
+      const text = readFileSync(path, 'utf8');
+      for (const m of text.matchAll(/@media ([^{]+)\{/g)) {
+        const query = m[1] ?? '';
+        expect(query, `${query} in ${path}`).not.toMatch(/width|height|\d+px/);
+        for (const name of query.matchAll(/\((--[a-z0-9-]+)\)/g)) {
+          expect(defined.has(name[1] ?? ''), `${name[1]} in ${path}`).toBe(true);
+          expect(text, path).toMatch(/@import '(\.\.\/styles\/|\.\/)breakpoints\.css';/);
+        }
+      }
+    }
+  });
 });

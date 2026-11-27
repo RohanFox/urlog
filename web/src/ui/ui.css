@@ -232,6 +232,18 @@
   background: var(--hover);
 }
 
+/* How a table shares the window's width: a column marked `fit` is as wide as its content and no wider, and the
+   columns with a share take the rest. Text marked `cut` is cut to its column and never widens the table. */
+.table .fit {
+  width: 0;
+  white-space: nowrap;
+}
+
+.table .cut {
+  width: 0;
+  min-width: 100%;
+}
+
 .skel {
   display: block;
   height: var(--skel);

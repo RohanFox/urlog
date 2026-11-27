@@ -1,5 +1,7 @@
 /* The frame of the signed-in pages. */
 
+@import '../styles/breakpoints.css';
+
 .app {
   min-height: 100vh;
   display: flex;
@@ -170,7 +172,7 @@
   padding: var(--sp-12) var(--sp-24) 0;
 }
 
-@media (max-width: 720px) {
+@media (--to-720) {
   .header {
     padding: 0 var(--sp-12);
   }

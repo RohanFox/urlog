@@ -1,12 +1,16 @@
 /* The overview of a case and its file list. */
 
+@import '../styles/breakpoints.css';
+
 .strip {
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
 }
 
-.strip-facts {
+/* The overview's values use the row's width and wrap only when it is full. Two classes, so the measure of
+   `.facts` in pages.css, which comes later in the bundle, does not win. */
+.facts.strip-facts {
   max-width: none;
 }
 
@@ -116,12 +120,22 @@
   width: var(--w-filter);
 }
 
-.file-name {
-  max-width: var(--w-file);
+/* The file's name and its flags share what the other columns leave; under 1280 the flags stand under the name. */
+.files-table .c-name {
+  width: 60%;
+}
+
+.files-table .c-flags {
+  width: 40%;
 }
 
 .file-name .ellipsis {
   display: block;
+}
+
+.file-name .file-flags {
+  display: none;
+  margin-top: var(--sp-4);
 }
 
 .file-state {
@@ -134,6 +148,21 @@
   display: block;
   font-size: var(--fs-12);
   overflow-wrap: anywhere;
+}
+
+/* The state's column is as wide as the state; a reason under it wraps, at a readable width. */
+.files-table .file-reason {
+  min-width: var(--w-filter);
+  white-space: normal;
+}
+
+/* The hosts of the case: the name takes what the other columns leave. */
+.host-cell {
+  width: 100%;
+}
+
+.host-cell .ellipsis {
+  display: block;
 }
 
 .file-flags {
@@ -149,6 +178,11 @@
   white-space: nowrap;
 }
 
+/* The SHA-256 whole from 1600, ten and four characters under it. */
+.hash-full {
+  display: none;
+}
+
 /* A file that wants a person to look carries a stripe at the start of its row. */
 .row-err td:first-child {
   border-left: var(--ring-w) solid var(--err);
@@ -158,7 +192,31 @@
   border-left: var(--ring-w) solid var(--warn);
 }
 
-@media (max-width: 720px) {
+@media (--from-1600) {
+  .hash-full {
+    display: inline;
+  }
+
+  .hash-short {
+    display: none;
+  }
+}
+
+@media (--under-1280) {
+  .files-table .c-name {
+    width: 100%;
+  }
+
+  .files-table .c-flags {
+    display: none;
+  }
+
+  .file-name .file-flags {
+    display: flex;
+  }
+}
+
+@media (--to-720) {
   .files-q {
     width: 100%;
   }

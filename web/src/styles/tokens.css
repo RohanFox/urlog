@@ -1,6 +1,9 @@
 /* The design tokens: the one file where a colour, a font, a size, a space or a radius is written.
    Every other stylesheet reads these names (the stylelint configuration refuses a literal elsewhere).
-   A theme is a second set of the colour values under the same names. */
+   A theme is a second set of the colour values under the same names. The widths at which a page changes
+   shape are named in breakpoints.css beside it. */
+
+@import './breakpoints.css';
 
 @font-face {
   font-family: 'IBM Plex Sans';
@@ -103,15 +106,16 @@
   --logo-hdr: 30px;
   --logo-full: 80px;
 
-  /* Type. */
-  --fs-10: 10px;
-  --fs-11: 11px;
-  --fs-12: 12px;
-  --fs-13: 13px;
-  --fs-14: 14px;
-  --fs-15: 15px;
-  --fs-16: 16px;
-  --fs-20: 20px;
+  /* Type. Sizes of text and of space are in rem, so the browser's font size scales them; at its default of
+     16 px each is the pixel value of its name. */
+  --fs-10: 0.625rem;
+  --fs-11: 0.6875rem;
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-15: 0.9375rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
@@ -121,37 +125,36 @@
   --track-wide: .5em;
 
   /* Space. */
-  --sp-2: 2px;
-  --sp-4: 4px;
-  --sp-6: 6px;
-  --sp-8: 8px;
-  --sp-10: 10px;
-  --sp-12: 12px;
-  --sp-16: 16px;
-  --sp-20: 20px;
-  --sp-24: 24px;
-  --sp-32: 32px;
-  --sp-40: 40px;
-  --sp-48: 48px;
+  --sp-2: 0.125rem;
+  --sp-4: 0.25rem;
+  --sp-6: 0.375rem;
+  --sp-8: 0.5rem;
+  --sp-10: 0.625rem;
+  --sp-12: 0.75rem;
+  --sp-16: 1rem;
+  --sp-20: 1.25rem;
+  --sp-24: 1.5rem;
+  --sp-32: 2rem;
+  --sp-40: 2.5rem;
+  --sp-48: 3rem;
 
-  /* Widths of the fixed parts of a page. */
-  --w-page: 1440px;
+  /* Widths of the parts of a page. */
   --w-form: 480px;
   --w-prose: 560px;
   --w-lead: 340px;
   --w-filter: 240px;
   --w-dialog: 560px;
-  --w-name: 520px;
   --w-menu: 220px;
   --w-meter: 80px;
-  --w-file: 320px;
   --w-tick: 110px;
-  --w-rail: 280px;
-  --w-rail-narrow: 224px;
   --w-strip: 44px;
-  --w-detail: 520px;
+  /* The search page's field list and event detail: a share of the window between a least and a greatest width. */
+  --w-rail-min: 224px;
+  --w-rail-share: 14.5vw;
+  --w-rail-max: 360px;
   --w-detail-min: 360px;
   --w-detail-share: 34vw;
+  --w-detail-max: 600px;
   --w-col: 160px;
   --w-col-narrow: 120px;
   --w-table: 560px;
@@ -211,7 +214,7 @@
 }
 
 /* Touch sizes on a narrow screen. */
-@media (max-width: 720px) {
+@media (--to-720) {
   :root {
     --ctl: 44px;
     --rowH: 44px;

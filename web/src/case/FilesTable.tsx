@@ -24,9 +24,10 @@ function Hash({ value, name }: { value: string; name: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="hash">
-      <span className="mono muted" title={value}>
+      <span className="mono muted hash-short" title={value}>
         {value.slice(0, 10)}…{value.slice(-4)}
       </span>
+      <span className="mono muted hash-full">{value}</span>
       <Button
         small
         kind="ghost"
@@ -87,6 +88,17 @@ function State({ file, running, failed, asText }: { file: FileResponse; running:
   );
 }
 
+/** A file's flags. They stand in their own column, and under the file's name where that column is left out. */
+function Flags({ flags }: { flags: FileResponse['flags'] }) {
+  return (
+    <span className="file-flags">
+      {flags.map((flag) => (
+        <Tag key={flag}>{flagName(flag)}</Tag>
+      ))}
+    </span>
+  );
+}
+
 /** The action that sends a file kept as "not a log" to the parser as text: one call, a person's decision. */
 export interface AsText {
   run: (file: FileResponse) => void;
@@ -109,29 +121,30 @@ interface Props {
 export function FilesTable({ files, running, failed, asText }: Props) {
   return (
     <div className="table-wrap">
-      <table className="table">
+      <table className="table files-table">
         <thead>
           <tr>
-            <th>File</th>
-            <th>Host</th>
-            <th>Format</th>
-            <th className="right">Size</th>
-            <th>SHA-256 at intake</th>
-            <th>State</th>
-            <th className="right">Rows</th>
-            <th className="right">Rejected</th>
-            <th>Flags</th>
+            <th className="c-name">File</th>
+            <th className="fit">Host</th>
+            <th className="fit">Format</th>
+            <th className="fit right">Size</th>
+            <th className="fit">SHA-256 at intake</th>
+            <th className="fit">State</th>
+            <th className="fit right">Rows</th>
+            <th className="fit right">Rejected</th>
+            <th className="c-flags">Flags</th>
           </tr>
         </thead>
         <tbody>
           {files.map((file) => (
             <tr key={file.id} className={TROUBLE.has(file.state) ? 'row-err' : file.flags.length > 0 ? 'row-warn' : undefined}>
-              <td className="file-name">
-                <span className="mono ellipsis" title={file.archive_path ?? file.original_name}>
+              <td className="file-name c-name">
+                <span className="mono ellipsis cut" title={file.archive_path ?? file.original_name}>
                   {file.archive_path ?? file.original_name}
                 </span>
+                <Flags flags={file.flags} />
               </td>
-              <td>
+              <td className="fit">
                 {file.host === null ? (
                   <span className="muted">none</span>
                 ) : (
@@ -140,27 +153,23 @@ export function FilesTable({ files, running, failed, asText }: Props) {
                   </>
                 )}
               </td>
-              <td>
+              <td className="fit">
                 {file.effective.source !== '' ? file.effective.source : <span className="muted">{file.detection.kind ?? 'not detected'}</span>}
                 {file.detection.layout === null ? '' : ` ${file.detection.layout}`}
                 {file.detection.confidence === null ? null : <span className="muted num"> {Math.round(file.detection.confidence * 100)}%</span>}
                 {file.override === null ? null : <> <Tag>override</Tag></>}
               </td>
-              <td className="right num">{bytes(file.size)}</td>
-              <td>
+              <td className="fit right num">{bytes(file.size)}</td>
+              <td className="fit">
                 <Hash value={file.sha256} name={file.original_name} />
               </td>
-              <td>
+              <td className="fit">
                 <State file={file} running={running.get(file.id)} failed={failed.get(file.id)} asText={asText} />
               </td>
-              <td className="right num">{number(file.rows)}</td>
-              <td className="right num">{number(file.rejects)}</td>
-              <td>
-                <span className="file-flags">
-                  {file.flags.map((flag) => (
-                    <Tag key={flag}>{flagName(flag)}</Tag>
-                  ))}
-                </span>
+              <td className="fit right num">{number(file.rows)}</td>
+              <td className="fit right num">{number(file.rejects)}</td>
+              <td className="c-flags">
+                <Flags flags={file.flags} />
               </td>
             </tr>
           ))}

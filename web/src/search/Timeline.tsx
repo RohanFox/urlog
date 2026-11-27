@@ -29,8 +29,11 @@ function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+/** A size token in pixels. Sizes of text and space are in rem, so they follow the browser's font size. */
 function pixels(name: string): number {
-  return Number.parseFloat(token(name)) || 0;
+  const value = token(name);
+  const n = Number.parseFloat(value) || 0;
+  return value.endsWith('rem') ? n * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) : n;
 }
 
 /** Counts up the series so that each is drawn over the taller one behind it: stacked bars from plain ones. */
@@ -98,7 +101,8 @@ export default function Timeline({ histogram, from, to, zone, collapsed, range, 
     }
     const ink = token('--muted');
     const grid = token('--line');
-    const font = `${token('--fs-11')} ${token('--data')}`;
+    // uPlot scales the size of an axis font for the screen's pixel ratio and reads it only as whole pixels.
+    const font = `${String(Math.round(pixels('--fs-11')))}px ${token('--data')}`;
     const axis = { stroke: ink, font, gap: pixels('--sp-2'), grid: { stroke: grid, width: 1 }, ticks: { stroke: grid, width: 1, size: pixels('--sp-4') } };
     // Without a count axis the first and last labels of the time axis would stand past the canvas.
     const side = pixels('--w-tick') / 2;
