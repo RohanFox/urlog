@@ -512,7 +512,17 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
         };
         await Assert.ThrowsAnyAsync<Exception>(ExportAsync);
         api.AfterStatement = null;
-        var row = JsonDocument.Parse((await QueryRowsAsync(api))[^1].DetailsJson).RootElement;
+
+        // The server writes the row after it has broken off the download, so the client can see the break first.
+        // Until then the newest row is the export before this one.
+        async Task<JsonElement> NewestAsync() => JsonDocument.Parse((await QueryRowsAsync(api))[^1].DetailsJson).RootElement;
+        var row = await NewestAsync();
+        for (var i = 0; i < 300 && row.GetProperty("outcome").GetString() == "ok"; i++)
+        {
+            await Task.Delay(10, Ct);
+            row = await NewestAsync();
+        }
+
         Assert.Equal("failed", row.GetProperty("outcome").GetString());
         Assert.False(row.GetProperty("complete").GetBoolean());
         Assert.Equal("the evidence of the result changed while it was exported: file 64 is no longer as it was counted", row.GetProperty("reason").GetString());
