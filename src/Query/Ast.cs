@@ -46,6 +46,29 @@ public sealed record TermNode(string Text, TextSpan Span) : SearchNode(Span);
 /// <summary>A quoted phrase: substring search on <c>message</c>.</summary>
 public sealed record PhraseNode(string Text, TextSpan Span) : SearchNode(Span);
 
+/// <summary>
+/// <c>word LIKE pattern</c>, also with <c>ILIKE</c> and <c>NOT LIKE</c>: the SQL habit, which the dialect does not
+/// have. The parser cannot tell a field from a word, so it keeps the three pieces as the terms they are without
+/// the rule: the transpiler refuses the form when <see cref="Left"/> names a field and searches the three terms
+/// when it does not.
+/// </summary>
+/// <param name="Left">The word before the keyword, a <see cref="TermNode"/>, under the <c>NOT</c>s written before it.</param>
+/// <param name="Keyword">The keyword as a <see cref="TermNode"/>, under a <see cref="NotNode"/> for <c>NOT LIKE</c>.</param>
+/// <param name="Pattern">A <see cref="TermNode"/> or a <see cref="PhraseNode"/>.</param>
+public sealed record LikeNode(SearchNode Left, SearchNode Keyword, SearchNode Pattern, TextSpan Span) : SearchNode(Span)
+{
+    public TermNode Word => (TermNode)Unwrap(Left);
+
+    public TermNode KeywordWord => (TermNode)Unwrap(Keyword);
+
+    /// <summary>True when the NOTs before the word and before the keyword leave a negation.</summary>
+    public bool Negated => (Depth(Left) + Depth(Keyword)) % 2 == 1;
+
+    private static SearchNode Unwrap(SearchNode node) => node is NotNode not ? Unwrap(not.Operand) : node;
+
+    private static int Depth(SearchNode node) => node is NotNode not ? 1 + Depth(not.Operand) : 0;
+}
+
 /// <summary>Pipeline commands (verbs) after the search.</summary>
 public abstract record CommandNode(TextSpan Span);
 
@@ -119,4 +142,8 @@ public sealed record Query(
     ImmutableArray<CommandNode> Commands,
     (string Value, TextSpan Span)? Index,
     (string Value, TextSpan Span)? Earliest,
-    (string Value, TextSpan Span)? Latest);
+    (string Value, TextSpan Span)? Latest)
+{
+    /// <summary>A rex group name the query does not use: what a refusal that suggests a rex calls its group.</summary>
+    public string FreeGroupName { get; init; } = "m";
+}

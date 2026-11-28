@@ -449,13 +449,16 @@ index=case-31 src_ip=10.0.0.5 EventID=4625 | stats count by user | sort -count |
 | Form | Semantics |
 | --- | --- |
 | `field=value` | case-folded exact match on string fields; numeric compare on typed fields |
-| `field=val*` | `LIKE 'val%'`, indexed |
-| `field=*val*` | `ILIKE`, flagged unindexed in the UI |
+| `field=val*` | `LIKE 'val%'`, indexed. A single `*` at the end of the value is the only pattern that is a prefix search |
+| `field=*val*`, `field=va?`, `field=a*b` | every other pattern (`*` is any text, `?` one character) is compared row by row, `ILIKE` on a string field, and flagged unindexed in the UI. The note says "a leading wildcard" when the value starts with one, and for the rest that only a single `*` at the end is a prefix search |
 | `!= < > <= >=`, `field IN (a, b)` | direct |
 | `src_ip=10.0.0.0/8` | `isIPAddressInRange` on native IP types |
 | bare term | token search on `message` through the `text` index, case-insensitive (ASCII lowering, as the index); `raw` is not searched for bare terms, because an OR with an unindexed column would defeat the index, and everything in `raw` but not in `message` is a typed column; a term of several tokens is each token through the index plus the exact text confirmed by `position` |
 | `"quoted phrase"` | exact substring |
 | `a b` / `OR` / `NOT` / `( )` | implicit AND, explicit OR and NOT, grouping |
+| `-field=value`, `-field IN (a, b)` | refused with the rewrite `NOT field=value` or `field!=value`. No field name starts with a minus, and the form is how other query languages write an exclusion, so reading it as a comparison would answer with no events. The limit this leaves: an extras key that begins with a minus cannot be compared (the raw-SQL tab reaches it). A minus in a value (`earliest=-7d`), in a bare word (`-enc`) and inside quotes is searched as text |
+| `field LIKE "pattern"`, also `ILIKE` and `NOT LIKE` | refused when the word before the keyword is a catalog name, an alias or a rex group of the query, with the rewrite `field=*text*` (`!=` for `NOT LIKE`), where `*` is any text and `?` one character. After any other word the three are search terms, since LIKE is a word that log text holds (`select LIKE "%admin%"`). The keyword is read in upper case only, as `OR` and `IN` are; `like` and `"LIKE"` are terms everywhere |
+| `field~"re"`, `field!~"re"`, `field=~"re"` | refused with the rewrite: `rex field=f "(?<m>re)"` and then `where m=*` (`where m!=*` for `!~`). A filter has no regex operator in v1. The group is given a name the query does not use, and after `stats` the message gives the form with the `rex` and the `where` before it, since a pattern is matched on events. The form is refused after any word when the quote touches the operator, and without quotes (`field~word`) when the part before the `~` is a catalog name, an alias or a rex group. `~` stays a word character, so `PROGRA~1`, `file.txt~`, `~/.ssh` and `user~ "x"` with a space are search terms |
 
 **Time.** Relative (`-24h`, `-7d@d`, `now`), absolute ISO 8601, and inline `earliest=` / `latest=` overriding the picker. `@` snapping is computed in the display timezone. Default range is the whole case span (per-file min/max in the metadata DB), never "last 24 h". Always queried in UTC.
 

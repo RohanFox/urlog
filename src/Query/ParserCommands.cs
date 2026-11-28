@@ -70,6 +70,7 @@ public sealed partial class Parser
 
     private bool _inWhere;
     private bool _afterAggregate;
+    private string _aggregateVerb = "stats";
 
     private CommandNode ParseCommand()
     {
@@ -94,6 +95,7 @@ public sealed partial class Parser
             {
                 var chart = ParseTimechart(verb);
                 _afterAggregate = true;
+                _aggregateVerb = "timechart";
                 return chart;
             }
 

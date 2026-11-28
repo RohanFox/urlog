@@ -1,0 +1,1059 @@
+[
+  {
+    "name": "minus-field-eq",
+    "spl": "-status=200",
+    "error": {
+      "offset": 0,
+      "length": 7,
+      "message": "'-status' is not a field name: to exclude write NOT status=200 or status!=200"
+    }
+  },
+  {
+    "name": "minus-field-ne",
+    "spl": "-status!=200",
+    "error": {
+      "offset": 0,
+      "length": 7,
+      "message": "'-status' is not a field name: to exclude write NOT status!=200"
+    }
+  },
+  {
+    "name": "minus-field-in",
+    "spl": "-status IN (1, 2)",
+    "error": {
+      "offset": 0,
+      "length": 7,
+      "message": "'-status' is not a field name: to exclude write NOT status IN (...)"
+    }
+  },
+  {
+    "name": "minus-field-under-not",
+    "spl": "NOT -status=200",
+    "error": {
+      "offset": 4,
+      "length": 7,
+      "message": "'-status' is not a field name: to exclude write NOT status=200 or status!=200"
+    }
+  },
+  {
+    "name": "minus-field-quoted-value",
+    "spl": "program=nginx -url.path=\"/a b\"",
+    "error": {
+      "offset": 14,
+      "length": 9,
+      "message": "'-url.path' is not a field name: to exclude write NOT url.path=\"/a b\" or url.path!=\"/a b\""
+    }
+  },
+  {
+    "name": "minus-field-where-after-stats",
+    "spl": "| stats count | where -count>5",
+    "error": {
+      "offset": 22,
+      "length": 6,
+      "message": "'-count' is not a field name: to exclude write NOT count>5"
+    }
+  },
+  {
+    "name": "minus-field-no-value",
+    "spl": "-status=",
+    "error": {
+      "offset": 0,
+      "length": 7,
+      "message": "'-status' is not a field name: to exclude write NOT status=..."
+    }
+  },
+  {
+    "name": "minus-alone-before-operator",
+    "spl": "-=5",
+    "error": {
+      "offset": 0,
+      "length": 1,
+      "message": "'-' is not a field name"
+    }
+  },
+  {
+    "name": "minus-in-number-value",
+    "spl": "status=-1",
+    "error": {
+      "offset": 7,
+      "length": 2,
+      "message": "http.response.status_code expects an unsigned integer, got '-1'"
+    }
+  },
+  {
+    "name": "minus-in-time-value",
+    "spl": "earliest=-7d",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-08 12:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-comparison-in-quotes",
+    "spl": "\"-status=200\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:status",
+        "p1": "String:200",
+        "p2": "String:-status=200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-sort-key",
+    "spl": "| stats count by host | sort -count",
+    "expect": {
+      "sql": "SELECT host AS `host.name`, count() AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND notEmpty(host) GROUP BY host ORDER BY `c0` DESC",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000"
+      },
+      "warnings": [],
+      "fields": [
+        "host.name"
+      ],
+      "aggregate": true,
+      "columns": [
+        "host.name",
+        "count"
+      ]
+    }
+  },
+  {
+    "name": "minus-bare-word",
+    "spl": "-enc",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:enc",
+        "p1": "String:-enc",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-bare-word-double",
+    "spl": "--insecure",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:insecure",
+        "p1": "String:--insecure",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-bare-word-quoted",
+    "spl": "\"-enc\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:enc",
+        "p1": "String:-enc",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-bare-word-under-not",
+    "spl": "NOT -enc",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:enc",
+        "p1": "String:-enc",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "minus-alone",
+    "spl": "-",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (position(lower(message), {p0:String}) > 0) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:-",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+1"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-after-field",
+    "spl": "url.path LIKE \"%x%\"",
+    "error": {
+      "offset": 9,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write url.path=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-ilike-after-field",
+    "spl": "url.path ILIKE x",
+    "error": {
+      "offset": 9,
+      "length": 5,
+      "message": "not supported in v1: ILIKE (write url.path=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-not-like-after-field",
+    "spl": "url.path NOT LIKE \"x\"",
+    "error": {
+      "offset": 9,
+      "length": 8,
+      "message": "not supported in v1: NOT LIKE (write url.path!=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-after-alias",
+    "spl": "program=nginx src LIKE \"x\"",
+    "error": {
+      "offset": 18,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write src=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-after-field-any-case",
+    "spl": "URL.Path LIKE \"x\"",
+    "error": {
+      "offset": 9,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write URL.Path=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-not-before-field",
+    "spl": "NOT url.path LIKE \"x\"",
+    "error": {
+      "offset": 13,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write url.path!=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-in-parentheses",
+    "spl": "status=200 OR (url.path LIKE \"x\")",
+    "error": {
+      "offset": 24,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write url.path=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-in-where",
+    "spl": "| where url.path LIKE \"x\"",
+    "error": {
+      "offset": 17,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write url.path=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-after-by-field-of-stats",
+    "spl": "| stats count by host | where host LIKE \"web%\"",
+    "error": {
+      "offset": 35,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write host=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-after-rex-group",
+    "spl": "| rex field=raw \"(?<m>x+)\" | where m LIKE \"x%\"",
+    "error": {
+      "offset": 37,
+      "length": 4,
+      "message": "not supported in v1: LIKE (write m=*text*: * is any text, ? one character)"
+    }
+  },
+  {
+    "name": "like-after-unknown-word",
+    "spl": "nosuch LIKE \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:nosuch",
+        "p1": "String:like",
+        "p2": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-sql-injection-hunt",
+    "spl": "select LIKE \"%admin%\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND (hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:select",
+        "p1": "String:like",
+        "p2": "String:admin",
+        "p3": "String:%admin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-not-like-after-unknown-word",
+    "spl": "nosuch NOT LIKE \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND NOT (hasToken(lower(message), {p1:String})) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:nosuch",
+        "p1": "String:like",
+        "p2": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-among-other-terms",
+    "spl": "GET nosuch LIKE x 200",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND hasToken(lower(message), {p3:String}) AND hasToken(lower(message), {p4:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:get",
+        "p1": "String:nosuch",
+        "p2": "String:like",
+        "p3": "String:x",
+        "p4": "String:200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-lower-case-alone",
+    "spl": "like",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:like",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-upper-case-alone",
+    "spl": "LIKE",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:like",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-quoted",
+    "spl": "\"LIKE\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:like",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-lower-case-after-field",
+    "spl": "url.path like \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0) AND hasToken(lower(message), {p3:String}) AND hasToken(lower(message), {p4:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path",
+        "p3": "String:like",
+        "p4": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-quoted-after-field",
+    "spl": "url.path \"LIKE\" \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0) AND hasToken(lower(message), {p3:String}) AND hasToken(lower(message), {p4:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path",
+        "p3": "String:like",
+        "p4": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-quoted-after-word",
+    "spl": "select \"LIKE\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:select",
+        "p1": "String:like",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-first-word",
+    "spl": "LIKE \"%x%\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND (hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:like",
+        "p1": "String:x",
+        "p2": "String:%x%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-last-word",
+    "spl": "url.path LIKE",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0) AND hasToken(lower(message), {p3:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path",
+        "p3": "String:like",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "like-with-and-written",
+    "spl": "url.path AND LIKE AND \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0) AND hasToken(lower(message), {p3:String}) AND hasToken(lower(message), {p4:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path",
+        "p3": "String:like",
+        "p4": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "regex-match",
+    "spl": "url.path~\"item/6[0-9]$\"",
+    "error": {
+      "offset": 0,
+      "length": 23,
+      "message": "not supported in v1: url.path~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m=*; to search for the text url.path~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-no-match",
+    "spl": "url.path!~\"x\"",
+    "error": {
+      "offset": 0,
+      "length": 13,
+      "message": "not supported in v1: url.path!~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m!=*; to search for the text url.path!~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-eq-tilde",
+    "spl": "url.path=~\"item/6\"",
+    "error": {
+      "offset": 0,
+      "length": 18,
+      "message": "not supported in v1: url.path=~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m=*)"
+    }
+  },
+  {
+    "name": "regex-ne-tilde",
+    "spl": "url.path!=~\"x\"",
+    "error": {
+      "offset": 0,
+      "length": 14,
+      "message": "not supported in v1: url.path!=~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m!=*)"
+    }
+  },
+  {
+    "name": "regex-after-unknown-word",
+    "spl": "nosuch~\"x\"",
+    "error": {
+      "offset": 0,
+      "length": 10,
+      "message": "not supported in v1: nosuch~\"...\" (use | rex field=nosuch \"(?<m>...)\" | where m=*; to search for the text nosuch~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-among-other-terms",
+    "spl": "program=nginx backup~\"x\" 200",
+    "error": {
+      "offset": 14,
+      "length": 10,
+      "message": "not supported in v1: backup~\"...\" (use | rex field=backup \"(?<m>...)\" | where m=*; to search for the text backup~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-unquoted-after-field",
+    "spl": "url.path~item",
+    "error": {
+      "offset": 0,
+      "length": 13,
+      "message": "not supported in v1: url.path~... (use | rex field=url.path \"(?<m>...)\" | where m=*; to search for the text write \"url.path~item\")"
+    }
+  },
+  {
+    "name": "regex-unquoted-no-match-after-alias",
+    "spl": "status=200 src!~10.0",
+    "error": {
+      "offset": 11,
+      "length": 9,
+      "message": "not supported in v1: src!~... (use | rex field=src \"(?<m>...)\" | where m!=*; to search for the text write \"src!~10.0\")"
+    }
+  },
+  {
+    "name": "regex-in-parentheses",
+    "spl": "(url.path~\"x\")",
+    "error": {
+      "offset": 1,
+      "length": 12,
+      "message": "not supported in v1: url.path~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m=*; to search for the text url.path~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-under-not",
+    "spl": "NOT url.path~\"x\"",
+    "error": {
+      "offset": 4,
+      "length": 12,
+      "message": "not supported in v1: url.path~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m=*; to search for the text url.path~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-in-where",
+    "spl": "| where url.path~\"x\"",
+    "error": {
+      "offset": 8,
+      "length": 12,
+      "message": "not supported in v1: url.path~\"...\" (use | rex field=url.path \"(?<m>...)\" | where m=*; to search for the text url.path~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-in-where-after-stats",
+    "spl": "| stats count by host | where host~web",
+    "error": {
+      "offset": 30,
+      "length": 8,
+      "message": "not supported in v1: host~... (a pattern is matched before stats: | rex field=host \"(?<m>...)\" | where m=* | stats ...)"
+    }
+  },
+  {
+    "name": "regex-after-rex-group",
+    "spl": "| rex field=raw \"(?<m>x+)\" | where m~\"x\"",
+    "error": {
+      "offset": 35,
+      "length": 5,
+      "message": "not supported in v1: m~\"...\" (use | rex field=m \"(?<m2>...)\" | where m2=*; to search for the text m~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-unquoted-after-rex-group",
+    "spl": "| rex field=raw \"(?<m>x+)\" | where m~x",
+    "error": {
+      "offset": 35,
+      "length": 3,
+      "message": "not supported in v1: m~... (use | rex field=m \"(?<m2>...)\" | where m2=*; to search for the text write \"m~x\")"
+    }
+  },
+  {
+    "name": "tilde-short-file-name",
+    "spl": "PROGRA~1",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:progra",
+        "p1": "String:1",
+        "p2": "String:progra~1",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-backup-file",
+    "spl": "file.txt~",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:file",
+        "p1": "String:txt",
+        "p2": "String:file.txt~",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-home-path",
+    "spl": "~/.ssh/authorized_keys",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:ssh",
+        "p1": "String:authorized",
+        "p2": "String:keys",
+        "p3": "String:~/.ssh/authorized_keys",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-field-then-space",
+    "spl": "user~ \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:user",
+        "p1": "String:user~",
+        "p2": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-with-spaces",
+    "spl": "url.path ~ \"item/6\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0) AND position(lower(message), {p3:String}) > 0 AND (hasToken(lower(message), {p4:String}) AND hasToken(lower(message), {p5:String}) AND position(lower(message), {p6:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path",
+        "p3": "String:~",
+        "p4": "String:item",
+        "p5": "String:6",
+        "p6": "String:item/6",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@9+1"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-eq-then-space",
+    "spl": "url.path=~ \"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((url_path = {p0:String} AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:~",
+        "p1": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-in-quotes",
+    "spl": "\"url.path~x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:x",
+        "p3": "String:url.path~x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-alone-before-quote",
+    "spl": "~\"x\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((position(lower(message), {p0:String}) > 0 AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:~",
+        "p1": "String:x",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+1"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-unquoted-after-unknown-word",
+    "spl": "nosuch~item",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:nosuch",
+        "p1": "String:item",
+        "p2": "String:nosuch~item",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "tilde-field-at-end-of-word",
+    "spl": "url.path~",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:url",
+        "p1": "String:path",
+        "p2": "String:url.path~",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "wildcard-one-character-at-end",
+    "spl": "url.path=/shop/item/6?",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/shop/item/6_",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+22"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "wildcard-one-character-at-start",
+    "spl": "url.path=?shop",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:_shop",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+14"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "wildcard-star-inside",
+    "spl": "url.path=/shop/*/64",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path ILIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/shop/%/64",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "unindexed@0+19"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "wildcard-star-at-end-only",
+    "spl": "url.path=/shop/*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path LIKE {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:/shop/%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "regex-quoted-in-where-after-stats",
+    "spl": "| stats count by host | where host~\"web\"",
+    "error": {
+      "offset": 30,
+      "length": 10,
+      "message": "not supported in v1: host~\"...\" (a pattern is matched before stats: | rex field=host \"(?<m>...)\" | where m=* | stats ...)"
+    }
+  },
+  {
+    "name": "regex-no-match-in-where-after-stats",
+    "spl": "| stats count by host | where host!~\"web\"",
+    "error": {
+      "offset": 30,
+      "length": 11,
+      "message": "not supported in v1: host!~\"...\" (a pattern is matched before stats: | rex field=host \"(?<m>...)\" | where m!=* | stats ...)"
+    }
+  },
+  {
+    "name": "regex-eq-tilde-in-where-after-stats",
+    "spl": "| stats count by host | where host=~\"web\"",
+    "error": {
+      "offset": 30,
+      "length": 11,
+      "message": "not supported in v1: host=~\"...\" (a pattern is matched before stats: | rex field=host \"(?<m>...)\" | where m=* | stats ...)"
+    }
+  },
+  {
+    "name": "regex-in-where-after-timechart",
+    "spl": "| timechart span=1h count | where count~\"5\"",
+    "error": {
+      "offset": 34,
+      "length": 9,
+      "message": "not supported in v1: count~\"...\" (a pattern is matched before timechart: | rex field=count \"(?<m>...)\" | where m=* | timechart ...)"
+    }
+  },
+  {
+    "name": "regex-in-where-before-stats",
+    "spl": "| where host~\"web\" | stats count by host",
+    "error": {
+      "offset": 8,
+      "length": 10,
+      "message": "not supported in v1: host~\"...\" (use | rex field=host \"(?<m>...)\" | where m=*; to search for the text host~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-group-name-taken-by-later-rex",
+    "spl": "url.path~\"x\" | rex field=raw \"(?<m>a)(?P<M2>b)\"",
+    "error": {
+      "offset": 0,
+      "length": 12,
+      "message": "not supported in v1: url.path~\"...\" (use | rex field=url.path \"(?<m3>...)\" | where m3=*; to search for the text url.path~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-group-name-read-as-field",
+    "spl": "m=1 url.path!~\"x\"",
+    "error": {
+      "offset": 4,
+      "length": 13,
+      "message": "not supported in v1: url.path!~\"...\" (use | rex field=url.path \"(?<m2>...)\" | where m2!=*; to search for the text url.path!~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-group-name-is-the-field",
+    "spl": "m~\"x\"",
+    "error": {
+      "offset": 0,
+      "length": 5,
+      "message": "not supported in v1: m~\"...\" (use | rex field=m \"(?<m2>...)\" | where m2=*; to search for the text m~ put a space after it)"
+    }
+  },
+  {
+    "name": "regex-group-name-is-the-field-eq-tilde",
+    "spl": "m2=5 m=~\"x\"",
+    "error": {
+      "offset": 5,
+      "length": 6,
+      "message": "not supported in v1: m=~\"...\" (use | rex field=m \"(?<m3>...)\" | where m3=*)"
+    }
+  }
+]

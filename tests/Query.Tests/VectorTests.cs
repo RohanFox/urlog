@@ -105,9 +105,9 @@ public sealed class VectorTests
         Assert.True(all.Count >= 400, $"{all.Count} vectors");
         Assert.True(all.Count(v => v.Error is not null) >= 200, "error vectors");
 
-        // The five verbs after the first slice, their order rules and the unsupported verbs: each file holds
-        // accepted forms and refusals.
-        foreach (var (file, least, leastErrors) in new[] { ("where.json", 25, 10), ("stats.json", 30, 15), ("table.json", 15, 6), ("rex.json", 60, 40), ("timechart.json", 35, 15), ("chaining.json", 20, 12) })
+        // The five verbs after the first slice, their order rules, the unsupported verbs and the filter forms
+        // borrowed from other query languages: each file holds accepted forms and refusals.
+        foreach (var (file, least, leastErrors) in new[] { ("where.json", 25, 10), ("stats.json", 30, 15), ("table.json", 15, 6), ("rex.json", 60, 40), ("timechart.json", 35, 15), ("chaining.json", 20, 12), ("misread.json", 77, 42) })
         {
             Assert.True(files[file].Count >= least, $"{file}: {files[file].Count} vectors");
             Assert.True(files[file].Count(v => v.Error is not null) >= leastErrors, $"{file}: error vectors");

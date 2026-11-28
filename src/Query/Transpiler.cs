@@ -139,6 +139,7 @@ public sealed class Transpiler
     private int _generated;
     private int _rexCount;
     private TranspileOptions? _current;
+    private string _freeGroup = "m";
 
     public Transpiler(FieldCatalog catalog)
     {
@@ -164,6 +165,7 @@ public sealed class Transpiler
         _generated = 0;
         _rexCount = 0;
         _current = options;
+        _freeGroup = query.FreeGroupName;
 
         var caseId = options.CaseId;
         if (query.Index is { } index)
@@ -936,7 +938,13 @@ public sealed class Transpiler
         switch (node)
         {
             case AndNode and:
-                return and.Terms.Length == 1 ? Expression(and.Terms[0]) : "(" + string.Join(" AND ", and.Terms.Select(Expression)) + ")";
+            {
+                var terms = and.Terms.SelectMany(Pieces).ToList();
+                return terms.Count == 1 ? Expression(terms[0]) : "(" + string.Join(" AND ", terms.Select(Expression)) + ")";
+            }
+
+            case LikeNode like:
+                return "(" + string.Join(" AND ", Pieces(like).Select(Expression)) + ")";
             case OrNode or:
                 return "(" + string.Join(" OR ", or.Terms.Select(Expression)) + ")";
             case NotNode not:
@@ -952,6 +960,28 @@ public sealed class Transpiler
             default:
                 throw new InvalidOperationException(node.GetType().Name);
         }
+    }
+
+    /// <summary>
+    /// A term as the conjunction holds it. <c>word LIKE pattern</c> is the three terms it always was, in the same
+    /// conjunction, unless the word names a field: then the analyst meant a comparison, and searching the message
+    /// for the word LIKE would answer with nothing.
+    /// </summary>
+    private IEnumerable<SearchNode> Pieces(SearchNode node)
+    {
+        if (node is not LikeNode like)
+        {
+            return [node];
+        }
+
+        var name = like.Word.Text;
+        if (_rex.ContainsKey(name) || _catalog.Contains(name))
+        {
+            var keyword = (like.Keyword is NotNode ? "NOT " : string.Empty) + like.KeywordWord.Text;
+            throw new QueryException(like.Keyword.Span, $"not supported in v1: {keyword} (write {name}{(like.Negated ? "!=" : "=")}*text*: * is any text, ? one character)");
+        }
+
+        return [like.Left, like.Keyword, like.Pattern];
     }
 
     private string Compare(CompareNode c)
@@ -1062,7 +1092,10 @@ public sealed class Transpiler
                 var like = field.Type is FieldType.Verbatim or FieldType.Text or FieldType.Extra && !prefixOnly ? "ILIKE" : "LIKE";
                 if (!prefixOnly && field.Type is FieldType.Keyword or FieldType.Verbatim && !field.IsRex && _outputs is null)
                 {
-                    Warn("unindexed", c.Span, $"a leading wildcard on {field.Name} scans every row");
+                    // Both forms scan; the text says which the analyst wrote, since "leading" under url.path=/a? reads as a mistake.
+                    Warn("unindexed", c.Span, text[0] is '*' or '?'
+                        ? $"a leading wildcard on {field.Name} scans every row"
+                        : $"{field.Name}: only a single * at the end is a prefix search; this pattern is compared row by row");
                 }
 
                 var test = $"{column} {like} {{{Add("String", pattern)}:String}}";
@@ -1167,6 +1200,11 @@ public sealed class Transpiler
     /// <summary>A bare term or a quoted phrase against <c>message</c>: tokens through the text index, the exact text confirmed by <c>position</c> when the term is more than one token.</summary>
     private string Term(string text, TextSpan span, bool isPhrase)
     {
+        if (!isPhrase)
+        {
+            RefuseRegexOperator(text, span);
+        }
+
         if (_outputs is not null)
         {
             throw new QueryException(span, "after stats, where compares the columns of the result (count>10, host=web-01): a search term has no event to search, so put it before stats");
@@ -1194,6 +1232,27 @@ public sealed class Transpiler
         var parts = tokens.Distinct(StringComparer.Ordinal).Select(t => $"hasToken(lower(message), {{{Add("String", t)}:String}})").ToList();
         parts.Add($"position(lower(message), {{{Add("String", lower)}:String}}) > 0");
         return "(" + string.Join(" AND ", parts) + ")";
+    }
+
+    /// <summary>
+    /// <c>field~word</c> and <c>field!~word</c> without quotes are one word to the parser. When the part before the
+    /// <c>~</c> names a field the analyst meant a regex match, and the word would be searched in the message and
+    /// find nothing. Any other word with a <c>~</c> (<c>PROGRA~1</c>, <c>file.txt~</c>) is a search term.
+    /// </summary>
+    private void RefuseRegexOperator(string word, TextSpan span)
+    {
+        var tilde = word.IndexOf('~', StringComparison.Ordinal);
+        if (tilde <= 0 || tilde == word.Length - 1)
+        {
+            return;
+        }
+
+        var negated = word[tilde - 1] == '!';
+        var name = word[..(negated ? tilde - 1 : tilde)];
+        if (name.Length > 0 && (_rex.ContainsKey(name) || _catalog.Contains(name)))
+        {
+            throw new QueryException(span, Parser.RegexOperatorMessage(name, negated ? "!~" : "~", "...", negated, _freeGroup, _outputs is null ? null : "stats", $"; to search for the text write \"{word}\""));
+        }
     }
 
     /// <summary>ASCII-only lowercasing: what <c>lower()</c> does in ClickHouse (the index is on <c>lower(message)</c>) and what the writer does to LowCardinality columns at ingest.</summary>
