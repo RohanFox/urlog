@@ -190,9 +190,25 @@ public static class SearchEndpoints
                     {
                         json.WriteStartObject();
                         json.WriteString("code", warning.Code);
+                        json.WriteString("level", warning.Level);
                         json.WriteNumber("offset", warning.Span.Offset);
                         json.WriteNumber("length", warning.Span.Length);
                         json.WriteString("message", warning.Message);
+                        json.WriteEndObject();
+                    }
+
+                    json.WriteEndArray();
+
+                    // How each bare word and phrase was read, so the page can say it with rows or without.
+                    json.WriteStartArray("terms");
+                    foreach (var term in plan.Query.Terms)
+                    {
+                        json.WriteStartObject();
+                        json.WriteString("text", term.Text);
+                        json.WriteString("kind", term.Kind);
+                        json.WriteBoolean("negated", term.Negated);
+                        json.WriteNumber("offset", term.Span.Offset);
+                        json.WriteNumber("length", term.Span.Length);
                         json.WriteEndObject();
                     }
 

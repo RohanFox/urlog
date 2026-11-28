@@ -111,6 +111,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@0+13"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -149,7 +152,12 @@
         "p1": "String:-enc",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:minus_term@0+4"
+      ],
+      "terms": [
+        "word@0+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -167,7 +175,12 @@
         "p1": "String:--insecure",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:minus_term@0+10"
+      ],
+      "terms": [
+        "word@0+10"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -186,6 +199,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@0+6"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -203,7 +219,12 @@
         "p1": "String:-enc",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:minus_term@4+4"
+      ],
+      "terms": [
+        "not word@4+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -221,7 +242,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+1"
+        "cost:unindexed@0+1"
+      ],
+      "terms": [
+        "text@0+1"
       ],
       "fields": [],
       "aggregate": false
@@ -331,7 +355,14 @@
         "p2": "String:x",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:like_term@7+4"
+      ],
+      "terms": [
+        "word@0+6",
+        "word@7+4",
+        "phrase@12+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -351,7 +382,14 @@
         "p3": "String:%admin%",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:like_term@7+4"
+      ],
+      "terms": [
+        "word@0+6",
+        "word@7+4",
+        "phrase@12+9"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -370,7 +408,14 @@
         "p2": "String:x",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:like_term@11+4"
+      ],
+      "terms": [
+        "word@0+6",
+        "not word@11+4",
+        "phrase@16+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -391,7 +436,16 @@
         "p4": "String:200",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:like_term@11+4"
+      ],
+      "terms": [
+        "word@0+3",
+        "word@4+6",
+        "word@11+4",
+        "word@16+1",
+        "word@18+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -409,6 +463,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -426,6 +483,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -443,6 +503,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@0+6"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -464,6 +527,11 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8",
+        "word@9+4",
+        "phrase@14+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -485,6 +553,11 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8",
+        "phrase@9+6",
+        "phrase@16+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -503,6 +576,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+6",
+        "phrase@7+6"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -522,6 +599,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+4",
+        "phrase@5+5"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -542,6 +623,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8",
+        "word@9+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -563,6 +648,11 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8",
+        "word@13+4",
+        "phrase@22+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -708,6 +798,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -727,6 +820,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+9"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -747,6 +843,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+22"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -766,6 +865,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+5",
+        "phrase@6+3"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -789,7 +892,12 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@9+1"
+        "cost:unindexed@9+1"
+      ],
+      "terms": [
+        "word@0+8",
+        "text@9+1",
+        "phrase@11+8"
       ],
       "fields": [],
       "aggregate": false
@@ -809,6 +917,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@11+3"
+      ],
       "fields": [
         "url.path"
       ],
@@ -831,6 +942,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@0+12"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -849,7 +963,11 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+1"
+        "cost:unindexed@0+1"
+      ],
+      "terms": [
+        "text@0+1",
+        "phrase@1+3"
       ],
       "fields": [],
       "aggregate": false
@@ -870,6 +988,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+11"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -889,6 +1010,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+9"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -906,7 +1030,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+22"
+        "cost:unindexed@0+22"
       ],
       "fields": [
         "url.path"
@@ -927,7 +1051,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+14"
+        "cost:unindexed@0+14"
       ],
       "fields": [
         "url.path"
@@ -948,7 +1072,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+19"
+        "cost:unindexed@0+19"
       ],
       "fields": [
         "url.path"
@@ -1054,6 +1178,961 @@
       "offset": 5,
       "length": 6,
       "message": "not supported in v1: m=~\"...\" (use | rex field=m \"(?<m3>...)\" | where m3=*)"
+    }
+  },
+  {
+    "name": "colon-field-value",
+    "spl": "status:200",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:status",
+        "p1": "String:200",
+        "p2": "String:status:200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:colon_term@0+10"
+      ],
+      "terms": [
+        "word@0+10"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-alias-value",
+    "spl": "program=nginx src:10.0.0.5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((program = {p0:String} AND (hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND hasToken(lower(message), {p3:String}) AND hasToken(lower(message), {p4:String}) AND position(lower(message), {p5:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:nginx",
+        "p1": "String:src",
+        "p2": "String:10",
+        "p3": "String:0",
+        "p4": "String:5",
+        "p5": "String:src:10.0.0.5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:colon_term@14+12"
+      ],
+      "terms": [
+        "word@14+12"
+      ],
+      "fields": [
+        "program"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-field-under-not",
+    "spl": "NOT status:404",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:status",
+        "p1": "String:404",
+        "p2": "String:status:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:colon_term@4+10"
+      ],
+      "terms": [
+        "not word@4+10"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-host-port-no-field",
+    "spl": "localhost:8080",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:localhost",
+        "p1": "String:8080",
+        "p2": "String:localhost:8080",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+14"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-address-port",
+    "spl": "10.0.0.5:443",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND hasToken(lower(message), {p3:String}) AND position(lower(message), {p4:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:10",
+        "p1": "String:0",
+        "p2": "String:5",
+        "p3": "String:443",
+        "p4": "String:10.0.0.5:443",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+12"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-url",
+    "spl": "http://example.test/a",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND hasToken(lower(message), {p3:String}) AND position(lower(message), {p4:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:http",
+        "p1": "String:example",
+        "p2": "String:test",
+        "p3": "String:a",
+        "p4": "String:http://example.test/a",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+21"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-in-quotes",
+    "spl": "\"status:200\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:status",
+        "p1": "String:200",
+        "p2": "String:status:200",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "phrase@0+12"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-field-no-value",
+    "spl": "status:",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:status",
+        "p1": "String:status:",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+7"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "colon-rex-group",
+    "spl": "| rex field=raw \"(?<m>x+)\" | where m:5",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message, extractGroups(raw, {p0:String})[1] AS `c0` FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:(?<m>x+)",
+        "p1": "String:m",
+        "p2": "String:5",
+        "p3": "String:m:5",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:colon_term@35+3"
+      ],
+      "terms": [
+        "word@35+3"
+      ],
+      "fields": [
+        "raw"
+      ],
+      "aggregate": false,
+      "columns": [
+        "ts",
+        "host",
+        "program",
+        "severity",
+        "source_ip",
+        "message",
+        "m"
+      ]
+    }
+  },
+  {
+    "name": "lowercase-or-between",
+    "spl": "curl or wget",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:or",
+        "p2": "String:wget",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:lowercase_operator@5+2"
+      ],
+      "terms": [
+        "word@0+4",
+        "word@5+2",
+        "word@8+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-and-between",
+    "spl": "curl and wget",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:and",
+        "p2": "String:wget",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:lowercase_operator@5+3"
+      ],
+      "terms": [
+        "word@0+4",
+        "word@5+3",
+        "word@9+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-not-before",
+    "spl": "not curl",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:not",
+        "p1": "String:curl",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:lowercase_operator@0+3"
+      ],
+      "terms": [
+        "word@0+3",
+        "word@4+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-comparisons",
+    "spl": "status=200 or status=404",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_status = {p0:UInt64} AND hasToken(lower(message), {p1:String}) AND http_status = {p2:UInt64})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:200",
+        "p1": "String:or",
+        "p2": "UInt64:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:lowercase_operator@11+2"
+      ],
+      "terms": [
+        "word@11+2"
+      ],
+      "fields": [
+        "http.response.status_code"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-quoted",
+    "spl": "curl \"or\" wget",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:or",
+        "p2": "String:wget",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+4",
+        "phrase@5+4",
+        "word@10+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-alone",
+    "spl": "or",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:or",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+2"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-last",
+    "spl": "curl or",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:or",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+4",
+        "word@5+2"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-or-first",
+    "spl": "or curl",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:or",
+        "p1": "String:curl",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+2",
+        "word@3+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-not-last",
+    "spl": "curl not",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:not",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+4",
+        "word@5+3"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "lowercase-mixed-case-or",
+    "spl": "curl Or wget",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:or",
+        "p2": "String:wget",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:lowercase_operator@5+2"
+      ],
+      "terms": [
+        "word@0+4",
+        "word@5+2",
+        "word@8+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "uppercase-or-between",
+    "spl": "curl OR wget",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) OR hasToken(lower(message), {p1:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:wget",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+4",
+        "word@8+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-term",
+    "spl": "%word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:word",
+        "p1": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:percent_term@0+6"
+      ],
+      "terms": [
+        "word@0+6"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-value-eq",
+    "spl": "url.path=%word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:percent_term@9+6"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-value-ne",
+    "spl": "url.path!=%word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path != {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:percent_term@10+6"
+      ],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-term-under-not",
+    "spl": "NOT %word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:word",
+        "p1": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:percent_term@4+6"
+      ],
+      "terms": [
+        "not word@4+6"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-term-digits",
+    "spl": "%20%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:20",
+        "p1": "String:%20%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:percent_term@0+4"
+      ],
+      "terms": [
+        "word@0+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-term-quoted",
+    "spl": "\"%word%\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:word",
+        "p1": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "phrase@0+8"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-value-quoted",
+    "spl": "url.path=\"%word%\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (url_path = {p0:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "fields": [
+        "url.path"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-encoded-quote",
+    "spl": "%27",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:27",
+        "p1": "String:%27",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+3"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-encoded-tag",
+    "spl": "%3Cscript%3E",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:3cscript",
+        "p1": "String:3e",
+        "p2": "String:%3cscript%3e",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+12"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-leading-only",
+    "spl": "%word",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:word",
+        "p1": "String:%word",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+5"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-trailing-only",
+    "spl": "word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND position(lower(message), {p1:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:word",
+        "p1": "String:word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+5"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-inside",
+    "spl": "%a%b%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0)) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:a",
+        "p1": "String:b",
+        "p2": "String:%a%b%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@0+5"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-alone",
+    "spl": "%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (position(lower(message), {p0:String}) > 0) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "cost:unindexed@0+1"
+      ],
+      "terms": [
+        "text@0+1"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-two",
+    "spl": "%%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (position(lower(message), {p0:String}) > 0) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:%%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "cost:unindexed@0+2"
+      ],
+      "terms": [
+        "text@0+2"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-after-like-word",
+    "spl": "select LIKE %admin%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND (hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:select",
+        "p1": "String:like",
+        "p2": "String:admin",
+        "p3": "String:%admin%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:like_term@7+4",
+        "meaning:percent_term@12+7"
+      ],
+      "terms": [
+        "word@0+6",
+        "word@7+4",
+        "word@12+7"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "percent-value-extras",
+    "spl": "nosuch=%word%",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (extras[{p0:String}] = {p1:String}) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:nosuch",
+        "p1": "String:%word%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:unknown_field@0+6",
+        "meaning:percent_term@7+6",
+        "cost:unindexed@0+13"
+      ],
+      "fields": [
+        "nosuch"
+      ],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-under-not",
+    "spl": "NOT curl",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT (hasToken(lower(message), {p0:String}))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "not word@4+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "phrase-under-not",
+    "spl": "NOT \"item/64\"",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT ((hasToken(lower(message), {p0:String}) AND hasToken(lower(message), {p1:String}) AND position(lower(message), {p2:String}) > 0))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:item",
+        "p1": "String:64",
+        "p2": "String:item/64",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "not phrase@4+9"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "term-under-two-nots",
+    "spl": "NOT NOT curl",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (NOT (NOT (hasToken(lower(message), {p0:String})))) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "limit": "UInt64:100"
+      },
+      "warnings": [],
+      "terms": [
+        "word@8+4"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "terms-in-where",
+    "spl": "curl | where NOT \"item/64\" wget*",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND (hasToken(lower(message), {p0:String})) AND ((NOT ((hasToken(lower(message), {p1:String}) AND hasToken(lower(message), {p2:String}) AND position(lower(message), {p3:String}) > 0)) AND lower(message) LIKE {p4:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "String:curl",
+        "p1": "String:item",
+        "p2": "String:64",
+        "p3": "String:item/64",
+        "p4": "String:wget%",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "cost:unindexed@27+5"
+      ],
+      "terms": [
+        "word@0+4",
+        "not phrase@17+9",
+        "wildcard@27+5"
+      ],
+      "fields": [],
+      "aggregate": false
+    }
+  },
+  {
+    "name": "unknown-field-under-or",
+    "spl": "status=200 OR statsu=404",
+    "expect": {
+      "sql": "SELECT ts, host, program, severity, source_ip, message FROM events_v WHERE case_id = {case:UInt64} AND ts >= {from:DateTime64(3)} AND ts < {to:DateTime64(3)} AND ((http_status = {p0:UInt64} OR extras[{p1:String}] = {p2:String})) ORDER BY ts DESC LIMIT {limit:UInt64}",
+      "params": {
+        "case": "UInt64:1",
+        "from": "DateTime64(3):2026-03-01 00:00:00.000",
+        "to": "DateTime64(3):2026-04-01 00:00:00.000",
+        "p0": "UInt64:200",
+        "p1": "String:statsu",
+        "p2": "String:404",
+        "limit": "UInt64:100"
+      },
+      "warnings": [
+        "meaning:unknown_field@14+6",
+        "cost:unindexed@14+10"
+      ],
+      "fields": [
+        "http.response.status_code",
+        "statsu"
+      ],
+      "aggregate": false
     }
   }
 ]

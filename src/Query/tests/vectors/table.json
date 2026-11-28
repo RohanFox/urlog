@@ -39,7 +39,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@13+7"
+        "meaning:unknown_field@13+7"
       ],
       "fields": [
         "host.name",

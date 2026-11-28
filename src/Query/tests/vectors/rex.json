@@ -67,7 +67,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@48+7"
+        "cost:unindexed@48+7"
       ],
       "fields": [
         "message"
@@ -183,7 +183,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@12+7"
+        "meaning:unknown_field@12+7"
       ],
       "fields": [
         "payload"
@@ -291,8 +291,8 @@
         "p0": "String:took (?<ms>\\d+)ms"
       },
       "warnings": [
-        "unindexed@52+2",
-        "unindexed@69+2"
+        "cost:unindexed@52+2",
+        "cost:unindexed@69+2"
       ],
       "fields": [
         "message",
@@ -348,7 +348,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@47+8"
+        "cost:unindexed@47+8"
       ],
       "fields": [
         "url.path"

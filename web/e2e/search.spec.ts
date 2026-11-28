@@ -523,6 +523,59 @@ test('a syntax error is marked where the server found it, and the results before
   await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
 });
 
+const misreadBanner = (page: Page) => page.locator('.banner').filter({ hasText: 'This query was read in a way you may not have meant' });
+const readingLine = (page: Page) => page.getByLabel('How free text was read');
+
+test('a form borrowed from another query language is refused at its place, with what to write', async ({ page }) => {
+  await openSearch(page, '?q=status%3D404');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+  await run(page, '-status=200');
+  await expect(page.getByRole('alert')).toContainText("At character 1: '-status' is not a field name: to exclude write NOT status=200 or status!=200");
+  await expect(page.locator('.cm-mark-error')).toHaveText('-status');
+  await expect(eventsStatus(page)).toContainText('65 of 65 events loaded');
+});
+
+test('a mistyped field name is said above the rows it still finds, and in the panel when it finds none', async ({ page }) => {
+  await openSearch(page);
+  await run(page, 'status=200 OR statsu=404');
+  await expect(eventsStatus(page)).toContainText(/of 585 events loaded/);
+  await expect(misreadBanner(page)).toContainText(/statsu is not a known field, and (no event of this case has a field of that name, so statsu=404 matched nothing|the fields of this case are not counted yet)\. Did you mean status\?/);
+  await expect(misreadBanner(page)).not.toContainText(/catalog|extras/);
+  const banner = await misreadBanner(page).boundingBox();
+  const events = await eventsRegion(page).boundingBox();
+  expect((banner?.y ?? 0) + (banner?.height ?? 0)).toBeLessThanOrEqual(events?.y ?? 0);
+  // The note of cost for the same comparison is not shown beside the banner; both keep their mark in the text.
+  await expect(page.locator('.query-warnings')).toHaveCount(0);
+  await expect(page.locator('.cm-mark-warning[title*="lives in extras"]')).toHaveText('statsu=404');
+  await expect(page.locator('.cm-mark-warning[title*="is not in the catalog"]')).toHaveText('statsu');
+
+  await run(page, 'statsu=404');
+  await expect(page.getByRole('heading', { name: 'No events match' })).toBeVisible();
+  await expect(page.locator('.empty-readings')).toContainText('statsu is not a known field');
+  await expect(page.locator('.empty-readings')).toContainText('Did you mean status?');
+  await expect(page.locator('.empty-readings')).not.toContainText(/catalog|extras/);
+  await expect(misreadBanner(page)).toBeVisible();
+});
+
+test('free text says where it was searched: under NOT with the rows it leaves, and with the percent habit when it finds none', async ({ page }) => {
+  await openSearch(page);
+  await run(page, 'NOT curl');
+  await expect(readingLine(page)).toHaveText('Free text is searched in the message, by whole words. NOT curl leaves out the events whose message holds the word curl. For the whole line write NOT raw=*curl*');
+  await expect(eventsStatus(page)).toContainText(/200 of [\d,]+ events loaded/);
+  await expect(misreadBanner(page)).toHaveCount(0);
+
+  await run(page, '%item%');
+  await expect(page.getByRole('heading', { name: 'No events match' })).toBeVisible();
+  await expect(misreadBanner(page)).toContainText('% is searched as a character; the wildcard is *: write *item*');
+  await expect(page.locator('.empty-readings')).toContainText('the text %item% with item as a whole word, in the message only');
+  await expect(page.locator('.empty-readings')).toContainText('raw=*text* searches the whole line');
+  await expect(readingLine(page)).toHaveText('Free text is searched in the message, by whole words: %item%. For the whole line write raw=*%item%*');
+
+  // The way to the whole line, as written in the line, finds the agent the message does not hold.
+  await page.goto(`${new URL(page.url()).pathname}?q=${encodeURIComponent('program=nginx raw=*curl*')}`);
+  await expect(eventsStatus(page)).toContainText(/200 of 65\d events loaded/);
+});
+
 test('the panes keep their place while the timeline waits for its answer and for its code', async ({ page }) => {
   // Both held back, as on a slow link: the search's answer, then the timeline's own code.
   let answer: (() => void) | undefined;

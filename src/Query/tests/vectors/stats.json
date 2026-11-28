@@ -161,10 +161,10 @@
         "p2": "String:http.request.bytes"
       },
       "warnings": [
-        "unindexed@12+22",
-        "unknown_field@46+5",
-        "unindexed@46+5",
-        "unindexed@63+14"
+        "cost:unindexed@12+22",
+        "meaning:unknown_field@46+5",
+        "cost:unindexed@46+5",
+        "cost:unindexed@63+14"
       ],
       "fields": [
         "host.name",

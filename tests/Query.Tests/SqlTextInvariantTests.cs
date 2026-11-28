@@ -42,6 +42,12 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
         "where", "table", "rex", "timechart", "field", "span", "dc", "sum", "avg", "min", "max", "values",
     };
 
+    /// <summary>
+    /// Warnings raised by what a word is: LIKE after a word, and a field name before a colon. The twin of such a
+    /// word is another word, so the warning goes with it; the SQL must still be the same.
+    /// </summary>
+    private static readonly HashSet<string> ReadFromTheWord = ["like_term", "colon_term"];
+
     [GeneratedRegex("[(][?]P?<([A-Za-z_][A-Za-z0-9_]*)>")]
     private static partial Regex RexGroupName();
 
@@ -83,7 +89,7 @@ public sealed partial class SqlTextInvariantTests(ITestOutputHelper output)
                 {
                     failures.Add($"{v.Name}: the SQL changed with the analyst's text\n  {v.Spl}\n  {original.Sql}\n  {other}\n  {twin.Sql}");
                 }
-                else if (!twin.Warnings.Select(w => w.Code).SequenceEqual(original.Warnings.Select(w => w.Code)))
+                else if (!twin.Warnings.Select(w => w.Code).Where(c => !ReadFromTheWord.Contains(c)).SequenceEqual(original.Warnings.Select(w => w.Code).Where(c => !ReadFromTheWord.Contains(c))))
                 {
                     failures.Add($"{v.Name}: the warnings changed with the analyst's text");
                 }

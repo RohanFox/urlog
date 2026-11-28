@@ -10,8 +10,10 @@ import { ExportMenu } from '../search/ExportMenu';
 import { FieldRail } from '../search/FieldRail';
 import { plain } from '../search/inert';
 import { QueryBox } from '../search/QueryBox';
+import { bannerLines, notesUnderBox, panelReadings, readingLine, type FieldsOfCase, type Reading } from '../search/readings';
 import { BUSY_TRIES, SearchRun, type Refusal, type RunState } from '../search/run';
 import { StatsTable } from '../search/StatsTable';
+import type { Meta } from '../search/stream';
 import { addTerm, isWord, term } from '../search/terms';
 import { instant, knownZone } from '../search/time';
 import { RangeLine, TimeRange } from '../search/TimeRange';
@@ -102,6 +104,43 @@ function RegionFailure({ what, state, onAgain }: { what: string; state: RunState
         {failureTitle(state.refusal, state.phase)}. {failureText(state.refusal, state.phase)}
         {state.refusal?.code === undefined || state.phase === 'cut' ? '' : ` (${state.refusal.code})`}
       </Banner>
+    </div>
+  );
+}
+
+/** The lines of a banner or of the empty panel: the piece of the query in the type of the query, then the sentence. */
+function Readings({ lines }: { lines: readonly Reading[] }) {
+  return (
+    <ul className="readings">
+      {lines.map((line, i) => (
+        <li key={i}>
+          {line.piece === undefined ? null : (
+            <>
+              <span className="mono">{line.piece}</span>{' '}
+            </>
+          )}
+          {line.text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Under "No events match": every reading of the query, so a query the tool read otherwise does not pass for an empty result. */
+function EmptyReadings({ query, meta, fields, failed }: { query: string; meta: Meta; fields: FieldsOfCase | undefined; failed: boolean }) {
+  const lines = panelReadings(query, meta.warnings, meta.fields, meta.terms, fields, failed);
+  if (lines.length === 0) {
+    return null;
+  }
+  return (
+    <div className="empty-readings">
+      <h3>How the query was read</h3>
+      <Readings lines={lines} />
+      {meta.terms.length > 0 ? (
+        <p className="sub">
+          Other parts of the line are in fields: <span className="mono">raw=*text*</span> searches the whole line.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -449,6 +488,12 @@ export function Search() {
   const showsOld = state !== undefined && state.phase !== 'cancelled' && (kind === 'events' ? oldTimeline || oldEvents : oldTable);
   const span = state?.meta?.span ?? dashboard.data.span;
 
+  // How the text that ran was read. The lookups wait for the fields of the case; a failed listing says "not counted".
+  const metaNow = state?.meta;
+  const misread = metaNow === undefined ? [] : bannerLines(state?.request.q ?? '', metaNow.warnings, catalog.data, catalog.isError);
+  const reading = metaNow === undefined ? undefined : readingLine(metaNow.terms);
+  const notes = metaNow === undefined ? [] : notesUnderBox(state?.request.q ?? '', metaNow.warnings, catalog.data, catalog.isError);
+
   const exportMenu = (
     <ExportMenu
       request={request}
@@ -489,6 +534,7 @@ export function Search() {
             draft={draft}
             ran={state?.request.q ?? url.q}
             warnings={state?.meta?.warnings ?? []}
+            notes={notes}
             refusal={ofQuery ? refused : undefined}
             running={live}
             words={words}
@@ -550,6 +596,25 @@ export function Search() {
             {failureText(refused, 'refused')}
           </Banner>
         ) : null}
+        {misread.length > 0 ? (
+          <Banner kind="notice" title="This query was read in a way you may not have meant">
+            {misread.map((line, i) => (
+              <span key={i} className="misread-line">
+                {line.piece === undefined ? null : (
+                  <>
+                    <span className="mono">{line.piece}</span>{' '}
+                  </>
+                )}
+                {line.text}
+              </span>
+            ))}
+          </Banner>
+        ) : null}
+        {reading === undefined ? null : (
+          <p className="sub reading-line" aria-label="How free text was read">
+            {reading}
+          </p>
+        )}
         {showsOld && fallback !== undefined ? (
           <p className="sub stale-line" role="status">
             {live ? 'Searching. Below, dimmed: the results of ' : 'Below: the results of the search before, '}
@@ -642,6 +707,7 @@ export function Search() {
                   <p className="sub">
                     Searched {describe(listing.request)}. The case holds {count(dashboard.data.files.total, 'file', 'files')}.
                   </p>
+                  {listing === state && listing.meta !== undefined ? <EmptyReadings query={listing.request.q} meta={listing.meta} fields={catalog.data} failed={catalog.isError} /> : null}
                 </EmptyState>
               ) : (
                 <EventTable

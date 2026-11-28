@@ -48,6 +48,34 @@ describe('the frames the backend writes', () => {
     expect(extras).toEqual({ k: 'v' });
   });
 
+  it('reads the level of each warning and the terms the server searched as text', () => {
+    const meta = decodeAll(samples.listing)[0];
+    expect(meta?.kind === 'meta' && meta.warnings.map((w) => [w.code, w.level])).toEqual([
+      ['unknown_field', 'meaning'],
+      ['unindexed', 'cost'],
+    ]);
+    expect(meta?.kind === 'meta' && meta.terms).toEqual([{ text: 'line', kind: 'word', negated: false, offset: 17, length: 4 }]);
+    expect(meta?.kind === 'meta' && meta.fields).toEqual(['nosuchfield']);
+  });
+
+  it('reads the meta of a server that sends no level and no terms: every warning a note, no term', () => {
+    const data = samples.listing[0]?.data as Record<string, unknown>;
+    const old = { ...data, warnings: (data['warnings'] as Array<Record<string, unknown>>).map((w) => ({ code: w['code'], offset: w['offset'], length: w['length'], message: w['message'] })) };
+    delete (old as Record<string, unknown>)['terms'];
+    delete (old as Record<string, unknown>)['fields'];
+    const meta = decode('meta', JSON.stringify(old));
+    expect(meta.kind === 'meta' && meta.warnings.map((w) => w.level)).toEqual(['cost', 'cost']);
+    expect(meta.kind === 'meta' && meta.terms).toEqual([]);
+    expect(meta.kind === 'meta' && meta.fields).toEqual([]);
+  });
+
+  it('takes a level it does not know for a reading, never for a note', () => {
+    const data = samples.listing[0]?.data as Record<string, unknown>;
+    const later = { ...data, warnings: [{ code: 'later', level: 'later', offset: 0, length: 1, message: 'm' }] };
+    const meta = decode('meta', JSON.stringify(later));
+    expect(meta.kind === 'meta' && meta.warnings[0]?.level).toBe('meaning');
+  });
+
   it('reads the page that reaches the paging limit, with the message of the server', () => {
     const page = decodeAll(samples.page_at_the_limit)[0];
     expect(page?.kind === 'page' && [page.capped, page.next, page.first_row]).toEqual([true, null, 2]);

@@ -40,7 +40,7 @@
         "p2": "UInt64:1"
       },
       "warnings": [
-        "unindexed@48+9"
+        "cost:unindexed@48+9"
       ],
       "fields": [
         "message"
@@ -135,8 +135,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@37+3",
-        "unindexed@78+3"
+        "cost:unindexed@37+3",
+        "cost:unindexed@78+3"
       ],
       "fields": [
         "raw"

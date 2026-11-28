@@ -121,7 +121,7 @@
         "p0": "String:proxy_upstream_name"
       },
       "warnings": [
-        "unknown_field@17+19"
+        "meaning:unknown_field@17+19"
       ],
       "fields": [
         "proxy_upstream_name"
@@ -267,6 +267,9 @@
         "limit": "UInt64:10"
       },
       "warnings": [],
+      "terms": [
+        "phrase@13+17"
+      ],
       "fields": [
         "program",
         "_time"

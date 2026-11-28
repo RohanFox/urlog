@@ -161,6 +161,38 @@
   overflow-wrap: anywhere;
 }
 
+/* How the query was read: the lines of the banner, the muted line of free text, the list of the empty panel. */
+
+.misread-line {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.misread-line + .misread-line {
+  margin-top: var(--sp-4);
+}
+
+.reading-line {
+  margin: 0;
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.empty-readings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+.empty-readings h3 {
+  margin: 0;
+  font-size: var(--fs-14);
+}
+
+.readings {
+  overflow-wrap: anywhere;
+}
+
 /* A part of the answer. */
 
 .region {

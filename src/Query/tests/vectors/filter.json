@@ -238,7 +238,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+19"
+        "cost:unindexed@0+19"
       ],
       "fields": [
         "user_agent.original"
@@ -278,7 +278,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+9"
+        "cost:unindexed@0+9"
       ],
       "fields": [
         "host.name"
@@ -360,6 +360,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+6"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -380,6 +383,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+8"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -397,7 +403,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+5"
+        "cost:unindexed@0+5"
+      ],
+      "terms": [
+        "wildcard@0+5"
       ],
       "fields": [],
       "aggregate": false
@@ -418,6 +427,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "phrase@0+17"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -435,7 +447,10 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+4"
+        "cost:unindexed@0+4"
+      ],
+      "terms": [
+        "text@0+4"
       ],
       "fields": [],
       "aggregate": false
@@ -519,7 +534,12 @@
         "p2": "String:web-02",
         "limit": "UInt64:100"
       },
-      "warnings": [],
+      "warnings": [
+        "meaning:lowercase_operator@12+2"
+      ],
+      "terms": [
+        "word@12+2"
+      ],
       "fields": [
         "host.name"
       ],
@@ -539,7 +559,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+17"
+        "cost:unindexed@0+17"
       ],
       "fields": [
         "message"
@@ -560,7 +580,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+12"
+        "cost:unindexed@0+12"
       ],
       "fields": [
         "raw"
@@ -582,7 +602,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+20"
+        "cost:unindexed@0+20"
       ],
       "fields": [
         "url.original"
@@ -604,8 +624,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@0+19",
-        "unindexed@0+23"
+        "meaning:unknown_field@0+19",
+        "cost:unindexed@0+23"
       ],
       "fields": [
         "proxy_upstream_name"
@@ -664,7 +684,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+27"
+        "cost:unindexed@0+27"
       ],
       "fields": [
         "message"
@@ -739,7 +759,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "assumed_timezone@0+14"
+        "cost:assumed_timezone@0+14"
       ],
       "fields": [
         "http.response.status_code"
@@ -759,8 +779,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "assumed_timezone@0+19",
-        "assumed_timezone@20+17"
+        "cost:assumed_timezone@0+19",
+        "cost:assumed_timezone@20+17"
       ],
       "fields": [],
       "aggregate": false
@@ -789,7 +809,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "assumed_timezone@0+14"
+        "cost:assumed_timezone@0+14"
       ],
       "fields": [],
       "aggregate": false
@@ -853,7 +873,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@40+21"
+        "cost:unindexed@40+21"
       ],
       "fields": [
         "http.request.method",
@@ -877,6 +897,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+4"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -895,6 +918,9 @@
         "limit": "UInt64:100"
       },
       "warnings": [],
+      "terms": [
+        "word@0+7"
+      ],
       "fields": [],
       "aggregate": false
     }
@@ -932,7 +958,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unindexed@0+19"
+        "cost:unindexed@0+19"
       ],
       "fields": [
         "url.original"

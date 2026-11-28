@@ -32,7 +32,7 @@ internal static class QueryCommand
         var table = await GuardAsync(() => client.RunAsync(result, cancellationToken: ct)).ConfigureAwait(false);
         if (table.ValuesCapped)
         {
-            Console.Error.WriteLine($"warning: values_capped: {table.CappedRows.Count} row(s) hold more than {Transpiler.ValuesCap} values; their lists end in ...");
+            Console.Error.WriteLine($"warning (cost): values_capped: {table.CappedRows.Count} row(s) hold more than {Transpiler.ValuesCap} values; their lists end in ...");
         }
 
         table = TimechartPivot.Pivot(table, result);
@@ -143,7 +143,7 @@ internal static class QueryCommand
     {
         foreach (var w in result.Warnings)
         {
-            Console.Error.WriteLine($"warning: {w.Code} at {w.Span.Offset}: {w.Message}");
+            Console.Error.WriteLine($"warning ({w.Level}): {w.Code} at {w.Span.Offset}: {w.Message}");
         }
     }
 

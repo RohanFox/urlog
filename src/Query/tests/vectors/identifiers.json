@@ -83,7 +83,7 @@
         "p0": "String:a\\b"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "a\\b"
@@ -116,7 +116,7 @@
         "p0": "String:a'b"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "a'b"
@@ -150,8 +150,8 @@
         "p1": "String:b"
       },
       "warnings": [
-        "unknown_field@17+1",
-        "unknown_field@19+1"
+        "meaning:unknown_field@17+1",
+        "meaning:unknown_field@19+1"
       ],
       "fields": [
         "a",
@@ -186,7 +186,7 @@
         "p0": "String:aéb"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "aéb"
@@ -210,7 +210,7 @@
         "p0": "String:u\\"
       },
       "warnings": [
-        "unknown_field@17+2"
+        "meaning:unknown_field@17+2"
       ],
       "fields": [
         "u\\"
@@ -234,7 +234,7 @@
         "p0": "String:a\\b"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "a\\b"
@@ -267,7 +267,7 @@
         "p0": "String:a'b"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "a'b"
@@ -301,8 +301,8 @@
         "p1": "String:b"
       },
       "warnings": [
-        "unknown_field@17+1",
-        "unknown_field@19+1"
+        "meaning:unknown_field@17+1",
+        "meaning:unknown_field@19+1"
       ],
       "fields": [
         "a",
@@ -337,7 +337,7 @@
         "p0": "String:aéb"
       },
       "warnings": [
-        "unknown_field@17+3"
+        "meaning:unknown_field@17+3"
       ],
       "fields": [
         "aéb"
@@ -361,7 +361,7 @@
         "p0": "String:u\\"
       },
       "warnings": [
-        "unknown_field@17+2"
+        "meaning:unknown_field@17+2"
       ],
       "fields": [
         "u\\"
@@ -386,7 +386,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@7+3"
+        "meaning:unknown_field@7+3"
       ],
       "fields": [
         "a\\b"
@@ -416,7 +416,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@7+3"
+        "meaning:unknown_field@7+3"
       ],
       "fields": [
         "a'b"
@@ -447,8 +447,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@7+1",
-        "unknown_field@9+1"
+        "meaning:unknown_field@7+1",
+        "meaning:unknown_field@9+1"
       ],
       "fields": [
         "a",
@@ -479,7 +479,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@7+3"
+        "meaning:unknown_field@7+3"
       ],
       "fields": [
         "aéb"
@@ -500,7 +500,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@7+2"
+        "meaning:unknown_field@7+2"
       ],
       "fields": [
         "u\\"
@@ -522,8 +522,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@0+3",
-        "unindexed@0+5"
+        "meaning:unknown_field@0+3",
+        "cost:unindexed@0+5"
       ],
       "fields": [
         "a\\b"
@@ -554,8 +554,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@0+3",
-        "unindexed@0+5"
+        "meaning:unknown_field@0+3",
+        "cost:unindexed@0+5"
       ],
       "fields": [
         "a'b"
@@ -587,8 +587,11 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@2+1",
-        "unindexed@2+3"
+        "meaning:unknown_field@2+1",
+        "cost:unindexed@2+3"
+      ],
+      "terms": [
+        "word@0+1"
       ],
       "fields": [
         "b"
@@ -619,8 +622,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@0+3",
-        "unindexed@0+5"
+        "meaning:unknown_field@0+3",
+        "cost:unindexed@0+5"
       ],
       "fields": [
         "aéb"
@@ -642,8 +645,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@0+2",
-        "unindexed@0+4"
+        "meaning:unknown_field@0+2",
+        "cost:unindexed@0+4"
       ],
       "fields": [
         "u\\"
@@ -681,7 +684,7 @@
         "p0": "String:u\\"
       },
       "warnings": [
-        "unknown_field@22+2"
+        "meaning:unknown_field@22+2"
       ],
       "fields": [
         "u\\"
@@ -771,7 +774,7 @@
         "p0": "String:nokey"
       },
       "warnings": [
-        "unknown_field@23+5"
+        "meaning:unknown_field@23+5"
       ],
       "fields": [
         "nokey",
@@ -798,7 +801,7 @@
         "p1": "String:trace.id"
       },
       "warnings": [
-        "unknown_field@34+8"
+        "meaning:unknown_field@34+8"
       ],
       "fields": [
         "network.forwarded_ip",
@@ -897,7 +900,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@13+3"
+        "meaning:unknown_field@13+3"
       ],
       "fields": [
         "host.name",
@@ -932,7 +935,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@13+3"
+        "meaning:unknown_field@13+3"
       ],
       "fields": [
         "host.name",
@@ -968,8 +971,8 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@13+1",
-        "unknown_field@15+1"
+        "meaning:unknown_field@13+1",
+        "meaning:unknown_field@15+1"
       ],
       "fields": [
         "host.name",
@@ -1006,7 +1009,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@13+3"
+        "meaning:unknown_field@13+3"
       ],
       "fields": [
         "host.name",
@@ -1032,7 +1035,7 @@
         "limit": "UInt64:100"
       },
       "warnings": [
-        "unknown_field@8+2"
+        "meaning:unknown_field@8+2"
       ],
       "fields": [
         "u\\",
@@ -1059,7 +1062,7 @@
         "top": "UInt64:10"
       },
       "warnings": [
-        "unknown_field@29+3"
+        "meaning:unknown_field@29+3"
       ],
       "fields": [
         "a\\b"
@@ -1096,7 +1099,7 @@
         "top": "UInt64:10"
       },
       "warnings": [
-        "unknown_field@29+3"
+        "meaning:unknown_field@29+3"
       ],
       "fields": [
         "a'b"
@@ -1151,7 +1154,7 @@
         "top": "UInt64:10"
       },
       "warnings": [
-        "unknown_field@29+3"
+        "meaning:unknown_field@29+3"
       ],
       "fields": [
         "aéb"
@@ -1179,7 +1182,7 @@
         "top": "UInt64:10"
       },
       "warnings": [
-        "unknown_field@34+2"
+        "meaning:unknown_field@34+2"
       ],
       "fields": [
         "u\\"
@@ -1205,7 +1208,7 @@
         "p0": "String:a\\b"
       },
       "warnings": [
-        "unknown_field@11+3"
+        "meaning:unknown_field@11+3"
       ],
       "fields": [
         "host.name",
@@ -1239,7 +1242,7 @@
         "p0": "String:a'b"
       },
       "warnings": [
-        "unknown_field@11+3"
+        "meaning:unknown_field@11+3"
       ],
       "fields": [
         "host.name",
@@ -1291,7 +1294,7 @@
         "p0": "String:aéb"
       },
       "warnings": [
-        "unknown_field@11+3"
+        "meaning:unknown_field@11+3"
       ],
       "fields": [
         "host.name",
@@ -1316,7 +1319,7 @@
         "p0": "String:u\\"
       },
       "warnings": [
-        "unknown_field@15+2"
+        "meaning:unknown_field@15+2"
       ],
       "fields": [
         "host.name",

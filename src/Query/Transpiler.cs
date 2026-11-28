@@ -25,8 +25,44 @@ public sealed record TranspileOptions(ulong CaseId, DateTimeOffset RangeFrom, Da
 /// <summary>One bound parameter: the <c>{name:Type}</c> placeholder in the SQL and its value as the HTTP interface takes it.</summary>
 public sealed record QueryParameter(string Name, string Type, string Value);
 
-/// <summary>A non-fatal note for the UI: <c>unindexed</c>, <c>assumed_timezone</c>, <c>unknown_field</c>.</summary>
-public sealed record QueryWarning(string Code, TextSpan Span, string Message);
+/// <summary>
+/// What a warning is about. A reader that shows the two alike hides the first kind behind the second, so the level
+/// travels with the warning and is never looked up from the code.
+/// </summary>
+public static class WarningLevel
+{
+    /// <summary>The query was read in a way the analyst may not have meant: the answer can be to another question.</summary>
+    public const string Meaning = "meaning";
+
+    /// <summary>The reading is certain; the query is slow or its answer approximate.</summary>
+    public const string Cost = "cost";
+
+    private static readonly HashSet<string> MeaningCodes = new(StringComparer.Ordinal)
+    {
+        "unknown_field", "minus_term", "colon_term", "lowercase_operator", "like_term", "percent_term",
+    };
+
+    public static string Of(string code) => MeaningCodes.Contains(code) ? Meaning : Cost;
+}
+
+/// <summary>
+/// A non-fatal note for the UI. Level <c>cost</c>: <c>unindexed</c>, <c>assumed_timezone</c>. Level <c>meaning</c>:
+/// <c>unknown_field</c>, <c>minus_term</c>, <c>colon_term</c>, <c>lowercase_operator</c>, <c>like_term</c>,
+/// <c>percent_term</c>.
+/// </summary>
+public sealed record QueryWarning(string Code, TextSpan Span, string Message)
+{
+    public string Level { get; init; } = WarningLevel.Of(Code);
+}
+
+/// <summary>
+/// One bare word or quoted phrase the query searches in <c>message</c>, so a reader can say how it was read.
+/// <see cref="Kind"/> is <c>word</c> (whole tokens), <c>phrase</c> (quoted: whole tokens and the text),
+/// <c>wildcard</c> (a pattern, no index) or <c>text</c> (no letter or digit: a plain substring).
+/// </summary>
+/// <param name="Text">The term as searched, without its quotes and before lowercasing.</param>
+/// <param name="Negated">True when an odd number of NOTs stand over it.</param>
+public sealed record QueryTerm(string Text, TextSpan Span, string Kind, bool Negated);
 
 /// <summary>What the rows of a result are.</summary>
 public enum ResultKind
@@ -100,6 +136,9 @@ public sealed record TranspileResult(
 
     public TimechartShape? Timechart { get; init; }
 
+    /// <summary>The bare words and phrases of the query, in the order they are searched.</summary>
+    public ImmutableArray<QueryTerm> Terms { get; init; } = [];
+
     /// <summary>The parts of an event listing; null for an aggregation.</summary>
     public ListingParts? Listing { get; init; }
 }
@@ -131,6 +170,7 @@ public sealed class Transpiler
     private readonly FieldCatalog _catalog;
     private readonly List<QueryParameter> _parameters = [];
     private readonly List<QueryWarning> _warnings = [];
+    private readonly List<QueryTerm> _terms = [];
     private readonly Dictionary<string, FieldDef> _fields = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Operand> _rex = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Operand> _rexOrder = [];
@@ -138,6 +178,7 @@ public sealed class Transpiler
     private int _next;
     private int _generated;
     private int _rexCount;
+    private int _notDepth;
     private TranspileOptions? _current;
     private string _freeGroup = "m";
 
@@ -157,6 +198,8 @@ public sealed class Transpiler
         ArgumentNullException.ThrowIfNull(options);
         _parameters.Clear();
         _warnings.Clear();
+        _terms.Clear();
+        _notDepth = 0;
         _fields.Clear();
         _rex.Clear();
         _rexOrder.Clear();
@@ -245,6 +288,7 @@ public sealed class Transpiler
             Kind = built.Kind,
             ValuesColumns = [.. built.ValuesColumns],
             Timechart = built.Timechart,
+            Terms = [.. _terms],
             Listing = listing,
         };
     }
@@ -940,7 +984,19 @@ public sealed class Transpiler
             case AndNode and:
             {
                 var terms = and.Terms.SelectMany(Pieces).ToList();
-                return terms.Count == 1 ? Expression(terms[0]) : "(" + string.Join(" AND ", terms.Select(Expression)) + ")";
+                if (terms.Count == 1)
+                {
+                    return Expression(terms[0]);
+                }
+
+                var parts = new List<string>(terms.Count);
+                for (var i = 0; i < terms.Count; i++)
+                {
+                    WarnLowerCaseOperator(terms[i], hasBefore: i > 0, hasAfter: i < terms.Count - 1);
+                    parts.Add(Expression(terms[i]));
+                }
+
+                return "(" + string.Join(" AND ", parts) + ")";
             }
 
             case LikeNode like:
@@ -948,7 +1004,13 @@ public sealed class Transpiler
             case OrNode or:
                 return "(" + string.Join(" OR ", or.Terms.Select(Expression)) + ")";
             case NotNode not:
-                return "NOT (" + Expression(not.Operand) + ")";
+            {
+                _notDepth++;
+                var operand = Expression(not.Operand);
+                _notDepth--;
+                return "NOT (" + operand + ")";
+            }
+
             case CompareNode c:
                 return Compare(c);
             case InNode @in:
@@ -981,13 +1043,70 @@ public sealed class Transpiler
             throw new QueryException(like.Keyword.Span, $"not supported in v1: {keyword} (write {name}{(like.Negated ? "!=" : "=")}*text*: * is any text, ? one character)");
         }
 
+        // Any other word: the three terms are searched as before, and the reader is told LIKE was one of them.
+        var written = like.KeywordWord;
+        Warn("like_term", written.Span, $"{written.Text} is searched as a word; a comparison with wildcards is written field=*text*");
         return [like.Left, like.Keyword, like.Pattern];
+    }
+
+    /// <summary>
+    /// Lower-case <c>or</c>, <c>and</c> and <c>not</c> are words, as in Splunk. Where one stands in the place of the
+    /// operator (between two terms, or for <c>not</c> before one) the reader is told it was searched as text.
+    /// </summary>
+    private void WarnLowerCaseOperator(SearchNode node, bool hasBefore, bool hasAfter)
+    {
+        if (node is not TermNode term || !hasAfter)
+        {
+            return;
+        }
+
+        var isNot = term.Text.Equals("not", StringComparison.OrdinalIgnoreCase);
+        if (isNot || (hasBefore && (term.Text.Equals("or", StringComparison.OrdinalIgnoreCase) || term.Text.Equals("and", StringComparison.OrdinalIgnoreCase))))
+        {
+            Warn("lowercase_operator", term.Span, $"'{term.Text}' is searched as a word; the operator is {term.Text.ToUpperInvariant()} in upper case");
+        }
+    }
+
+    /// <summary>
+    /// <c>%word%</c> is the SQL wildcard habit. Here the percent sign is a character, so the term or the value
+    /// matches only text that holds the signs. Percent-encoded text (<c>%27</c>, <c>%3Cscript%3E</c>) is searched
+    /// on purpose and has another shape: one sign, or signs inside.
+    /// </summary>
+    private void WarnPercent(string text, TextSpan span)
+    {
+        if (text.Length >= 3 && text[0] == '%' && text[^1] == '%' && !text.AsSpan(1, text.Length - 2).Contains('%'))
+        {
+            Warn("percent_term", span, $"% is searched as a character; the wildcard is *: write *{text[1..^1]}*");
+        }
+    }
+
+    /// <summary>The readings of an unquoted term that other query languages give another meaning.</summary>
+    private void WarnMisreadTerm(string text, TextSpan span)
+    {
+        var word = text.AsSpan().TrimStart('-');
+        if (word.Length < text.Length && word.Length > 0)
+        {
+            Warn("minus_term", span, $"'{text}' is searched as text, minus included; to exclude a word write NOT {word}");
+        }
+
+        var colon = text.IndexOf(':', StringComparison.Ordinal);
+        if (colon > 0 && colon < text.Length - 1 && (_rex.ContainsKey(text[..colon]) || _catalog.Contains(text[..colon])))
+        {
+            Warn("colon_term", span, $"'{text}' is searched as text; a comparison is written {text[..colon]}={text[(colon + 1)..]}");
+        }
+
+        WarnPercent(text, span);
     }
 
     private string Compare(CompareNode c)
     {
         var field = Resolve(c.Field, c.FieldSpan);
         var value = c.Value;
+        if (!c.Quoted && c.Op is CompareOp.Eq or CompareOp.Ne)
+        {
+            WarnPercent(value, c.ValueSpan);
+        }
+
         var hasWildcard = !c.Quoted && value.AsSpan().ContainsAny(Wildcards);
         var ordering = c.Op is CompareOp.Lt or CompareOp.Gt or CompareOp.Le or CompareOp.Ge;
         if (field.IsArray)
@@ -1210,14 +1329,22 @@ public sealed class Transpiler
             throw new QueryException(span, "after stats, where compares the columns of the result (count>10, host=web-01): a search term has no event to search, so put it before stats");
         }
 
+        if (!isPhrase)
+        {
+            WarnMisreadTerm(text, span);
+        }
+
         var lower = AsciiLower(text);
+        var negated = _notDepth % 2 == 1;
         if (!isPhrase && lower.AsSpan().ContainsAny(Wildcards))
         {
+            _terms.Add(new QueryTerm(text, span, "wildcard", negated));
             Warn("unindexed", span, "a wildcard term scans message without the index");
             return $"lower(message) LIKE {{{Add("String", LikePattern(lower))}:String}}";
         }
 
         var tokens = Tokens(lower);
+        _terms.Add(new QueryTerm(text, span, tokens.Count == 0 ? "text" : isPhrase ? "phrase" : "word", negated));
         if (tokens.Count == 0)
         {
             Warn("unindexed", span, "a term without letters or digits scans message without the index");

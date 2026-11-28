@@ -107,7 +107,7 @@ public sealed class VectorTests
 
         // The five verbs after the first slice, their order rules, the unsupported verbs and the filter forms
         // borrowed from other query languages: each file holds accepted forms and refusals.
-        foreach (var (file, least, leastErrors) in new[] { ("where.json", 25, 10), ("stats.json", 30, 15), ("table.json", 15, 6), ("rex.json", 60, 40), ("timechart.json", 35, 15), ("chaining.json", 20, 12), ("misread.json", 77, 42) })
+        foreach (var (file, least, leastErrors) in new[] { ("where.json", 25, 10), ("stats.json", 30, 15), ("table.json", 15, 6), ("rex.json", 60, 40), ("timechart.json", 35, 15), ("chaining.json", 20, 12), ("misread.json", 118, 42) })
         {
             Assert.True(files[file].Count >= least, $"{file}: {files[file].Count} vectors");
             Assert.True(files[file].Count(v => v.Error is not null) >= leastErrors, $"{file}: error vectors");
@@ -145,7 +145,8 @@ public sealed class VectorTests
             {
                 Sql = result.Sql,
                 Params = result.Parameters.ToDictionary(p => p.Name, p => $"{p.Type}:{p.Value}"),
-                Warnings = [.. result.Warnings.Select(w => $"{w.Code}@{w.Span.Offset}+{w.Span.Length}")],
+                Warnings = [.. result.Warnings.Select(w => $"{w.Level}:{w.Code}@{w.Span.Offset}+{w.Span.Length}")],
+                Terms = result.Terms.IsEmpty ? null : [.. result.Terms.Select(t => $"{(t.Negated ? "not " : string.Empty)}{t.Kind}@{t.Span.Offset}+{t.Span.Length}")],
                 Fields = [.. result.Fields.Select(f => f.Name)],
                 Aggregate = result.IsAggregate,
                 Columns = result.IsAggregate || !result.Columns.SequenceEqual(DefaultListing) ? [.. result.Columns] : null,
@@ -192,6 +193,9 @@ public sealed class VectorTests
         public Dictionary<string, string> Params { get; set; } = [];
 
         public string[] Warnings { get; set; } = [];
+
+        /// <summary>The bare words and phrases as read: kind, place, and <c>not</c> before one under a negation. Left out when the query has none.</summary>
+        public string[]? Terms { get; set; }
 
         public string[] Fields { get; set; } = [];
 

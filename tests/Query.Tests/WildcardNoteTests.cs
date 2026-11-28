@@ -19,6 +19,20 @@ public sealed class WildcardNoteTests
         TimeZoneInfo.Utc,
         new DateTimeOffset(2026, 3, 15, 12, 0, 0, TimeSpan.Zero));
 
+    /// <summary>The percent note gives the analyst's own term with the wildcard that does what the percent signs were meant to.</summary>
+    [Theory]
+    [InlineData("%item%", "*item*")]
+    [InlineData("NOT %20%", "*20*")]
+    [InlineData("url.path=%item/6%", "*item/6*")]
+    [InlineData("url.path!=%item%", "*item*")]
+    [InlineData("select LIKE %admin%", "*admin*")]
+    public void ThePercentNoteWritesTheTermWithTheWildcard(string spl, string rewrite)
+    {
+        var warning = Assert.Single(Transpiler.Transpile(spl, Options).Warnings, w => w.Code == "percent_term");
+        Assert.Equal(WarningLevel.Meaning, warning.Level);
+        Assert.Equal($"% is searched as a character; the wildcard is *: write {rewrite}", warning.Message);
+    }
+
     [Theory]
     [InlineData("*a", Leading)]
     [InlineData("?a", Leading)]

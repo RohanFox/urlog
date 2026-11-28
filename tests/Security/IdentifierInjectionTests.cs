@@ -35,6 +35,41 @@ public sealed class IdentifierInjectionTests(ClickHouseFixture ch, ITestOutputHe
         Assert.Equal(17, e.Offset);
     }
 
+    /// <summary>The forms borrowed from other query languages are refused before a name is read; a backquote in one changes nothing.</summary>
+    [Theory]
+    [InlineData("-x`=1")]
+    [InlineData("-x` IN (1, 2)")]
+    [InlineData("x`~\"a\"")]
+    [InlineData("x`!~\"a\"")]
+    [InlineData("x`=~\"a\"")]
+    [InlineData("| stats count by host | where -x`>1")]
+    public void AMisreadFormWithABackquoteIsAQueryError(string spl)
+    {
+        var e = Assert.Throws<QueryException>(() => Transpiler.Transpile(spl, Options));
+        output.WriteLine($"{spl}: {e.Offset}+{e.Length}: {e.Message}");
+    }
+
+    /// <summary>The forms that are answered with a reading search the word as text: it is a parameter, and the warning's message is the only other place it stands.</summary>
+    [Theory]
+    [InlineData("-x`", "minus_term")]
+    [InlineData("x` LIKE \"a`\"", "like_term")]
+    [InlineData("%x`%", "percent_term")]
+    [InlineData("status:x`", "colon_term")]
+    [InlineData("x` or y`", "lowercase_operator")]
+    public async Task AMisreadTermWithABackquoteIsAParameterAndTheQueryKeepsItsScope(string spl, string code)
+    {
+        var query = Transpiler.Transpile(spl, Options);
+        Assert.DoesNotContain('`', query.Sql);
+        Assert.Contains(query.Parameters, p => p.Value.Contains('`', StringComparison.Ordinal));
+        var warning = Assert.Single(query.Warnings, w => w.Code == code);
+        Assert.Equal(WarningLevel.Meaning, warning.Level);
+        Assert.NotEmpty(query.Terms);
+
+        // The range is one minute of 2020 and the seed is 2026: with its scope intact the query sees nothing.
+        var table = await ch.QueryClient().RunAsync(query, [1, 2, 3], Ct);
+        Assert.Empty(table.Rows);
+    }
+
     [Fact]
     public async Task AByFieldEndingInABackslashIsAParameterAndTheQueryKeepsItsScope()
     {

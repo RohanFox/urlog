@@ -227,6 +227,30 @@ public sealed class SearchApiTests(ClickHouseFixture ch, ITestOutputHelper outpu
     }
 
     [Fact]
+    public async Task TheMetaFrameSaysHowTheQueryWasReadAndOnlyToAMemberOfTheCase()
+    {
+        var (api, alice, mallory) = await StartAsync();
+        await using var host = api;
+
+        // A mistyped field under OR, a word behind a minus under NOT (which binds that word alone), a phrase and the SQL wildcard habit.
+        var body = new { query = "statsu=404 OR NOT -enc \"index html\" %get%" };
+        var events = await EventsAsync(await alice.PostAsync("/api/v1/cases/1/search", body));
+        Assert.Equal("done", events[^1].Name);
+        var meta = events.Single(e => e.Name == "meta").Data;
+        var warnings = meta.GetProperty("warnings").EnumerateArray().Select(w => $"{w.GetProperty("level").GetString()}:{w.GetProperty("code").GetString()}@{w.GetProperty("offset").GetInt32()}+{w.GetProperty("length").GetInt32()}").ToList();
+        var terms = meta.GetProperty("terms").EnumerateArray().Select(t => $"{(t.GetProperty("negated").GetBoolean() ? "not " : string.Empty)}{t.GetProperty("kind").GetString()} {t.GetProperty("text").GetString()}@{t.GetProperty("offset").GetInt32()}+{t.GetProperty("length").GetInt32()}").ToList();
+        output.WriteLine(string.Join(", ", warnings));
+        output.WriteLine(string.Join(", ", terms));
+        Assert.Equal(["meaning:unknown_field@0+6", "cost:unindexed@0+10", "meaning:minus_term@18+4", "meaning:percent_term@36+5"], warnings);
+        Assert.Equal(["not word -enc@18+4", "phrase index html@23+12", "word %get%@36+5"], terms);
+
+        // The same search by a user outside the case: no frame at all.
+        var refused = await mallory.PostAsync("/api/v1/cases/1/search", body);
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.DoesNotContain("terms", await refused.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AListingIsWalkedByCursorWithoutAGapOrADuplicateOnEqualTimes()
     {
         // Three more files in case 1, all in March, each with a row on the same 200 instants.

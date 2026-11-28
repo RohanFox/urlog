@@ -110,6 +110,8 @@ interface Listing {
   next?: string | null;
   capped?: boolean;
   warnings?: unknown[];
+  terms?: unknown[];
+  fields?: string[];
   span?: Record<string, unknown>;
   buckets?: unknown[];
 }
@@ -119,7 +121,7 @@ const META = { kind: 'meta', from: '2026-03-01T00:00:00.000Z', to: '2026-03-01T0
 function frames(l: Listing = {}) {
   const rows = (l.rows ?? [{ offset: 100 }, { offset: 200, message: 'GET /admin 404', level: 'error' }]).map(row);
   return {
-    meta: { event: 'meta', data: { ...META, warnings: l.warnings ?? [], span: l.span ?? META.span } },
+    meta: { event: 'meta', data: { ...META, warnings: l.warnings ?? [], ...(l.terms === undefined ? {} : { terms: l.terms }), fields: l.fields ?? [], span: l.span ?? META.span } },
     histogram: { event: 'histogram', data: { kind: 'histogram', span: '1s', source: 'query', total: l.total ?? rows.length, buckets: l.buckets ?? [{ start: '2026-03-01T00:00:05.000Z', counts: { info: 1, error: 1 } }] } },
     page: { event: 'page', data: { kind: 'page', first_row: 0, columns: COLUMNS, rows, next: l.next ?? null, capped: l.capped ?? false, ...(l.capped === true ? { message: 'narrow the search or the time range: a result is paged to 10,000 events' } : {}) } },
     counts: { event: 'counts', data: { kind: 'counts', total: l.total ?? rows.length, source: 'query', fields: [{ name: 'program', top: [{ value: 'nginx', count: rows.length }] }] } },
@@ -216,8 +218,101 @@ describe('the search page', () => {
 
   it('shows the warnings of the server at their place in the text', async () => {
     open({ [SEARCH]: listing({ warnings: (samples.listing[0]?.data as { warnings: unknown[] }).warnings }) }, '/cases/7/search?q=nosuchfield%3D1');
-    expect(await screen.findByText(/At character 1: 'nosuchfield' is not in the catalog/)).toBeInTheDocument();
+    // A name no event of the case has is said in the banner, and its note of cost with it. Both stay marked.
+    expect(await screen.findByText(/nosuchfield is not a known field, and no event of this case has a field of that name, so nosuchfield=1 matched nothing\./)).toBeInTheDocument();
+    expect(screen.queryByText(/At character 1:/)).toBeNull();
     expect(within(screen.getByRole('list', { name: 'Marks' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['warning 0+11', 'warning 0+13']);
+  });
+
+  it('says above the rows that a name is in no event of the case, with the name it is close to', async () => {
+    const warnings = [
+      { code: 'unknown_field', level: 'meaning', offset: 14, length: 6, message: "'statsu' is not in the catalog: searched as extras['statsu']" },
+      { code: 'unindexed', level: 'cost', offset: 14, length: 10, message: 'statsu lives in extras: compared without an index' },
+    ];
+    open({ [SEARCH]: listing({ warnings, fields: ['http.response.status_code', 'statsu'] }) }, '/cases/7/search?q=status%3D200%20OR%20statsu%3D404');
+    const banner = (await screen.findByText('This query was read in a way you may not have meant')).closest('.banner') as HTMLElement;
+    expect(banner).toHaveTextContent('statsu is not a known field, and no event of this case has a field of that name, so statsu=404 matched nothing. Did you mean status?');
+    expect(banner).not.toHaveTextContent(/catalog|extras/);
+    // The rows are there all the same. The note of cost for the same comparison says nothing more and is not shown.
+    expect(within(region('Events')).getAllByRole('button', { name: /Open the event of/ })).toHaveLength(2);
+    expect(screen.queryByText(/lives in extras/)).toBeNull();
+    expect(within(screen.getByRole('list', { name: 'Marks' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['warning 14+6', 'warning 14+10']);
+    expect(screen.queryByLabelText('How free text was read')).toBeNull();
+  });
+
+  it('keeps the banner away for a key the events of the case have', async () => {
+    const warnings = [
+      { code: 'unknown_field', level: 'meaning', offset: 0, length: 10, message: "'request_id' is not in the catalog: searched as extras['request_id']" },
+      { code: 'unindexed', level: 'cost', offset: 0, length: 12, message: 'request_id lives in extras: compared without an index' },
+    ];
+    const fields = BASE['GET /api/v1/cases/7/fields'];
+    open({ [SEARCH]: listing({ warnings, fields: ['request_id'] }), 'GET /api/v1/cases/7/fields': { ...fields, body: { ...fields.body, extras_keys: [{ key: 'request_id', events: 2 }] } } }, '/cases/7/search?q=request_id%3D5');
+    await screen.findAllByRole('button', { name: /Open the event of/ });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /request_id/ })).toBeInTheDocument();
+    });
+    expect(screen.queryByText('This query was read in a way you may not have meant')).toBeNull();
+    // Both notes under the box, in the words of the server, as before.
+    expect(await screen.findByText(/At character 1: 'request_id' is not in the catalog/)).toBeInTheDocument();
+    expect(screen.getByText(/At character 1: request_id lives in extras/)).toBeInTheDocument();
+  });
+
+  it('says "not counted yet" of a name outside the catalog while the statistics of the case are missing', async () => {
+    const warnings = [
+      { code: 'unknown_field', level: 'meaning', offset: 0, length: 6, message: "'statsu' is not in the catalog: searched as extras['statsu']" },
+      { code: 'unindexed', level: 'cost', offset: 0, length: 10, message: 'statsu lives in extras: compared without an index' },
+    ];
+    const fields = BASE['GET /api/v1/cases/7/fields'];
+    open({ [SEARCH]: listing({ warnings, fields: ['statsu'] }), 'GET /api/v1/cases/7/fields': { ...fields, body: { ...fields.body, statistics: { ...fields.body.statistics, state: 'missing' } } } }, '/cases/7/search?q=statsu%3D404');
+    const banner = (await screen.findByText('This query was read in a way you may not have meant')).closest('.banner') as HTMLElement;
+    expect(banner).toHaveTextContent('statsu is not a known field, and the fields of this case are not counted yet. Did you mean status?');
+    expect(banner).not.toHaveTextContent('no event of this case');
+  });
+
+  it('says in one muted line where free text was searched, with what a NOT leaves out, while rows show', async () => {
+    const terms = [{ text: 'curl', kind: 'word', negated: true, offset: 4, length: 4 }];
+    open({ [SEARCH]: listing({ terms }) }, '/cases/7/search?q=NOT%20curl');
+    const line = await screen.findByLabelText('How free text was read');
+    expect(line).toHaveTextContent('Free text is searched in the message, by whole words. NOT curl leaves out the events whose message holds the word curl. For the whole line write NOT raw=*curl*');
+    expect(within(region('Events')).getAllByRole('button', { name: /Open the event of/ })).toHaveLength(2);
+    expect(screen.queryByText('This query was read in a way you may not have meant')).toBeNull();
+  });
+
+  it('lists every reading of a query that matched nothing: the slips, the fields no event has, the terms', async () => {
+    const warnings = [
+      { code: 'unknown_field', level: 'meaning', offset: 0, length: 6, message: "'statsu' is not in the catalog: searched as extras['statsu']" },
+      { code: 'percent_term', level: 'meaning', offset: 25, length: 6, message: '% is searched as a character; the wildcard is *: write *item*' },
+    ];
+    const terms = [
+      { text: '%item%', kind: 'word', negated: false, offset: 25, length: 6 },
+      { text: 'a/b', kind: 'phrase', negated: true, offset: 36, length: 5 },
+    ];
+    open({ [SEARCH]: listing({ rows: [], buckets: [], warnings, terms, fields: ['statsu', 'process.pid'] }) }, `/cases/7/search?q=${encodeURIComponent('statsu=404 process.pid=1 %item% NOT "a/b"')}`);
+    expect(await screen.findByRole('heading', { name: 'No events match' })).toBeInTheDocument();
+    const panel = (await screen.findByRole('heading', { name: 'How the query was read' })).parentElement as HTMLElement;
+    await waitFor(() => {
+      expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+        'statsu is not a known field, and no event of this case has a field of that name. Did you mean status?',
+        '%item% % is searched as a character; the wildcard is *: write *item*',
+        'process.pid No event of this case has this field.',
+        'the text %item% with item as a whole word, in the message only',
+        'NOT: the text a/b with a and b as whole words, in the message only',
+      ]);
+    });
+    expect(panel).toHaveTextContent('Other parts of the line are in fields: raw=*text* searches the whole line.');
+    // The banner says the slips too, and the line that says what was searched stays.
+    expect(screen.getByText('This query was read in a way you may not have meant')).toBeInTheDocument();
+    expect(screen.getByText(/The case holds 1 file\./)).toBeInTheDocument();
+  });
+
+  it('draws a query and the words about it as text, whatever they hold', async () => {
+    const hostile = '-<img src=x onerror=window.pwned=1>';
+    const warnings = [{ code: 'minus_term', level: 'meaning', offset: 0, length: hostile.length, message: `'${hostile}' is searched as text, minus included` }];
+    const terms = [{ text: hostile, kind: 'word', negated: false, offset: 0, length: hostile.length }];
+    open({ [SEARCH]: listing({ rows: [], buckets: [], warnings, terms }) }, `/cases/7/search?q=${encodeURIComponent(hostile)}`);
+    expect(await screen.findByRole('heading', { name: 'How the query was read' })).toBeInTheDocument();
+    expect(document.querySelector('img')).toBeNull();
+    expect((window as unknown as { pwned?: number }).pwned).toBeUndefined();
   });
 
   it('marks a syntax error where the server found it and keeps the results of the search before', async () => {

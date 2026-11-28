@@ -4,9 +4,24 @@
 
 export interface Warning {
   code: string;
+  /**
+   * `meaning`: the query was read in a way the analyst may not have meant. `cost`: the reading is certain, the
+   * query is slow or approximate. A server that sends no level is an older one, whose warnings were all notes.
+   */
+  level: 'meaning' | 'cost';
   offset: number;
   length: number;
   message: string;
+}
+
+/** A bare word or a quoted phrase the server searched as text: what it is, where it stands, and whether a NOT is over it. */
+export interface Term {
+  text: string;
+  /** `word`, `phrase`, `wildcard`, or `text` for a term without a letter or a digit. */
+  kind: string;
+  negated: boolean;
+  offset: number;
+  length: number;
 }
 
 export interface Span {
@@ -23,6 +38,10 @@ export interface Meta {
   tz: string;
   result: 'events' | 'stats' | 'timechart';
   warnings: Warning[];
+  /** Empty from a server that does not send them. */
+  terms: Term[];
+  /** The fields the query read, by their catalog name or as written. */
+  fields: string[];
   span: Span;
 }
 
@@ -187,8 +206,17 @@ export function decode(event: string, data: string): Frame {
           if (!object(w)) {
             throw new FrameError('a warning that is not an object');
           }
-          return { code: text(w, 'code'), offset: count(w, 'offset'), length: count(w, 'length'), message: text(w, 'message') };
+          // A level this page does not know is not a note: it is shown as loudly as a reading can be.
+          const level: Warning['level'] = w['level'] === undefined || w['level'] === 'cost' ? 'cost' : 'meaning';
+          return { code: text(w, 'code'), level, offset: count(w, 'offset'), length: count(w, 'length'), message: text(w, 'message') };
         }),
+        terms: (Array.isArray(o['terms']) ? o['terms'] : []).map((t: unknown) => {
+          if (!object(t)) {
+            throw new FrameError('a term that is not an object');
+          }
+          return { text: text(t, 'text'), kind: text(t, 'kind'), negated: t['negated'] === true, offset: count(t, 'offset'), length: count(t, 'length') };
+        }),
+        fields: Array.isArray(o['fields']) ? o['fields'].filter((f: unknown): f is string => typeof f === 'string') : [],
         span: { from: instantOrNull(span, 'from'), to: instantOrNull(span, 'to'), undated_events: count(span, 'undated_events'), future_events: count(span, 'future_events') },
       };
     }

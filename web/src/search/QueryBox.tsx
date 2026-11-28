@@ -17,6 +17,8 @@ interface Props {
   /** The text the marks below were made for. They are shown only while the draft is still that text. */
   ran: string;
   warnings: readonly Warning[];
+  /** The warnings listed under the box. Every warning is marked in the text; a reading said in the banner is not repeated here. */
+  notes: readonly Warning[];
   /** A refusal of the query itself: its syntax, or what the server would not run. */
   refusal: Refusal | undefined;
   running: boolean;
@@ -32,7 +34,7 @@ interface Props {
 }
 
 /** The query, the button that runs it, and what the server said about the text that ran. */
-export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraft, onRun, onCancel, focusRef, range }: Props) {
+export function QueryBox({ draft, ran, warnings, notes: listed, refusal, running, words, onDraft, onRun, onCancel, focusRef, range }: Props) {
   const notes = useId();
   const current = draft === ran;
   const tooLong = draft.length > MAX_QUERY;
@@ -83,9 +85,9 @@ export function QueryBox({ draft, ran, warnings, refusal, running, words, onDraf
             {refusal.detail === undefined ? '' : `. ${plain(refusal.detail, 2000)}`}
           </p>
         ) : null}
-        {current && warnings.length > 0 ? (
+        {current && listed.length > 0 ? (
           <ul className="query-warnings">
-            {warnings.map((w, i) => (
+            {listed.map((w, i) => (
               <li key={i} className="warn-text">
                 At character {number(w.offset + 1)}: {plain(w.message, 2000)}
               </li>

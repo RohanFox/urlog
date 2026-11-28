@@ -19,15 +19,26 @@
         "warnings": [
           {
             "code": "unknown_field",
+            "level": "meaning",
             "offset": 0,
             "length": 11,
             "message": "\u0027nosuchfield\u0027 is not in the catalog: searched as extras[\u0027nosuchfield\u0027]"
           },
           {
             "code": "unindexed",
+            "level": "cost",
             "offset": 0,
             "length": 13,
             "message": "nosuchfield lives in extras: compared without an index"
+          }
+        ],
+        "terms": [
+          {
+            "text": "line",
+            "kind": "word",
+            "negated": false,
+            "offset": 17,
+            "length": 4
           }
         ],
         "fields": [
@@ -307,6 +318,7 @@
         "result": "stats",
         "columns": [],
         "warnings": [],
+        "terms": [],
         "fields": [
           "host.name"
         ],
@@ -369,6 +381,7 @@
           "message"
         ],
         "warnings": [],
+        "terms": [],
         "fields": [],
         "span": {
           "from": "2026-03-01T00:00:00.000Z",
